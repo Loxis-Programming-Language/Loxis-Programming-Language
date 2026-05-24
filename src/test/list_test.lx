@@ -1,0 +1,24 @@
+// list<int> demo — real generics, no erasure
+
+fun main() {
+    // alloc("int", 3) → allocates list<int> with 3 elements
+    var xs = alloc("int", 3)
+
+    // Store: xs[0] = 10, xs[1] = 20, xs[2] = 30
+    var off = 0
+    hstore(xs, off, 10)
+    off = 9
+    hstore(xs, off, 20)
+    off = 18
+    hstore(xs, off, 30)
+
+    // Load and print
+    off = 0
+    print(hload(xs, off))
+    off = 9
+    print(hload(xs, off))
+    off = 18
+    print(hload(xs, off))
+
+    hfree(xs)
+}

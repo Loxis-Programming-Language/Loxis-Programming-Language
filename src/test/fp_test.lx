@@ -1,0 +1,21 @@
+fun main(): void {
+    // int to float conversion
+    var a = itof(3)
+    var b = itof(4)
+
+    // float operations
+    var c = fadd(a, b)    // 3.0 + 4.0 = 7.0
+    var d = fsub(c, a)    // 7.0 - 3.0 = 4.0
+    var e = fmul(d, a)    // 4.0 * 3.0 = 12.0
+    var f = fdiv(e, b)    // 12.0 / 4.0 = 3.0
+
+    // back to int
+    print(ftoi(c))        // 7
+    print(ftoi(d))        // 4
+    print(ftoi(e))        // 12
+    print(ftoi(f))        // 3
+
+    // negate
+    var g = fneg(a)       // -3.0
+    print(ftoi(g))        // -3
+}

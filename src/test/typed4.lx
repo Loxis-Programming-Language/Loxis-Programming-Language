@@ -1,0 +1,7 @@
+fun greet(name: str) {
+    print(name)
+}
+
+fun main() {
+    greet("Loixs")
+}

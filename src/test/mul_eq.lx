@@ -1,0 +1,7 @@
+def main() -> None {
+    var z = 10
+    z *= 2
+    print(z)
+    z /= 5
+    print(z)
+}

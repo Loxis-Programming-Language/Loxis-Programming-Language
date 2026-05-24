@@ -1,0 +1,10 @@
+fun id(x) {
+    return x
+}
+
+fun main() {
+    var a = 10
+    var b = id(20)
+    print(a)
+    print(b)
+}

@@ -1,0 +1,16 @@
+def add(a: int, b: int) -> int {
+    return a + b
+}
+
+def greet(name: str) -> None {
+    print(name)
+}
+
+def main() -> None {
+    val x = 42
+    var y: long = 9999999999
+    print(x)
+    print(y)
+    print(add(x, 10))
+    greet("Loixs")
+}

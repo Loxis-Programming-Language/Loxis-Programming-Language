@@ -1,0 +1,8 @@
+fun a() { return 1 }
+fun b() { return 2 }
+
+fun main() {
+    var x = a()
+    var y = b()
+    print(x + y)
+}

@@ -1,0 +1,12 @@
+def main() -> None {
+    val a = 42
+    print(a)
+    print("--- while ---")
+    var i = 0
+    while i < 3 {
+        print(i)
+        i += 1
+    }
+    print("--- done ---")
+    print(99)
+}

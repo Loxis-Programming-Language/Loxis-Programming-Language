@@ -1,0 +1,86 @@
+// ==========================================
+//  Loixs Language Demo
+//  Kotlin + Python inspired syntax
+// ==========================================
+
+fun fib(n) {
+    if n <= 1 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fun factorial(n) {
+    var result = 1
+    var i = 1
+    while i <= n {
+        result *= i
+        i += 1
+    }
+    return result
+}
+
+fun main() {
+    // ---- Variables ----
+    var x = 42
+    val name = "Loixs"
+    print(x)
+    print(name)
+
+    // ---- Arithmetic ----
+    var a = 100
+    var b = 7
+    print(a + b)
+    print(a - b)
+    print(a * b)
+    print(a / b)
+
+    // ---- Compound assignment ----
+    var c = 10
+    c += 5
+    print(c)
+    c -= 3
+    print(c)
+    c *= 2
+    print(c)
+    c /= 4
+    print(c)
+
+    // ---- Comparisons ----
+    if a == 100 {
+        print(1)
+    }
+    if b != 100 {
+        print(2)
+    }
+    if b < a {
+        print(3)
+    }
+    if a > b {
+        print(4)
+    }
+    if b <= 7 {
+        print(5)
+    }
+    if a >= 100 {
+        print(6)
+    }
+    if a != b {
+        if b < 10 {
+            print(7)
+        }
+    }
+
+    // ---- While loop ----
+    var i = 0
+    while i < 5 {
+        print(i)
+        i += 1
+    }
+
+    // ---- Fibonacci ----
+    print(fib(10))
+
+    // ---- Factorial ----
+    print(factorial(5))
+}

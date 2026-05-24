@@ -1,0 +1,10 @@
+def main() -> None {
+    var x = 15
+    if x > 20 {
+        print(0)
+    } else if x > 10 {
+        print(5)
+    } else {
+        print(0)
+    }
+}

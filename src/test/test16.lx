@@ -1,0 +1,11 @@
+fun wrap(n) {
+    if n <= 0 {
+        return 0
+    }
+    var a = wrap(n - 1)
+    return a
+}
+
+fun main() {
+    print(wrap(3))
+}

@@ -1,0 +1,13 @@
+fun dec(n) {
+    if n <= 0 {
+        return 0
+    }
+    return dec(n - 1)
+}
+
+fun main() {
+    print(1)
+    print(dec(3))
+    print(dec(4))
+    print(2)
+}

@@ -1,0 +1,12 @@
+class Point {
+    var x: int = 10
+    var y: int = 20
+}
+
+fun main() -> None {
+    val p = Point_new()
+    print(p.x)
+    print(p.y)
+    p.y = 99
+    print(p.y)
+}

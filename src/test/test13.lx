@@ -1,0 +1,7 @@
+fun main() {
+    print(1)
+    var a = 10
+    var b = 20
+    print(a + b)
+    print(2)
+}

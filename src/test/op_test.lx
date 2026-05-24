@@ -1,0 +1,28 @@
+fun main(): void {
+    // int + int → int
+    print(10 + 20)
+
+    // double + double → double
+    var a = 3.0 + 4.0
+    print(ftoi(a))
+
+    // double * double
+    var b = 2.5 * 2.0
+    print(ftoi(b))
+
+    // int + double → auto-promote
+    var c = 3 + 4.0
+    print(ftoi(c))
+
+    // double / double
+    var d = 10.0 / 3.0
+    print(ftoi(d))
+
+    // float literal
+    var e = 3f + 4f
+    print(ftoi(e))
+
+    // mixed expression
+    var f = 1.5 + 2.5 * 2.0
+    print(ftoi(f))
+}

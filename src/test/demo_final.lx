@@ -1,0 +1,106 @@
+// ============================================
+//  Loixs — 完整功能演示
+// ============================================
+
+fun fib(n: int) -> int {
+    if n <= 1 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fun circle_area(r: double) -> double {
+    val pi = 3.14159
+    return pi * r * r
+}
+
+fun double(x: int) -> int = x * 2
+
+class Point {
+    var x: int = 0
+    var y: int = 0
+}
+
+fun main() -> None {
+
+    // ==== 变量 ====
+    val a: int = 42
+    var b: long = 9999999999
+    val flag: bool = 1
+    val msg: str = "Loixs"
+
+    print(a)
+    print(b)
+    print(flag)
+    print(msg)
+
+    // ==== 类型推断 ====
+    val g = 100
+    print(g)
+
+    // ==== 比较 ====
+    if a == 42 { print(1) }
+    if b != 0  { print(2) }
+    if a < 100 { print(3) }
+    if b > a  { print(4) }
+
+    // ==== else if 链 ====
+    var score = 75
+    if score > 90 {
+        print(0)
+    } else if score > 70 {
+        print(5)
+    } else {
+        print(0)
+    }
+
+    // ==== while 循环 ====
+    var i = 0
+    while i < 3 {
+        print(i)
+        i += 1
+    }
+
+    // ==== 复合赋值 ====
+    var z = 10
+    z += 5
+    print(z)
+    z -= 3
+    print(z)
+    z *= 2
+    print(z)
+    z /= 4
+    print(z)
+
+    // ==== i32 溢出 ====
+    var big: int = 2147483647
+    big += 1
+    print(big)
+
+    // ==== 函数调用 ====
+    print(double(21))
+    print(fib(5))
+    print(ftoi(circle_area(3.0)))
+
+    // ==== 类 ====
+    val p = Point_new()
+    p.x = 10
+    p.y = 20
+    print(p.x + p.y)
+
+    // ==== 堆操作 ====
+    val arr = alloc("int", 3)
+    hstore(arr, 0, 100)
+    hstore(arr, 9, 200)
+    hstore(arr, 18, 300)
+    print(hload(arr, 0))
+    print(hload(arr, 9))
+    print(hload(arr, 18))
+    hfree(arr)
+
+    // ==== 浮点运算 ====
+    val fa = 3f
+    val fb = 2f
+    print(ftoi(fa + fb))
+
+    // ==== 取负 ====
+    print(-5)
+}

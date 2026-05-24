@@ -1,0 +1,4 @@
+def main() -> None {
+    print(-5)
+    print(-10)
+}

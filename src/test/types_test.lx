@@ -1,0 +1,23 @@
+fun main() {
+    var a: int = 42
+    var b: long = 9999999999
+    var c: bool = 1
+    var d: str = "hello"
+
+    print(a)
+    print(b)
+    print(c)
+
+    // typed allocations
+    var xs = alloc("bool", 2)
+    var off = 0
+    hstore(xs, off, 1)
+    off = 9
+    hstore(xs, off, 0)
+
+    off = 0
+    print(hload(xs, off))
+    off = 9
+    print(hload(xs, off))
+    hfree(xs)
+}

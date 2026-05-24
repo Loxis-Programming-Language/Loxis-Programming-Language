@@ -1,0 +1,13 @@
+fun add(a, b) {
+    return a + b
+}
+
+fun main() {
+    var i = 0
+    while i < 3 {
+        print(i)
+        i += 1
+    }
+    print(add(10, 20))
+    print(99)
+}

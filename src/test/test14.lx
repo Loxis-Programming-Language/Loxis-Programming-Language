@@ -1,0 +1,12 @@
+fun get5() {
+    return 5
+}
+
+fun main() {
+    print(1)
+    var a = get5()
+    var b = get5()
+    print(a)
+    print(b)
+    print(2)
+}

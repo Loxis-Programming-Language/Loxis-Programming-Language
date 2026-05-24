@@ -1,0 +1,18 @@
+fun main(): void {
+    // float literal
+    var a = 3.0
+    var b = 4.0
+    var c = fadd(a, b)    // 7.0
+    print(ftoi(c))
+
+    // double literal with fraction
+    var d = 2.5
+    var e = fadd(d, d)    // 5.0
+    print(ftoi(e))
+
+    // float suffix
+    var f = 3f
+    var g = 2f
+    var h = fadd(f, g)    // 5.0
+    print(ftoi(h))
+}

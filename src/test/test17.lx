@@ -1,0 +1,16 @@
+fun get0() {
+    return 0
+}
+
+fun rec(n) {
+    if n <= 0 {
+        return 0
+    }
+    var a = rec(n - 1)
+    var b = get0()
+    return a
+}
+
+fun main() {
+    print(rec(3))
+}

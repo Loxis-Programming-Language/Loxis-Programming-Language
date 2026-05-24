@@ -1,0 +1,7 @@
+fun get5(): int {
+    return 5
+}
+
+fun main() {
+    print(get5())
+}

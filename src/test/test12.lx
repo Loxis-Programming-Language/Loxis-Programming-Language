@@ -1,0 +1,12 @@
+fun fib(n) {
+    if n <= 1 {
+        return n
+    }
+    var a = fib(n - 1)
+    var b = fib(n - 2)
+    return a
+}
+
+fun main() {
+    print(fib(4))
+}

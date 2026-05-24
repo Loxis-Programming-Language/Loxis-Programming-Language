@@ -1,0 +1,9 @@
+fun greet(name) {
+    print(name)
+}
+
+fun main() {
+    print(1)
+    greet("hi")
+    print(2)
+}

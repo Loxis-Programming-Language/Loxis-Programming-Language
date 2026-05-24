@@ -1,0 +1,10 @@
+fun simple(n) {
+    if n <= 1 {
+        return 1
+    }
+    return simple(n - 1)
+}
+
+fun main() {
+    print(simple(3))
+}

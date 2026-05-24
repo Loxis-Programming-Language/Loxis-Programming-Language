@@ -1,0 +1,39 @@
+// Loixs language test
+
+fun main() {
+    // Variables
+    var x = 42
+    val name = "World"
+
+    // Print
+    print(x)
+    print(name)
+
+    // Arithmetic
+    var y = x + 10
+    print(y)
+
+    // Assignment
+    x = 100
+    print(x)
+
+    // Compound assignment
+    x += 1
+    print(x)
+
+    // Comparisons
+    if x == 101 {
+        print(1)
+    }
+
+    if x != 99 {
+        print(2)
+    }
+
+    // Loop
+    var i = 0
+    while i < 5 {
+        print(i)
+        i += 1
+    }
+}

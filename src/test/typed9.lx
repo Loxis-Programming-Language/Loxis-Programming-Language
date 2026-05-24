@@ -1,0 +1,7 @@
+fun greet(name: str) {
+    print(42)
+}
+
+fun main() {
+    print(99)
+}

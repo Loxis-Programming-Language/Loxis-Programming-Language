@@ -1,0 +1,12 @@
+fun f(n) {
+    if n <= 0 {
+        return 0
+    }
+    var a = f(n - 1)
+    var b = f(n - 2)
+    return a + b
+}
+
+fun main() {
+    print(f(2))
+}

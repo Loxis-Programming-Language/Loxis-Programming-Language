@@ -1,0 +1,8 @@
+fun nop() {
+}
+
+fun main() {
+    print(1)
+    nop()
+    print(2)
+}

@@ -1,0 +1,22 @@
+// Mandatory type annotations + default immutable
+
+fun add(a: int, b: int): int {
+    return a + b
+}
+
+fun main(): void {
+    // default immutable (val)
+    x = 42
+    print(x)
+
+    // explicit mutable
+    var y = 100
+    y = add(x, y)
+    print(y)
+
+    // type inference
+    pi = 3.14
+    r = 2.0
+    area = pi * r * r
+    print(ftoi(area))
+}

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Loixs + Loinx 路线图</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            padding: 40px 20px
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 28px;
+            margin-bottom: 8px;
+            color: #f0f6fc
+        }
+
+        h1 + p {
+            text-align: center;
+            color: #8b949e;
+            margin-bottom: 40px;
+            font-size: 14px
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns:repeat(auto-fit, minmax(360px, 1fr));
+            gap: 20px;
+            max-width: 1300px;
+            margin: 0 auto
+        }
+
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 24px
+        }
+
+        .card h2 {
+            font-size: 16px;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #30363d
+        }
+
+        ul {
+            list-style: none
+        }
+
+        li {
+            padding: 5px 0;
+            font-size: 13px
+        }
+
+        .done {
+            color: #7ee787
+        }
+
+        .done::before {
+            content: "✅ ";
+            margin-right: 6px
+        }
+
+        .wip {
+            color: #d29922
+        }
+
+        .wip::before {
+            content: "🔄 ";
+            margin-right: 6px
+        }
+
+        .todo {
+            color: #8b949e
+        }
+
+        .todo::before {
+            content: "⬜ ";
+            margin-right: 6px
+        }
+
+        .phase {
+            text-transform: uppercase;
+            font-size: 10px;
+            color: #58a6ff;
+            margin: 14px 0 6px;
+            letter-spacing: 1.5px;
+            font-weight: 600
+        }
+
+        .pct {
+            text-align: center;
+            font-size: 48px;
+            font-weight: bold;
+            margin: 16px 0 4px
+        }
+
+        .bar {
+            height: 4px;
+            background: #21262d;
+            border-radius: 2px;
+            margin: 8px 0 16px
+        }
+
+        .bar div {
+            height: 100%;
+            border-radius: 2px;
+            transition: width .3s
+        }
+
+        .green {
+            background: #3fb950
+        }
+
+        .yellow {
+            background: #d29922
+        }
+    </style>
+</head>
+<body>
+<h1>Loixs Language + Loinx VM</h1>
+<p>v0.2 — Python 骨骼 x Kotlin 肌肉</p>
+
+<div class="grid">
+
+    <div class="card">
+        <h2>📝 语法前端 (Parser)</h2>
+        <div class="pct">93%</div>
+        <div class="bar">
+            <div class="green" style="width:93%"></div>
+        </div>
+        <ul>
+            <li class="done">Lexer — 注释 // /**/, 26 种 token</li>
+            <li class="done">Pratt 表达式解析器</li>
+            <li class="done">val / var 变量声明</li>
+            <li class="done">fun ... -> ReturnType</li>
+            <li class="done">if / else if / else</li>
+            <li class="done">while 循环</li>
+            <li class="done">print()</li>
+            <li class="done">成员访问 obj.field</li>
+            <li class="done">obj.field = value</li>
+            <li class="done">3.14 double, 3f float 字面量</li>
+            <li class="done">class 声明 + 字段</li>
+            <li class="done">单行函数 = expr</li>
+            <li class="done">obj.method(args) — static dispatch</li>
+            <li class="wip">class 继承 (class Dog: Animal)</li>
+            <li class="todo">for-in-range 循环</li>
+            <li class="todo">when 表达式</li>
+            <li class="todo">字符串模板 "$x"</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>⚙️ IR / Compiler</h2>
+        <div class="pct">85%</div>
+        <div class="bar">
+            <div class="green" style="width:85%"></div>
+        </div>
+        <ul>
+            <li class="done">IRGen — 符号表 + 寄存器分配</li>
+            <li class="done">类型感知表达式编译 (int/float 自动选择)</li>
+            <li class="done">轻量级类型推断 (正向传播)</li>
+            <li class="done">class 构造器 + 字段 IR</li>
+            <li class="done">Compiler — IR → bytecode</li>
+            <li class="done">类型池 (泛型保留, 无擦除)</li>
+            <li class="done">声明侧变型 out / in</li>
+            <li class="done">i32 截断 (shl+shr)</li>
+            <li class="done">obj.method(args) desugar (static dispatch)</li>
+            <li class="todo">常量折叠 / 死代码消除</li>
+            <li class="wip">class 继承 — 父类字段/方法合并</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>🖥️ VM (Loinx)</h2>
+        <div class="pct">75%</div>
+        <div class="bar">
+            <div class="green" style="width:75%"></div>
+        </div>
+        <ul>
+            <li class="done">寄存器机 — 256×64-bit, 三地址</li>
+            <li class="done">JIT 预解码 (bytecode → JitInstruction)</li>
+            <li class="done">26 条指令</li>
+            <li class="done">整型 Add/Sub/Mul/Div/Shl/Shr</li>
+            <li class="done">浮点 FAdd/FSub/FMul/FDiv/FNeg</li>
+            <li class="done">比较 Cmp, 控制流 Jmp/Jnz/Jz/Jn</li>
+            <li class="done">Call/Ret, 调用栈, 数据栈</li>
+            <li class="done">堆 Alloc/HStore/HLoad/HFree</li>
+            <li class="done">rtag: int/str/heap/float</li>
+            <li class="todo">GC / 引用计数</li>
+            <li class="todo">模块系统</li>
+            <li class="todo">原生 FFI (C ABI)</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>🧬 类型系统</h2>
+        <div class="pct">85%</div>
+        <div class="bar">
+            <div class="green" style="width:85%"></div>
+        </div>
+        <ul>
+            <li class="done">TypeNode 树 — 递归泛型</li>
+            <li class="done">类型池 — 字节码保留, 无擦除</li>
+            <li class="done">int(i32) long(i64) bool str</li>
+            <li class="done">float(f32) double(f64) None</li>
+            <li class="done">list&lt;T&gt; 真泛型</li>
+            <li class="done">声明侧变型: out / in</li>
+            <li class="done">isSubtypeOf 协变/逆变规则</li>
+            <li class="done">class 用户类型 (TypeKind::Class)</li>
+            <li class="done">Heap header 存 type_id</li>
+            <li class="done">轻量级正向类型推断</li>
+            <li class="wip">class 继承 — isSubtypeOf 父链查找</li>
+            <li class="todo">类型检查 / HM 推断</li>
+            <li class="todo">map&lt;K,V&gt; built-in</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>🧰 工具链</h2>
+        <div class="pct">5%</div>
+        <div class="bar">
+            <div class="yellow" style="width:5%"></div>
+        </div>
+        <ul>
+            <li class="todo">LSP (诊断 / 补全 / 跳转 / hover)</li>
+            <li class="todo">VS Code 语法高亮</li>
+            <li class="todo">包管理器</li>
+            <li class="todo">REPL</li>
+            <li class="todo">测试框架</li>
+            <li class="todo">doc 生成器</li>
+            <li class="todo">调试器</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>🗺️ 版本路线</h2>
+        <ul>
+            <li class="phase">v0.1 — 核心 (已完成 2026-05-23)</li>
+            <li class="done">变量, 函数, 控制流, 表达式</li>
+            <li class="done">i32/i64/bool/str/f32/f64/None</li>
+            <li class="done">真泛型 list&lt;T&gt; + 变型 out/in</li>
+            <li class="done">class + 字段读写</li>
+            <li class="done">轻量级类型推断</li>
+            <li class="done">obj.method() 方法调用 (static dispatch)</li>
+
+            <li class="phase">v0.2 — 结构化 (进行中)</li>
+            <li class="wip">class 继承 (Child: Parent) ← 当前</li>
+            <li class="todo">map&lt;K,V&gt; built-in</li>
+            <li class="todo">enum / 代数类型</li>
+            <li class="todo">for-in-range 循环</li>
+            <li class="todo">when 表达式</li>
+
+            <li class="phase">v0.3 — 基础设施</li>
+            <li class="todo">GC</li>
+            <li class="todo">模块系统</li>
+            <li class="todo">标准库</li>
+            <li class="todo">字符串模板</li>
+
+            <li class="phase">v0.5 — 生态</li>
+            <li class="todo">LSP + 语法高亮</li>
+            <li class="todo">包管理器</li>
+            <li class="todo">REPL</li>
+
+            <li class="phase">v1.0 — 发布</li>
+            <li class="todo">自举 (Loixs → Loixs)</li>
+            <li class="todo">FFI (C ABI)</li>
+        </ul>
+    </div>
+
+</div>
+</body>
+</html>

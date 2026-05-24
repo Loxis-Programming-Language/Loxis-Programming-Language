@@ -1,0 +1,22 @@
+fun main(): void {
+    // int = i32, long = i64
+    var a: int = 2147483647     // max i32 = 2^31 - 1
+    var b: long = 2147483647
+
+    print(a)
+    print(b)
+
+    // i32 overflow: max_i32 + 1 should wrap to -2147483648
+    var c: int = 2147483647
+    c += 1
+    print(c)
+
+    // i64: no overflow
+    var d: long = 2147483647
+    d += 1
+    print(d)
+
+    // i32: negative works
+    var e: int = -1
+    print(e)
+}

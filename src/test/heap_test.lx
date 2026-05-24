@@ -1,0 +1,25 @@
+// Heap memory test — alloc, store, load
+
+fun main() {
+    // Allocate array of 3 elements (3 * 9 = 27 bytes)
+    var arr = alloc(27)
+
+    // Store values: arr[0] = 10
+    var zero = 0
+    hstore(arr, zero, 10)
+    zero = 9
+    hstore(arr, zero, 20)
+    zero = 18
+    hstore(arr, zero, 30)
+
+    // Load and print values
+    zero = 0
+    print(hload(arr, zero))
+    zero = 9
+    print(hload(arr, zero))
+    zero = 18
+    print(hload(arr, zero))
+
+    // Free
+    hfree(arr)
+}
