@@ -8,17 +8,17 @@ Loxis is a custom language ("Loixs") compiler and register-based VM, implemented
 .lx source → Lexer → Parser → IRGen → Compiler → Chunk (bytecode) → VM
 ```
 
-**src/ip/frontend/** — Lexer (tokenizer) and recursive-descent/Pratt parser. Produces an AST (`AST.hpp`) with `FunDeclNode` and `ClassDeclNode` as top-level nodes, `Stmt` variants for statements, and `Expr` variants for expressions. Newlines are statement separators (significant whitespace, Python-style). `Token.hpp` defines 26 token kinds.
+**src/cpp/frontend/** — Lexer (tokenizer) and recursive-descent/Pratt parser. Produces an AST (`AST.hpp`) with `FunDeclNode` and `ClassDeclNode` as top-level nodes, `Stmt` variants for statements, and `Expr` variants for expressions. Newlines are statement separators (significant whitespace, Python-style). `Token.hpp` defines 26 token kinds.
 
-**src/ip/ir/** — IR generation (`IRGen.cpp`). Lowers the AST into a CFG of `BasicBlock`s containing three-address-code `IRInstruction`s. Uses an infinite virtual register file (x0=zero/return, x16+ for variables, temporaries allocated from the same range). `OpCode.hpp` defines the IR opcode set and value types (`RegId`, `LabelRef`, `CondRef`). Types (`int`, `str`, `list<T>`, class types) are non-erased and serialized into a type pool.
+**src/cpp/ir/** — IR generation (`IRGen.cpp`). Lowers the AST into a CFG of `BasicBlock`s containing three-address-code `IRInstruction`s. Uses an infinite virtual register file (x0=zero/return, x16+ for variables, temporaries allocated from the same range). `OpCode.hpp` defines the IR opcode set and value types (`RegId`, `LabelRef`, `CondRef`). Types (`int`, `str`, `list<T>`, class types) are non-erased and serialized into a type pool.
 
-**src/ip/backend/** — `Compiler.cpp` lowers IR to bytecode (`Chunk`). Handles label→offset resolution via a patch table. `Chunk.hpp` defines the `Chunk` struct bundling bytecode, an interned string pool, and a type pool (serialized `TypeNode`s).
+**src/cpp/backend/** — `Compiler.cpp` lowers IR to bytecode (`Chunk`). Handles label→offset resolution via a patch table. `Chunk.hpp` defines the `Chunk` struct bundling bytecode, an interned string pool, and a type pool (serialized `TypeNode`s).
 
-**src/ip/vm/** — Stackless register VM: 256 int64 registers with type tags (TAG_HEAP=2, TAG_FLOAT=3), a data stack, a call stack, and a `Heap` (9-byte cells: 8B value + 1B tag). At startup the VM JIT-decodes bytecode into a linear `JitInstruction` array for faster dispatch.
+**src/cpp/vm/** — Stackless register VM: 256 int64 registers with type tags (TAG_HEAP=2, TAG_FLOAT=3), a data stack, a call stack, and a `Heap` (9-byte cells: 8B value + 1B tag). At startup the VM JIT-decodes bytecode into a linear `JitInstruction` array for faster dispatch.
 
-**src/ip/Error.hpp** — Exception hierarchy: `LexError`, `ParseError`, `IRError`, `RuntimeError`, each carrying a `SourceLocation`.
+**src/cpp/Error.hpp** — Exception hierarchy: `LexError`, `ParseError`, `IRError`, `RuntimeError`, each carrying a `SourceLocation`.
 
-**src/main.cpp** — Stale "Hello World" stub, not in CMakeLists.txt. The real entry point is `src/ip/main.cpp`.
+**src/main.cpp** — Stale "Hello World" stub, not in CMakeLists.txt. The real entry point is `src/cpp/main.cpp`.
 
 ## Language syntax (.lx files)
 
@@ -81,4 +81,4 @@ Method calls desugar via static dispatch: `obj.method(args)` → `ClassName_meth
 
 ## Testing
 
-There is no test framework. `.lx` files in the repo root are manual test scripts — `demo_final.lx` is the most comprehensive. `src/test_tokens.cpp` is a standalone lexer test harness (not in CMakeLists.txt — compile manually with `g++ -std=c++20 src/test_tokens.cpp src/ip/frontend/Lexer.cpp -I src/ip`).
+There is no test framework. `.lx` files in the repo root are manual test scripts — `demo_final.lx` is the most comprehensive. `src/test_tokens.cpp` is a standalone lexer test harness (not in CMakeLists.txt — compile manually with `g++ -std=c++20 src/test_tokens.cpp src/cpp/frontend/Lexer.cpp -I src/ip`).
