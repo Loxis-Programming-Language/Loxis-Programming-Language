@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# Loxis-Programming-Language
-The Loxis Programming Language.
-=======
-# Loxis Programming Language
+# The Loxis Programming Language
 
 ## Architecture
 
@@ -86,4 +82,3 @@ Method calls desugar via static dispatch: `obj.method(args)` → `ClassName_meth
 ## Testing
 
 There is no test framework. `.lx` files in the repo root are manual test scripts — `demo_final.lx` is the most comprehensive. `src/test_tokens.cpp` is a standalone lexer test harness (not in CMakeLists.txt — compile manually with `g++ -std=c++20 src/test_tokens.cpp src/ip/frontend/Lexer.cpp -I src/ip`).
->>>>>>> 855d759 (Initial commit)
