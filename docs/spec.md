@@ -33,7 +33,6 @@ Loxis is a systems programming language with C++-like performance and Rust-like 
 ## Items
 ```
 mod math;
-use std::vec::Vec;
 
 pub fn add<T>(a: T, b: T) -> T where T: Add {
     a + b
@@ -77,12 +76,15 @@ pub struct Vec<T> {
 - `panic!("msg")` for unrecoverable errors
 
 ## Modules
-- File = module
-- `mod foo;` loads `foo.lxs`
-- `use path::Item;` imports
+- Planned: file = module
+- Planned: `mod foo;` loads `foo.lxs`
+- Planned: `use path::Item;` imports
 - Visibility: `pub`, `pub(crate)`, `priv` (default)
 
 ## Standard Library
+Not implemented yet. A standard library depends on the module loader and import resolver, so it should be added after `mod` and `use` are wired end-to-end.
+
+Planned modules:
 - `std::core`: traits (Clone, Copy, Default, PartialEq, PartialOrd, Add, Sub, ...)
 - `std::option`: Option<T>
 - `std::result`: Result<T, E>
