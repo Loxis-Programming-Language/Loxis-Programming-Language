@@ -1,0 +1,40 @@
+// Result type — placeholder until generics are supported.
+// Currently only supports int Ok / str Err payloads.
+
+class Result {
+    var ok: bool = 0
+    var value: int = 0
+    var err_msg: str = ""
+}
+
+fun Result_ok(v: int) -> Result {
+    val r = Result_new()
+    r.ok = 1
+    r.value = v
+    return r
+}
+
+fun Result_err(msg: str) -> Result {
+    val r = Result_new()
+    r.ok = 0
+    r.err_msg = msg
+    return r
+}
+
+fun Result_is_ok(r: Result) -> bool {
+    return r.ok
+}
+
+fun Result_is_err(r: Result) -> bool {
+    if r.ok {
+        return 0
+    }
+    return 1
+}
+
+fun Result_unwrap(r: Result) -> int {
+    if r.ok == 0 {
+        panic("called unwrap on Err")
+    }
+    return r.value
+}

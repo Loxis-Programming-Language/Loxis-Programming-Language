@@ -21,7 +21,7 @@ struct GalVMError : std::runtime_error {
 	SourceLocation loc;
 
 	GalVMError(const std::string &msg, const SourceLocation &location)
-			: std::runtime_error(msg), loc(location) {}
+			: std::runtime_error(msg + " at " + location.format()), loc(location) {}
 
 	GalVMError(const std::string &msg)
 			: std::runtime_error(msg), loc{"<unknown>", 0, 0} {}

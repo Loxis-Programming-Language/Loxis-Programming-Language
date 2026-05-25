@@ -1,0 +1,36 @@
+// Option type — placeholder until generics are supported.
+// Currently only supports int payloads.
+
+class Option {
+    var has_value: bool = 0
+    var value: int = 0
+}
+
+fun Option_some(v: int) -> Option {
+    val o = Option_new()
+    o.has_value = 1
+    o.value = v
+    return o
+}
+
+fun Option_none() -> Option {
+    return Option_new()
+}
+
+fun Option_is_some(o: Option) -> bool {
+    return o.has_value
+}
+
+fun Option_is_none(o: Option) -> bool {
+    if o.has_value {
+        return 0
+    }
+    return 1
+}
+
+fun Option_unwrap(o: Option) -> int {
+    if o.has_value == 0 {
+        panic("called unwrap on None")
+    }
+    return o.value
+}

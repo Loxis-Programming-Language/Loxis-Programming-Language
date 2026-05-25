@@ -1,0 +1,6 @@
+// IO utilities
+
+fun println(msg: str) -> None {
+    print(msg)
+    print("\n")
+}

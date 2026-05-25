@@ -1,0 +1,36 @@
+// Vec (list<int>) utilities
+
+class Vec {
+    var ptr: int = 0
+    var len: int = 0
+    var cap: int = 0
+}
+
+fun make_vec(capacity: int) -> Vec {
+    val v = Vec_new()
+    v.ptr = alloc("int", capacity)
+    v.len = 0
+    v.cap = capacity
+    return v
+}
+
+fun vec_push(v: Vec, val: int) -> None {
+    if v.len < v.cap {
+        val off = v.len * 9
+        hstore(v.ptr, off, val)
+        v.len = v.len + 1
+    }
+}
+
+fun vec_get(v: Vec, idx: int) -> int {
+    val off = idx * 9
+    return hload(v.ptr, off)
+}
+
+fun vec_len(v: Vec) -> int {
+    return v.len
+}
+
+fun vec_free(v: Vec) -> None {
+    hfree(v.ptr)
+}

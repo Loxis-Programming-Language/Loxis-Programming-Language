@@ -1,0 +1,9 @@
+// String utilities
+
+fun str_len(s: str) -> int {
+    return 0
+}
+
+fun str_concat(a: str, b: str) -> str {
+    return a
+}

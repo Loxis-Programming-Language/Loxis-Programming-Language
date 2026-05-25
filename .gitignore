@@ -38,4 +38,5 @@ vcpkg_installed/
 Testing/
 .cache/
 .idea/
-cmake-build-debug/*
+cmake-build-debug/*.vs/
+*.zip

@@ -1,5 +1,6 @@
 #include "IRGen.hpp"
 #include <stdexcept>
+#include <bit>
 #include "Type.hpp"
 
 IRProgram IRGen::generate(const AST &ast) {

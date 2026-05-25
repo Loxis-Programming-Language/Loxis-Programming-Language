@@ -1,6 +1,7 @@
 #include "Lexer.hpp"
 #include <cctype>
 #include <utility>
+#include <unordered_map>
 
 #define panic(msg) throw LexError(msg, currentLocation());
 
@@ -19,9 +20,17 @@ std::vector <Token> Lexer::tokenize() {
 			continue;
 		}
 
-		// Newline
+		// Newline (handle LF, CR, CRLF)
 		if (c == '\n') {
 			advance();
+			m_line++;
+			m_col = 0;
+			tokens.emplace_back(TokenKind::Newline, "\n", currentLocation());
+			continue;
+		}
+		if (c == '\r') {
+			advance();
+			if (currentChar() == '\n') advance(); // CRLF
 			m_line++;
 			m_col = 0;
 			tokens.emplace_back(TokenKind::Newline, "\n", currentLocation());
@@ -315,6 +324,23 @@ Token Lexer::lexIdentOrKeyword() {
 		advance();
 	}
 
+	static const std::unordered_map<std::string, TokenKind> keywords = {
+		{"fun",    TokenKind::KwFun},
+		{"class",  TokenKind::KwClass},
+		{"var",    TokenKind::KwVar},
+		{"val",    TokenKind::KwVal},
+		{"if",     TokenKind::KwIf},
+		{"else",   TokenKind::KwElse},
+		{"while",  TokenKind::KwWhile},
+		{"return", TokenKind::KwReturn},
+		{"print",  TokenKind::KwPrint},
+		{"true",   TokenKind::KwTrue},
+		{"false",  TokenKind::KwFalse},
+		{"None",   TokenKind::KwNone},
+	};
+
+	auto it = keywords.find(value);
+	if (it != keywords.end()) return Token(it->second, value, loc);
 	return Token(TokenKind::Ident, value, loc);
 }
 

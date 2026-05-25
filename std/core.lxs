@@ -1,0 +1,12 @@
+// Core utilities
+
+fun panic(msg: str) -> None {
+    print("panic: ")
+    print(msg)
+}
+
+fun assert(cond: bool) -> None {
+    if cond == 0 {
+        panic("assertion failed")
+    }
+}
