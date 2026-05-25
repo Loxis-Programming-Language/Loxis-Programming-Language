@@ -2,6 +2,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <bit>
 #include "../Error.hpp"
 #include "../ir/OpCode.hpp"
 
@@ -265,9 +266,6 @@ void VM::execJitInstruction(const JitInstruction &instr, bool &halted) {
 				m_regs[dstReg] = m_regs[static_cast<uint8_t>(val.intVal)];
 				m_rtag[dstReg] = m_rtag[static_cast<uint8_t>(val.intVal)];
 			} else if (val.tag == OperandTag::Imm64) {
-			} else if (val.tag == OperandTag::Reg) {
-				m_regs[dstReg] = m_regs[static_cast<uint8_t>(val.intVal)];
-				m_rtag[dstReg] = m_rtag[static_cast<uint8_t>(val.intVal)];
 				m_regs[dstReg] = val.intVal;
 				m_rtag[dstReg] = 0;
 			} else if (val.tag == OperandTag::StrIdx) {

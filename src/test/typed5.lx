@@ -3,5 +3,5 @@ fun greet(name) {
 }
 
 fun main() {
-    greet("Loixs")
+    greet("Loxis")
 }

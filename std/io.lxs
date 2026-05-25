@@ -1,0 +1,4 @@
+use crate::core::Display;
+
+pub fn print<T: Display>(val: T) { /* host builtin */ }
+pub fn println<T: Display>(val: T) { print(val); print("\n"); }

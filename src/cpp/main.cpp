@@ -10,9 +10,9 @@
 #include "backend/Compiler.hpp"
 #include "vm/VM.hpp"
 
-#define time std::chrono::high_resolution_clock::now
+inline auto now() { return std::chrono::high_resolution_clock::now(); }
 
-auto diff(auto t1, auto t2) {
+inline auto diff(auto t1, auto t2) {
 	return std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 }
 
@@ -44,11 +44,12 @@ Argument parse(int argc, char *argv[]) {
 		else if (arg == "--bytecode") em.dumpBytecode = true;
 		else if (arg == "--runtrace") em.runTrace = true;
 		else if (arg == "--time") em.showTime = true;
+		else if (arg == "verbose") em.showTime = true;
 		else {
 			// Try as max_instructions (backward compat)
 			try {
 				em.maxExecuteCount = std::stoi(arg);
-			} catch (...) {
+			} catch (const std::exception&) {
 				std::cerr << "Unknown flag: " << arg << std::endl;
 				throw std::runtime_error("unknown argument: " + arg);
 			}
@@ -549,7 +550,7 @@ int main(int argc, char *argv[]) {
 
 	try {
 		// --- Lex ---
-		auto t0 = time();
+		auto t0 = now();
 		Lexer lexer = [&]() {
 			std::ifstream f(em.source);
 			if (!f) throw std::runtime_error("cannot open file: " + em.source);
@@ -558,36 +559,36 @@ int main(int argc, char *argv[]) {
 			return Lexer(ss.str(), em.source);
 		}();
 		auto tokens = lexer.tokenize();
-		auto t1 = time();
+		auto t1 = now();
 
 		if (em.dumpTokens) dumpTokens(tokens);
 
 		// --- Parse ---
 		Parser parser(tokens);
 		AST ast = parser.parse();
-		auto t2 = time();
+		auto t2 = now();
 
 		if (em.dumpAst) dumpAst(ast);
 
 		// --- IRGen ---
 		IRGen irgen;
 		IRProgram program = irgen.generate(ast);
-		auto t3 = time();
+		auto t3 = now();
 
 		if (em.dumpIr) dumpIR(program);
 
 		// --- Compile ---
 		Compiler compiler;
 		Chunk chunk = compiler.compile(program);
-		auto t4 = time();
+		auto t4 = now();
 
 		if (em.dumpBytecode) dumpBytecode(chunk);
 
 		// --- Run ---
-		auto t5 = time();
+		auto t5 = now();
 		VM vm(chunk, em.runTrace);
 		vm.run(em.maxExecuteCount);
-		auto t6 = time();
+		auto t6 = now();
 
 		// --- Timing ---
 		if (em.showTime) {
@@ -600,7 +601,11 @@ int main(int argc, char *argv[]) {
 		}
 
 		return 0;
-	} catch (const RuntimeError &) {
+	} catch (const GalVMError &e) {
+		std::cerr << e.what() << std::endl;
+		return 1;
+	} catch (const std::exception &e) {
+		std::cerr << "error: " << e.what() << std::endl;
 		return 1;
 	}
 }

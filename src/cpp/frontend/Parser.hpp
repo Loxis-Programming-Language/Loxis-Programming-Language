@@ -28,13 +28,14 @@ private:
 
 	void expect(TokenKind kind);
 
-	bool isKeyword(const std::string &kw) const;
-
 	// Newline handling: newlines are statement separators, but inside {} they're whitespace
 	void skipNewlines();
 
 	// Check if current token is a statement-starter keyword
 	bool isStmtStart() const;
+
+	// Check if current token can be used as a type name
+	bool isTypeToken() const;
 
 	// Scope tracking — which variables are declared in current scope
 	std::unordered_set <std::string> m_declaredVars;

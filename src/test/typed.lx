@@ -1,4 +1,4 @@
-// Loixs — Python-style lowercase types
+// Loxis — Python-style lowercase types
 
 fun add(a: int, b: int): int {
     return a + b
@@ -14,6 +14,6 @@ fun main(): void {
     var y: int = add(x, pi)
     print(y)
 
-    var name: str = "Loixs"
+    var name: str = "Loxis"
     greet(name)
 }
