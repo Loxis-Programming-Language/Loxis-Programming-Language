@@ -6,11 +6,25 @@
 
 enum class TokenKind : uint8_t {
 	// Literals
-	Ident,        // identifier or keyword
+	Ident,        // identifier
 	Integer,      // 42
 	FloatLit,     // 3.14f or 3f
 	DoubleLit,    // 3.14
 	String,       // "string literal"
+
+	// Keywords
+	KwFun,
+	KwClass,
+	KwVar,
+	KwVal,
+	KwIf,
+	KwElse,
+	KwWhile,
+	KwReturn,
+	KwPrint,
+	KwTrue,
+	KwFalse,
+	KwNone,
 
 	// Single-char symbols
 	OpenParen,    // (

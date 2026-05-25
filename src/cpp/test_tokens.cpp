@@ -1,5 +1,5 @@
 #include <iostream>
-#include "ip/frontend/Lexer.hpp"
+#include "frontend/Lexer.hpp"
 
 int main() {
 	Lexer lexer("fun greet(name) {\n    print(name)\n}\n\nfun main() {\n    greet(\"Loixs\")\n}\n", "test");

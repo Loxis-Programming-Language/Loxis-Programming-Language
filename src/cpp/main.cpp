@@ -9,9 +9,9 @@
 #include "backend/Compiler.hpp"
 #include "vm/VM.hpp"
 
-#define time std::chrono::high_resolution_clock::now
+inline auto now() { return std::chrono::high_resolution_clock::now(); }
 
-auto diff(auto t1, auto t2) {
+inline auto diff(auto t1, auto t2) {
 	return std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 }
 
@@ -29,7 +29,16 @@ Argument parse(int argc, char *argv[]) {
 	}
 	em.source = argv[1];
 	if (argc >= 3) {
-		em.maxExecuteCount = std::stoi(argv[2]);
+		std::string arg2 = argv[2];
+		if (arg2 == "verbose") {
+			em.postVerbose = true;
+		} else {
+			try {
+				em.maxExecuteCount = std::stoi(arg2);
+			} catch (const std::exception&) {
+				throw std::runtime_error("invalid max_instructions: " + arg2);
+			}
+		}
 	}
 	if (argc >= 4) {
 		em.postVerbose = true;
@@ -41,24 +50,24 @@ int main(int argc, char *argv[]) {
 	auto em = parse(argc, argv);
 
 	try {
-		auto t0 = time();
+		auto t0 = now();
 		AST ast = Parser::parseFile(em.source);
-		auto t1 = time();
+		auto t1 = now();
 
-		auto t2 = time();
+		auto t2 = now();
 		IRGen irgen;
 		IRProgram program = irgen.generate(ast);
-		auto t3 = time();
+		auto t3 = now();
 
-		auto t4 = time();
+		auto t4 = now();
 		Compiler compiler;
 		Chunk chunk = compiler.compile(program);
-		auto t5 = time();
+		auto t5 = now();
 
-		auto t6 = time();
+		auto t6 = now();
 		VM vm(chunk);
 		vm.run(em.maxExecuteCount);
-		auto t7 = time();
+		auto t7 = now();
 
 		if (em.postVerbose) {
 			std::cerr << "Frontend:  " << diff(t0, t1) << " us" << std::endl;
@@ -68,7 +77,11 @@ int main(int argc, char *argv[]) {
 		}
 
 		return 0;
-	} catch (const RuntimeError &) {
+	} catch (const GalVMError &e) {
+		std::cerr << e.what() << std::endl;
+		return 1;
+	} catch (const std::exception &e) {
+		std::cerr << "error: " << e.what() << std::endl;
 		return 1;
 	}
 }

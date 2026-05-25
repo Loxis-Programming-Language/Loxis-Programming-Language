@@ -3,6 +3,56 @@
 #include <fstream>
 #include <sstream>
 
+static std::string tokenKindName(TokenKind kind) {
+	switch (kind) {
+		case TokenKind::Ident:        return "identifier";
+		case TokenKind::Integer:      return "integer";
+		case TokenKind::FloatLit:     return "float";
+		case TokenKind::DoubleLit:    return "double";
+		case TokenKind::String:       return "string";
+		case TokenKind::KwFun:        return "'fun'";
+		case TokenKind::KwClass:      return "'class'";
+		case TokenKind::KwVar:        return "'var'";
+		case TokenKind::KwVal:        return "'val'";
+		case TokenKind::KwIf:         return "'if'";
+		case TokenKind::KwElse:       return "'else'";
+		case TokenKind::KwWhile:      return "'while'";
+		case TokenKind::KwReturn:     return "'return'";
+		case TokenKind::KwPrint:      return "'print'";
+		case TokenKind::KwTrue:       return "'true'";
+		case TokenKind::KwFalse:      return "'false'";
+		case TokenKind::KwNone:       return "'None'";
+		case TokenKind::OpenParen:    return "'('";
+		case TokenKind::CloseParen:   return "')'";
+		case TokenKind::OpenBrace:    return "'{'";
+		case TokenKind::CloseBrace:   return "'}'";
+		case TokenKind::Comma:        return "','";
+		case TokenKind::Plus:         return "'+'";
+		case TokenKind::Minus:        return "'-'";
+		case TokenKind::StarOp:       return "'*'";
+		case TokenKind::Slash:        return "'/'";
+		case TokenKind::Equals:       return "'='";
+		case TokenKind::Colon:        return "':'";
+		case TokenKind::Dot:          return "'.'";
+		case TokenKind::OpenBracket:  return "'['";
+		case TokenKind::CloseBracket: return "']'";
+		case TokenKind::EqualsEquals: return "'=='";
+		case TokenKind::NotEquals:    return "'!='";
+		case TokenKind::Less:         return "'<'";
+		case TokenKind::LessEq:       return "'<='";
+		case TokenKind::Greater:      return "'>'";
+		case TokenKind::GreaterEq:    return "'>='";
+		case TokenKind::Arrow:        return "'->'";
+		case TokenKind::PlusEq:       return "'+='";
+		case TokenKind::MinusEq:      return "'-='";
+		case TokenKind::StarEq:       return "'*='";
+		case TokenKind::SlashEq:      return "'/='";
+		case TokenKind::Newline:      return "newline";
+		case TokenKind::Eof:          return "EOF";
+	}
+	return "<unknown>";
+}
+
 AST Parser::parseFile(const std::string &path) {
 	std::ifstream file(path);
 	if (!file.is_open())
@@ -23,9 +73,9 @@ AST Parser::parse() {
 	AST ast;
 	skipNewlines();
 	while (peek().kind != TokenKind::Eof) {
-		if (peek().kind == TokenKind::Ident && peek().lexeme == "fun")
+		if (peek().kind == TokenKind::KwFun)
 			ast.nodes.push_back(parseFunDecl());
-		else if (peek().kind == TokenKind::Ident && peek().lexeme == "class")
+		else if (peek().kind == TokenKind::KwClass)
 			ast.nodes.push_back(parseClassDecl());
 		else
 			throw ParseError("expected 'fun' or 'class' declaration", peek().loc);
@@ -59,13 +109,9 @@ bool Parser::match(TokenKind kind) {
 
 void Parser::expect(TokenKind kind) {
 	if (!match(kind))
-		throw ParseError("expected kind " + std::to_string((int) kind) +
-		                 ", got '" + peek().lexeme + "' (kind " + std::to_string((int) peek().kind) + ")",
+		throw ParseError("expected " + tokenKindName(kind) +
+		                 ", got " + tokenKindName(peek().kind) + " '" + peek().lexeme + "'",
 		                 peek().loc);
-}
-
-bool Parser::isKeyword(const std::string &kw) const {
-	return peek().kind == TokenKind::Ident && peek().lexeme == kw;
 }
 
 void Parser::skipNewlines() {
@@ -73,12 +119,21 @@ void Parser::skipNewlines() {
 }
 
 bool Parser::isStmtStart() const {
-	if (peek().kind == TokenKind::Ident) {
-		const auto &kw = peek().lexeme;
-		return kw == "var" || kw == "val" || kw == "if" || kw == "while" ||
-		       kw == "return" || kw == "print";
+	switch (peek().kind) {
+		case TokenKind::KwVar:
+		case TokenKind::KwVal:
+		case TokenKind::KwIf:
+		case TokenKind::KwWhile:
+		case TokenKind::KwReturn:
+		case TokenKind::KwPrint:
+			return true;
+		default:
+			return false;
 	}
-	return false;
+}
+
+bool Parser::isTypeToken() const {
+	return peek().kind == TokenKind::Ident || peek().kind == TokenKind::KwNone;
 }
 
 // ==================== Top Level ====================
@@ -101,7 +156,7 @@ FunDeclNode Parser::parseFunDecl() {
 			// mandatory type annotation
 			if (!match(TokenKind::Colon))
 				throw ParseError("parameter '" + p.name + "' requires type annotation", peek().loc);
-			if (peek().kind != TokenKind::Ident)
+			if (!isTypeToken())
 				throw ParseError("expected type after ':'", peek().loc);
 			p.type = advance().lexeme;
 			params.push_back(std::move(p));
@@ -118,7 +173,7 @@ FunDeclNode Parser::parseFunDecl() {
 	// mandatory return type
 	if (!match(TokenKind::Arrow))
 		throw ParseError("function '" + name + "' requires return type annotation", peek().loc);
-	if (peek().kind != TokenKind::Ident)
+	if (!isTypeToken())
 		throw ParseError("expected return type", peek().loc);
 	node.returnType = advance().lexeme;
 
@@ -153,28 +208,23 @@ ClassDeclNode Parser::parseClassDecl() {
 
 	// Parse class body: fields (var/val without initializer) and methods (fun)
 	while (peek().kind != TokenKind::CloseBrace && peek().kind != TokenKind::Eof) {
-		if (peek().kind == TokenKind::Ident) {
-			const auto &kw = peek().lexeme;
-			if (kw == "var" || kw == "val") {
-				// Field: var name: type or var name: type = default
-				advance();  // consume var/val
-				if (peek().kind != TokenKind::Ident)
-					throw ParseError("expected field name", peek().loc);
-				FieldDecl field;
-				field.name = advance().lexeme;
-				if (match(TokenKind::Colon)) {
-					if (peek().kind != TokenKind::Ident)
-						throw ParseError("expected type after ':'", peek().loc);
-					field.type = advance().lexeme;
-				}
-				if (match(TokenKind::Equals))
-					field.init = parseExpr();
-				node.fields.push_back(std::move(field));
-			} else if (kw == "fun") {
-				node.methods.push_back(parseFunDecl());
-			} else {
-				throw ParseError("expected field or method in class body", peek().loc);
+		if (peek().kind == TokenKind::KwVar || peek().kind == TokenKind::KwVal) {
+			// Field: var name: type or var name: type = default
+			advance();  // consume var/val
+			if (peek().kind != TokenKind::Ident)
+				throw ParseError("expected field name", peek().loc);
+			FieldDecl field;
+			field.name = advance().lexeme;
+			if (match(TokenKind::Colon)) {
+				if (!isTypeToken())
+					throw ParseError("expected type after ':'", peek().loc);
+				field.type = advance().lexeme;
 			}
+			if (match(TokenKind::Equals))
+				field.init = parseExpr();
+			node.fields.push_back(std::move(field));
+		} else if (peek().kind == TokenKind::KwFun) {
+			node.methods.push_back(parseFunDecl());
 		} else {
 			throw ParseError("expected field or method in class body", peek().loc);
 		}
@@ -190,20 +240,27 @@ ClassDeclNode Parser::parseClassDecl() {
 std::shared_ptr <Stmt> Parser::parseStatement() {
 	skipNewlines();
 	Token t = peek();
-	if (t.kind == TokenKind::Ident) {
-		const auto &kw = t.lexeme;
-		if (kw == "var" || kw == "val") return parseVarDecl();
-		if (kw == "if") return parseIfStmt();
-		if (kw == "while") return parseWhileStmt();
-		if (kw == "return") return parseReturnStmt();
-		if (kw == "print") return parsePrintStmt();
-		return parseAssignOrExpr();
+	switch (t.kind) {
+		case TokenKind::KwVar:
+		case TokenKind::KwVal:
+			return parseVarDecl();
+		case TokenKind::KwIf:
+			return parseIfStmt();
+		case TokenKind::KwWhile:
+			return parseWhileStmt();
+		case TokenKind::KwReturn:
+			return parseReturnStmt();
+		case TokenKind::KwPrint:
+			return parsePrintStmt();
+		case TokenKind::Ident:
+			return parseAssignOrExpr();
+		default:
+			throw ParseError("expected statement", t.loc);
 	}
-	throw ParseError("expected statement", t.loc);
 }
 
 std::shared_ptr <Stmt> Parser::parseVarDecl() {
-	bool mut = advance().lexeme == "var";
+	bool mut = advance().kind == TokenKind::KwVar;
 	SourceLocation loc = peek().loc;
 	if (peek().kind != TokenKind::Ident)
 		throw ParseError("expected variable name", peek().loc);
@@ -211,7 +268,7 @@ std::shared_ptr <Stmt> Parser::parseVarDecl() {
 
 	std::string typeAnnot;
 	if (match(TokenKind::Colon)) {
-		if (peek().kind != TokenKind::Ident)
+		if (!isTypeToken())
 			throw ParseError("expected type after ':'", peek().loc);
 		typeAnnot = advance().lexeme;
 	}
@@ -235,9 +292,8 @@ std::shared_ptr <Stmt> Parser::parseIfStmt() {
 	auto thenBody = parseBlock();
 
 	std::vector <std::shared_ptr<Stmt>> elseBody;
-	if (isKeyword("else")) {
-		advance();
-		if (isKeyword("if"))
+	if (match(TokenKind::KwElse)) {
+		if (peek().kind == TokenKind::KwIf)
 			elseBody.push_back(parseIfStmt());
 		else {
 			expect(TokenKind::OpenBrace);
@@ -551,7 +607,6 @@ std::shared_ptr <Expr> Parser::parsePrimary() {
 				result = std::make_shared<Expr>(std::move(*mem));
 			}
 		}
-		return result;
 		return result;
 	}
 	if (match(TokenKind::OpenParen)) {

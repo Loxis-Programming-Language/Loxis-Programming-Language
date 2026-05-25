@@ -1,0 +1,572 @@
+use crate::option::Option;
+
+pub enum Ordering {
+    Less,
+    Equal,
+    Greater,
+}
+
+pub trait Clone {
+    fn clone(&self) -> Self;
+}
+
+pub trait Copy {}
+
+pub trait Default {
+    fn default() -> Self;
+}
+
+pub trait PartialEq<Rhs = Self> {
+    fn eq(&self, other: &Rhs) -> bool;
+    fn ne(&self, other: &Rhs) -> bool {
+        !self.eq(other)
+    }
+}
+
+pub trait PartialOrd<Rhs = Self> : PartialEq<Rhs> {
+    fn partial_cmp(&self, other: &Rhs) -> Option<Ordering>;
+}
+
+pub trait Add<Rhs = Self> {
+    type Output;
+    fn add(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait Sub<Rhs = Self> {
+    type Output;
+    fn sub(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait Mul<Rhs = Self> {
+    type Output;
+    fn mul(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait Div<Rhs = Self> {
+    type Output;
+    fn div(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait Rem<Rhs = Self> {
+    type Output;
+    fn rem(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait Neg {
+    type Output;
+    fn neg(self) -> Self::Output;
+}
+
+pub trait Not {
+    type Output;
+    fn not(self) -> Self::Output;
+}
+
+pub trait BitAnd<Rhs = Self> {
+    type Output;
+    fn bitand(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait BitOr<Rhs = Self> {
+    type Output;
+    fn bitor(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait BitXor<Rhs = Self> {
+    type Output;
+    fn bitxor(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait Shl<Rhs = Self> {
+    type Output;
+    fn shl(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait Shr<Rhs = Self> {
+    type Output;
+    fn shr(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait Deref {
+    type Target;
+    fn deref(&self) -> &Self::Target;
+}
+
+pub trait DerefMut : Deref {
+    fn deref_mut(&mut self) -> &mut Self::Target;
+}
+
+pub trait Drop {
+    fn drop(&mut self);
+}
+
+pub trait Sized {}
+
+pub trait Display {
+    fn fmt(&self) -> String;
+}
+
+// --- i32 ---
+
+impl Clone for i32 {
+    fn clone(&self) -> Self { *self }
+}
+
+impl Copy for i32 {}
+
+impl PartialEq for i32 {
+    fn eq(&self, other: &Self) -> bool { self == other }
+}
+
+impl PartialOrd for i32 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self < other { Some(Ordering::Less) }
+        else if self == other { Some(Ordering::Equal) }
+        else { Some(Ordering::Greater) }
+    }
+}
+
+impl Add for i32 {
+    type Output = i32;
+    fn add(self, rhs: Self) -> Self::Output { self + rhs }
+}
+
+impl Sub for i32 {
+    type Output = i32;
+    fn sub(self, rhs: Self) -> Self::Output { self - rhs }
+}
+
+impl Mul for i32 {
+    type Output = i32;
+    fn mul(self, rhs: Self) -> Self::Output { self * rhs }
+}
+
+impl Div for i32 {
+    type Output = i32;
+    fn div(self, rhs: Self) -> Self::Output { self / rhs }
+}
+
+impl Rem for i32 {
+    type Output = i32;
+    fn rem(self, rhs: Self) -> Self::Output { self % rhs }
+}
+
+impl Neg for i32 {
+    type Output = i32;
+    fn neg(self) -> Self::Output { -self }
+}
+
+impl Not for i32 {
+    type Output = i32;
+    fn not(self) -> Self::Output { !self }
+}
+
+impl BitAnd for i32 {
+    type Output = i32;
+    fn bitand(self, rhs: Self) -> Self::Output { self & rhs }
+}
+
+impl BitOr for i32 {
+    type Output = i32;
+    fn bitor(self, rhs: Self) -> Self::Output { self | rhs }
+}
+
+impl BitXor for i32 {
+    type Output = i32;
+    fn bitxor(self, rhs: Self) -> Self::Output { self ^ rhs }
+}
+
+impl Shl for i32 {
+    type Output = i32;
+    fn shl(self, rhs: Self) -> Self::Output { self << rhs }
+}
+
+impl Shr for i32 {
+    type Output = i32;
+    fn shr(self, rhs: Self) -> Self::Output { self >> rhs }
+}
+
+// --- i64 ---
+
+impl Clone for i64 {
+    fn clone(&self) -> Self { *self }
+}
+
+impl Copy for i64 {}
+
+impl PartialEq for i64 {
+    fn eq(&self, other: &Self) -> bool { self == other }
+}
+
+impl PartialOrd for i64 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self < other { Some(Ordering::Less) }
+        else if self == other { Some(Ordering::Equal) }
+        else { Some(Ordering::Greater) }
+    }
+}
+
+impl Add for i64 {
+    type Output = i64;
+    fn add(self, rhs: Self) -> Self::Output { self + rhs }
+}
+
+impl Sub for i64 {
+    type Output = i64;
+    fn sub(self, rhs: Self) -> Self::Output { self - rhs }
+}
+
+impl Mul for i64 {
+    type Output = i64;
+    fn mul(self, rhs: Self) -> Self::Output { self * rhs }
+}
+
+impl Div for i64 {
+    type Output = i64;
+    fn div(self, rhs: Self) -> Self::Output { self / rhs }
+}
+
+impl Rem for i64 {
+    type Output = i64;
+    fn rem(self, rhs: Self) -> Self::Output { self % rhs }
+}
+
+impl Neg for i64 {
+    type Output = i64;
+    fn neg(self) -> Self::Output { -self }
+}
+
+impl Not for i64 {
+    type Output = i64;
+    fn not(self) -> Self::Output { !self }
+}
+
+impl BitAnd for i64 {
+    type Output = i64;
+    fn bitand(self, rhs: Self) -> Self::Output { self & rhs }
+}
+
+impl BitOr for i64 {
+    type Output = i64;
+    fn bitor(self, rhs: Self) -> Self::Output { self | rhs }
+}
+
+impl BitXor for i64 {
+    type Output = i64;
+    fn bitxor(self, rhs: Self) -> Self::Output { self ^ rhs }
+}
+
+impl Shl for i64 {
+    type Output = i64;
+    fn shl(self, rhs: Self) -> Self::Output { self << rhs }
+}
+
+impl Shr for i64 {
+    type Output = i64;
+    fn shr(self, rhs: Self) -> Self::Output { self >> rhs }
+}
+
+// --- u32 ---
+
+impl Clone for u32 {
+    fn clone(&self) -> Self { *self }
+}
+
+impl Copy for u32 {}
+
+impl PartialEq for u32 {
+    fn eq(&self, other: &Self) -> bool { self == other }
+}
+
+impl PartialOrd for u32 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self < other { Some(Ordering::Less) }
+        else if self == other { Some(Ordering::Equal) }
+        else { Some(Ordering::Greater) }
+    }
+}
+
+impl Add for u32 {
+    type Output = u32;
+    fn add(self, rhs: Self) -> Self::Output { self + rhs }
+}
+
+impl Sub for u32 {
+    type Output = u32;
+    fn sub(self, rhs: Self) -> Self::Output { self - rhs }
+}
+
+impl Mul for u32 {
+    type Output = u32;
+    fn mul(self, rhs: Self) -> Self::Output { self * rhs }
+}
+
+impl Div for u32 {
+    type Output = u32;
+    fn div(self, rhs: Self) -> Self::Output { self / rhs }
+}
+
+impl Rem for u32 {
+    type Output = u32;
+    fn rem(self, rhs: Self) -> Self::Output { self % rhs }
+}
+
+impl Neg for u32 {
+    type Output = u32;
+    fn neg(self) -> Self::Output { -self }
+}
+
+impl Not for u32 {
+    type Output = u32;
+    fn not(self) -> Self::Output { !self }
+}
+
+impl BitAnd for u32 {
+    type Output = u32;
+    fn bitand(self, rhs: Self) -> Self::Output { self & rhs }
+}
+
+impl BitOr for u32 {
+    type Output = u32;
+    fn bitor(self, rhs: Self) -> Self::Output { self | rhs }
+}
+
+impl BitXor for u32 {
+    type Output = u32;
+    fn bitxor(self, rhs: Self) -> Self::Output { self ^ rhs }
+}
+
+impl Shl for u32 {
+    type Output = u32;
+    fn shl(self, rhs: Self) -> Self::Output { self << rhs }
+}
+
+impl Shr for u32 {
+    type Output = u32;
+    fn shr(self, rhs: Self) -> Self::Output { self >> rhs }
+}
+
+// --- u64 ---
+
+impl Clone for u64 {
+    fn clone(&self) -> Self { *self }
+}
+
+impl Copy for u64 {}
+
+impl PartialEq for u64 {
+    fn eq(&self, other: &Self) -> bool { self == other }
+}
+
+impl PartialOrd for u64 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self < other { Some(Ordering::Less) }
+        else if self == other { Some(Ordering::Equal) }
+        else { Some(Ordering::Greater) }
+    }
+}
+
+impl Add for u64 {
+    type Output = u64;
+    fn add(self, rhs: Self) -> Self::Output { self + rhs }
+}
+
+impl Sub for u64 {
+    type Output = u64;
+    fn sub(self, rhs: Self) -> Self::Output { self - rhs }
+}
+
+impl Mul for u64 {
+    type Output = u64;
+    fn mul(self, rhs: Self) -> Self::Output { self * rhs }
+}
+
+impl Div for u64 {
+    type Output = u64;
+    fn div(self, rhs: Self) -> Self::Output { self / rhs }
+}
+
+impl Rem for u64 {
+    type Output = u64;
+    fn rem(self, rhs: Self) -> Self::Output { self % rhs }
+}
+
+impl Neg for u64 {
+    type Output = u64;
+    fn neg(self) -> Self::Output { -self }
+}
+
+impl Not for u64 {
+    type Output = u64;
+    fn not(self) -> Self::Output { !self }
+}
+
+impl BitAnd for u64 {
+    type Output = u64;
+    fn bitand(self, rhs: Self) -> Self::Output { self & rhs }
+}
+
+impl BitOr for u64 {
+    type Output = u64;
+    fn bitor(self, rhs: Self) -> Self::Output { self | rhs }
+}
+
+impl BitXor for u64 {
+    type Output = u64;
+    fn bitxor(self, rhs: Self) -> Self::Output { self ^ rhs }
+}
+
+impl Shl for u64 {
+    type Output = u64;
+    fn shl(self, rhs: Self) -> Self::Output { self << rhs }
+}
+
+impl Shr for u64 {
+    type Output = u64;
+    fn shr(self, rhs: Self) -> Self::Output { self >> rhs }
+}
+
+// --- f32 ---
+
+impl Clone for f32 {
+    fn clone(&self) -> Self { *self }
+}
+
+impl Copy for f32 {}
+
+impl PartialEq for f32 {
+    fn eq(&self, other: &Self) -> bool { self == other }
+}
+
+impl PartialOrd for f32 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self < other { Some(Ordering::Less) }
+        else if self == other { Some(Ordering::Equal) }
+        else { Some(Ordering::Greater) }
+    }
+}
+
+impl Add for f32 {
+    type Output = f32;
+    fn add(self, rhs: Self) -> Self::Output { self + rhs }
+}
+
+impl Sub for f32 {
+    type Output = f32;
+    fn sub(self, rhs: Self) -> Self::Output { self - rhs }
+}
+
+impl Mul for f32 {
+    type Output = f32;
+    fn mul(self, rhs: Self) -> Self::Output { self * rhs }
+}
+
+impl Div for f32 {
+    type Output = f32;
+    fn div(self, rhs: Self) -> Self::Output { self / rhs }
+}
+
+impl Rem for f32 {
+    type Output = f32;
+    fn rem(self, rhs: Self) -> Self::Output { self % rhs }
+}
+
+impl Neg for f32 {
+    type Output = f32;
+    fn neg(self) -> Self::Output { -self }
+}
+
+// --- f64 ---
+
+impl Clone for f64 {
+    fn clone(&self) -> Self { *self }
+}
+
+impl Copy for f64 {}
+
+impl PartialEq for f64 {
+    fn eq(&self, other: &Self) -> bool { self == other }
+}
+
+impl PartialOrd for f64 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self < other { Some(Ordering::Less) }
+        else if self == other { Some(Ordering::Equal) }
+        else { Some(Ordering::Greater) }
+    }
+}
+
+impl Add for f64 {
+    type Output = f64;
+    fn add(self, rhs: Self) -> Self::Output { self + rhs }
+}
+
+impl Sub for f64 {
+    type Output = f64;
+    fn sub(self, rhs: Self) -> Self::Output { self - rhs }
+}
+
+impl Mul for f64 {
+    type Output = f64;
+    fn mul(self, rhs: Self) -> Self::Output { self * rhs }
+}
+
+impl Div for f64 {
+    type Output = f64;
+    fn div(self, rhs: Self) -> Self::Output { self / rhs }
+}
+
+impl Rem for f64 {
+    type Output = f64;
+    fn rem(self, rhs: Self) -> Self::Output { self % rhs }
+}
+
+impl Neg for f64 {
+    type Output = f64;
+    fn neg(self) -> Self::Output { -self }
+}
+
+// --- bool ---
+
+impl Clone for bool {
+    fn clone(&self) -> Self { *self }
+}
+
+impl Copy for bool {}
+
+impl PartialEq for bool {
+    fn eq(&self, other: &Self) -> bool { self == other }
+}
+
+impl PartialOrd for bool {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self < other { Some(Ordering::Less) }
+        else if self == other { Some(Ordering::Equal) }
+        else { Some(Ordering::Greater) }
+    }
+}
+
+impl Not for bool {
+    type Output = bool;
+    fn not(self) -> Self::Output { !self }
+}
+
+// --- char ---
+
+impl Clone for char {
+    fn clone(&self) -> Self { *self }
+}
+
+impl Copy for char {}
+
+impl PartialEq for char {
+    fn eq(&self, other: &Self) -> bool { self == other }
+}
+
+impl PartialOrd for char {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self < other { Some(Ordering::Less) }
+        else if self == other { Some(Ordering::Equal) }
+        else { Some(Ordering::Greater) }
+    }
+}
