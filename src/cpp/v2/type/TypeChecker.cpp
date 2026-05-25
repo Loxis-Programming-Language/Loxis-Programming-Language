@@ -493,7 +493,11 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
             if (sym) sym->ty = fnTy;
             TyPtr saved = currentRetTy;
             currentRetTy = retTy;
-            checkExpr(n.body, sc);
+            Scope fnScope(sc);
+            for (size_t i = 0; i < n.params.size(); ++i) {
+                fnScope.declare(n.params[i].first, SymbolKind::Value, nullptr, paramTys[i]);
+            }
+            checkExpr(n.body, &fnScope);
             currentRetTy = saved;
         } else if constexpr (std::is_same_v<T, ItemStruct>) {
             // TODO: populate fields

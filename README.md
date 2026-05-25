@@ -2,7 +2,7 @@
 
 ## Architecture
 
-Loxis is a custom language ("Loixs") compiler and register-based VM, implemented as a classic 4-phase pipeline:
+Loxis is a custom language ("Loxis") compiler and register-based VM, implemented as a classic 4-phase pipeline:
 
 ```
 .lx source → Lexer → Parser → IRGen → Compiler → Chunk (bytecode) → VM

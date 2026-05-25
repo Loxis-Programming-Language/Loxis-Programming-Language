@@ -29,6 +29,17 @@ void Scope::addChildMod(const std::string& name, std::unique_ptr<Scope> child) {
 
 std::unique_ptr<Scope> ScopeBuilder::build(Module& mod) {
     auto root = std::make_unique<Scope>(nullptr);
+    root->declare("i32", SymbolKind::Type, nullptr, mkI32());
+    root->declare("i64", SymbolKind::Type, nullptr, mkI64());
+    root->declare("u32", SymbolKind::Type, nullptr, mkU32());
+    root->declare("u64", SymbolKind::Type, nullptr, mkU64());
+    root->declare("f32", SymbolKind::Type, nullptr, mkF32());
+    root->declare("f64", SymbolKind::Type, nullptr, mkF64());
+    root->declare("bool", SymbolKind::Type, nullptr, mkBool());
+    root->declare("str", SymbolKind::Type, nullptr, mkStr());
+    root->declare("String", SymbolKind::Type, nullptr, mkString());
+    root->declare("()", SymbolKind::Type, nullptr, mkUnit());
+    root->declare("!", SymbolKind::Type, nullptr, mkNever());
     processItems(mod.items, root.get());
     return root;
 }

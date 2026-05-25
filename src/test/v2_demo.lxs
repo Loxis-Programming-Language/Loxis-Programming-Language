@@ -1,10 +1,7 @@
-mod std::io;
-use std::io::println;
-
 fn fib(n: i32) -> i32 {
     if n <= 1 {
         return n;
-    }
+    };
     return fib(n - 1) + fib(n - 2);
 }
 
@@ -14,8 +11,6 @@ fn main() -> i32 {
     while i < 10 {
         sum = sum + i;
         i = i + 1;
-    }
-    println(sum);
-    println(fib(10));
-    return 0;
+    };
+    return sum + fib(10);
 }

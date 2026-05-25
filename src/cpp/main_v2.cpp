@@ -15,7 +15,12 @@ int main(int argc, char* argv[]) {
         bool verbose = false;
 
         if (argc >= 3) {
-            maxInstr = std::stoi(argv[2]);
+            std::string arg = argv[2];
+            if (arg == "verbose" || arg == "true" || arg == "1" || arg == "yes") {
+                verbose = true;
+            } else {
+                maxInstr = std::stoi(arg);
+            }
         }
         if (argc >= 4) {
             std::string v = argv[3];

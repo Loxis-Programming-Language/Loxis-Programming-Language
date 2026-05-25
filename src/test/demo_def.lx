@@ -12,5 +12,5 @@ def main() -> None {
     print(x)
     print(y)
     print(add(x, 10))
-    greet("Loixs")
+    greet("Loxis")
 }

@@ -1,5 +1,5 @@
 // ============================================
-//  Loixs — 完整功能演示
+//  Loxis — 完整功能演示
 // ============================================
 
 fun fib(n: int) -> int {
@@ -25,7 +25,7 @@ fun main() -> None {
     val a: int = 42
     var b: long = 9999999999
     val flag: bool = 1
-    val msg: str = "Loixs"
+    val msg: str = "Loxis"
 
     print(a)
     print(b)

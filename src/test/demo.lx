@@ -1,5 +1,5 @@
 // ==========================================
-//  Loixs Language Demo
+//  Loxis Language Demo
 //  Kotlin + Python inspired syntax
 // ==========================================
 
@@ -23,7 +23,7 @@ fun factorial(n) {
 fun main() {
     // ---- Variables ----
     var x = 42
-    val name = "Loixs"
+    val name = "Loxis"
     print(x)
     print(name)
 
