@@ -25,7 +25,7 @@ fun main() -> None {
     val a: int = 42
     var b: long = 9999999999
     val flag: bool = 1
-    val msg: str = "Loixs"
+    val msg: str = "123"
 
     print(a)
     print(b)

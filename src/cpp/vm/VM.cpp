@@ -1,7 +1,49 @@
 #include "VM.hpp"
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 #include "../Error.hpp"
 #include "../ir/OpCode.hpp"
+
+static const char *traceOpcodeName(OpCode op) {
+	switch (op) {
+		case OpCode::Nop:   return "nop";
+		case OpCode::Push:  return "push";
+		case OpCode::Pop:   return "pop";
+		case OpCode::Mov:   return "mov";
+		case OpCode::PushR: return "pushr";
+		case OpCode::PopR:  return "popr";
+		case OpCode::Alloc: return "alloc";
+		case OpCode::HFree: return "hfree";
+		case OpCode::HStore:return "hstore";
+		case OpCode::HLoad: return "hload";
+		case OpCode::Shl:   return "shl";
+		case OpCode::Shr:   return "shr";
+		case OpCode::Add:   return "add";
+		case OpCode::Sub:   return "sub";
+		case OpCode::Mul:   return "mul";
+		case OpCode::Div:   return "div";
+		case OpCode::FAdd:  return "fadd";
+		case OpCode::FSub:  return "fsub";
+		case OpCode::FMul:  return "fmul";
+		case OpCode::FDiv:  return "fdiv";
+		case OpCode::ItoF:  return "itof";
+		case OpCode::FtoI:  return "ftoi";
+		case OpCode::FNeg:  return "fneg";
+		case OpCode::Cmp:   return "cmp";
+		case OpCode::Jmp:   return "jmp";
+		case OpCode::Jnz:   return "jnz";
+		case OpCode::Jz:    return "jz";
+		case OpCode::Skip:  return "skip";
+		case OpCode::Call:  return "call";
+		case OpCode::Ret:   return "ret";
+		case OpCode::Br:    return "br";
+		case OpCode::Jn:    return "jn";
+		case OpCode::Print: return "print";
+		case OpCode::Halt:  return "halt";
+	}
+	return "?";
+}
 
 #define runtime_error(msg) do { \
     std::cerr << "Runtime error: " << msg << std::endl; \
@@ -10,8 +52,8 @@
 } while (0)
 
 
-VM::VM(Chunk chunk)
-		: m_chunk(std::move(chunk)), m_flags(0) {
+VM::VM(Chunk chunk, bool trace)
+		: m_chunk(std::move(chunk)), m_flags(0), m_trace(trace) {
 	std::fill(std::begin(m_regs), std::end(m_regs), 0);
 	std::fill(std::begin(m_rtag), std::end(m_rtag), 0);
 }
@@ -622,6 +664,27 @@ void VM::execJitInstruction(const JitInstruction &instr, bool &halted) {
 	}
 }
 
+static std::string formatTraceOperand(const VM::JitOperand &op, const Chunk &chunk) {
+	std::ostringstream oss;
+	switch (op.tag) {
+		case OperandTag::Reg:
+			oss << "r" << (int)op.intVal;
+			break;
+		case OperandTag::Imm64:
+			oss << "#" << op.intVal;
+			break;
+		case OperandTag::StrIdx:
+			oss << "str[" << op.strIdx << "]";
+			if (op.strIdx < chunk.strings.size())
+				oss << "(\"" << chunk.strings[op.strIdx] << "\")";
+			break;
+		case OperandTag::Addr:
+			oss << "0x" << std::hex << std::setw(8) << std::setfill('0') << (uint32_t)op.intVal << std::dec;
+			break;
+	}
+	return oss.str();
+}
+
 int VM::runJit(int maxExecuteCount) {
 	int executeCount = 0;
 	bool halted = false;
@@ -630,6 +693,18 @@ int VM::runJit(int maxExecuteCount) {
 	while (m_jitIp < m_jitCode.size() && executeCount < maxExecuteCount && !halted) {
 		executeCount++;
 		const auto &instr = m_jitCode[m_jitIp];
+
+		if (m_trace) {
+			std::cerr << "[" << std::dec << std::setw(6) << std::setfill(' ') << executeCount << "] "
+			          << "0x" << std::hex << std::setw(6) << std::setfill('0') << instr.byteOffset << std::dec << " " << std::setfill(' ')
+			          << std::setw(7) << std::left << traceOpcodeName(instr.op);
+			for (size_t i = 0; i < instr.operands.size(); i++) {
+				if (i > 0) std::cerr << ",";
+				std::cerr << " " << formatTraceOperand(instr.operands[i], m_chunk);
+			}
+			std::cerr << std::endl;
+		}
+
 		execJitInstruction(instr, halted);
 	}
 

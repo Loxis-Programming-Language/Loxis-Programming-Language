@@ -9,13 +9,14 @@
 
 class VM {
 public:
-	explicit VM(Chunk chunk);
+	explicit VM(Chunk chunk, bool trace = false);
 
 	int run();
 
 	int run(int maxExecuteCount);
 
 private:
+	bool m_trace;
 	Chunk m_chunk;
 	int64_t m_regs[256] = {};
 	uint8_t m_rtag[256] = {};   // 0=int, 1=string-index, 2=heap-ref
@@ -33,6 +34,7 @@ private:
 	static constexpr uint8_t
 	TAG_FLOAT = 3;  // register holds float64 bits
 
+public:
 	struct JitOperand {
 		OperandTag tag = OperandTag::Reg;
 		int64_t intVal = 0;
@@ -46,6 +48,8 @@ private:
 		uint8_t argCount = 0;
 		std::vector <JitOperand> operands;
 	};
+
+private:
 
 	std::vector <JitInstruction> m_jitCode;
 	std::unordered_map <uint32_t, size_t> m_jitIpMap;
