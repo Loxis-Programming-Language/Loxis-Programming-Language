@@ -20,6 +20,10 @@ static const char *traceOpcodeName(OpCode op) {
 		case OpCode::HLoad: return "hload";
 		case OpCode::Shl:   return "shl";
 		case OpCode::Shr:   return "shr";
+		case OpCode::Rem:   return "rem";
+		case OpCode::BitAnd:return "band";
+		case OpCode::BitOr: return "bor";
+		case OpCode::BitXor:return "bxor";
 		case OpCode::Add:   return "add";
 		case OpCode::Sub:   return "sub";
 		case OpCode::Mul:   return "mul";
@@ -40,6 +44,8 @@ static const char *traceOpcodeName(OpCode op) {
 		case OpCode::Ret:   return "ret";
 		case OpCode::Br:    return "br";
 		case OpCode::Jn:    return "jn";
+		case OpCode::NullChk: return "nullchk";
+		case OpCode::CallInd: return "callind";
 		case OpCode::Print: return "print";
 		case OpCode::Halt:  return "halt";
 	}
@@ -158,7 +164,7 @@ bool VM::tryBuildJit() {
 			case OpCode::Jz:
 			case OpCode::Jn:
 			case OpCode::Call:
-			case OpCode::Print:
+				case OpCode::Print:
 			case OpCode::PushR:
 			case OpCode::PopR:
 				operandCount = 1;
@@ -181,6 +187,10 @@ bool VM::tryBuildJit() {
 			case OpCode::Alloc:
 			case OpCode::Shl:
 			case OpCode::Shr:
+			case OpCode::Rem:
+			case OpCode::BitAnd:
+			case OpCode::BitOr:
+			case OpCode::BitXor:
 			case OpCode::FAdd:
 			case OpCode::FSub:
 			case OpCode::FMul:
@@ -190,6 +200,8 @@ bool VM::tryBuildJit() {
 			case OpCode::ItoF:
 			case OpCode::FtoI:
 			case OpCode::FNeg:
+				case OpCode::NullChk:
+				case OpCode::CallInd:
 				operandCount = 2;
 				break;
 			case OpCode::Skip:
@@ -438,6 +450,31 @@ void VM::execJitInstruction(const JitInstruction &instr, bool &halted) {
 			break;
 		}
 
+		case OpCode::Rem: {
+			uint8_t srcReg = static_cast<uint8_t>(instr.operands[0].intVal);
+			int64_t operand = readIntOperand(instr.operands[1]);
+			uint8_t dstReg = static_cast<uint8_t>(instr.operands[2].intVal);
+			if (operand == 0) runtime_error("remainder by zero");
+			m_regs[dstReg] = m_regs[srcReg] % operand;
+			m_rtag[dstReg] = 0;
+			m_jitIp++;
+			break;
+		}
+
+		case OpCode::BitAnd:
+		case OpCode::BitOr:
+		case OpCode::BitXor: {
+			uint8_t srcReg = static_cast<uint8_t>(instr.operands[0].intVal);
+			int64_t operand = readIntOperand(instr.operands[1]);
+			uint8_t dstReg = static_cast<uint8_t>(instr.operands[2].intVal);
+			if (instr.op == OpCode::BitAnd) m_regs[dstReg] = m_regs[srcReg] & operand;
+			else if (instr.op == OpCode::BitOr) m_regs[dstReg] = m_regs[srcReg] | operand;
+			else m_regs[dstReg] = m_regs[srcReg] ^ operand;
+			m_rtag[dstReg] = 0;
+			m_jitIp++;
+			break;
+		}
+
 		case OpCode::FAdd: {
 			uint8_t dstReg = static_cast<uint8_t>(instr.operands[0].intVal);
 			uint8_t srcReg = static_cast<uint8_t>(instr.operands[1].intVal);
@@ -616,6 +653,41 @@ void VM::execJitInstruction(const JitInstruction &instr, bool &halted) {
 			}
 			m_callStack.push(m_jitIp + 1);
 			m_jitIp = target;
+			break;
+		}
+
+		case OpCode::NullChk: {
+			auto &val = instr.operands[0];
+			uint8_t reg = static_cast<uint8_t>(val.intVal);
+			bool isNull = false;
+			if (val.tag == OperandTag::Reg) {
+				// Check rtag for TAG_NULL, or value 0 with tag 0 (int 0 = null ref)
+				isNull = (m_rtag[reg] == TAG_NULL) ||
+				         (m_rtag[reg] == 0 && m_regs[reg] == 0);
+			} else if (val.tag == OperandTag::Imm64) {
+				isNull = (val.intVal == 0);
+			}
+			if (isNull) {
+				size_t target;
+				if (!resolveJitTarget(static_cast<uint32_t>(instr.operands[1].intVal), target)) {
+					halted = true; return;
+				}
+				m_jitIp = target;
+			} else {
+				m_jitIp++;
+			}
+			break;
+		}
+
+		case OpCode::CallInd: {
+			auto &funcReg = instr.operands[0];
+			uint8_t reg = static_cast<uint8_t>(funcReg.intVal);
+			// For now, indirect calls use the same mechanism as direct calls
+			// The function pointer is stored in the register as a label index
+			// TODO: real indirect call through function table
+			m_callStack.push(m_jitIp + 1);
+			// Stub: halt for now since we don't have function tables
+			halted = true;
 			break;
 		}
 

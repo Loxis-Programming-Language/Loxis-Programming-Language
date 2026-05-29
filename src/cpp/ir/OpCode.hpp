@@ -22,6 +22,10 @@ enum class OpCode : uint8_t {
 	HLoad = 0x09,  // heap load: base_reg, offset_reg, result_reg
 	Shl = 0x0A,    // shift left: src, shift, dst
 	Shr = 0x0B,    // shift right (arithmetic): src, shift, dst
+	Rem = 0x0C,    // remainder: src, val, dst
+	BitAnd = 0x0D, // bitwise and: src, val, dst
+	BitOr = 0x0E,  // bitwise or: src, val, dst
+	BitXor = 0x0F, // bitwise xor: src, val, dst
 
 	// Arithmetic
 	Add = 0x10,
@@ -50,6 +54,8 @@ enum class OpCode : uint8_t {
 	Ret = 0x35,
 	Br = 0x36,   // IR-only explicit branch (not emitted to bytecode)
 	Jn = 0x37,   // jump if NEG flag set
+	NullChk = 0x38, // null check: val_reg, null_target_addr
+	CallInd = 0x39, // indirect call: func_ptr_reg
 
 	// I/O
 	Print = 0x40,

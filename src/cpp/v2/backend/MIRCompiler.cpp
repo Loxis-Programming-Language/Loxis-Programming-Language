@@ -56,6 +56,12 @@ void MIRCompiler::emitStatement(const Statement& stmt) {
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::Nop));
         } else if constexpr (std::is_same_v<T, StSetDiscriminant>) {
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::Nop));
+        } else if constexpr (std::is_same_v<T, StPush>) {
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::PushR));
+            emitReg(localToReg(s.local));
+        } else if constexpr (std::is_same_v<T, StPop>) {
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::PopR));
+            emitReg(localToReg(s.local));
         } else if constexpr (std::is_same_v<T, StDrop>) {
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::Nop));
         }
@@ -97,11 +103,6 @@ void MIRCompiler::emitTerminator(const Terminator& term, const std::string& pref
         } else if constexpr (std::is_same_v<T, TmReturn>) {
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::Ret));
         } else if constexpr (std::is_same_v<T, TmCall>) {
-            // Move arguments into parameter registers (1..n)
-            for (size_t i = 0; i < t.args.size(); ++i) {
-                uint8_t paramReg = static_cast<uint8_t>(i + 1);
-                emitOperandToReg(t.args[i], paramReg);
-            }
             std::string funcLabel;
             std::visit([&](const auto& f) {
                 using FT = std::decay_t<decltype(f)>;
@@ -115,10 +116,60 @@ void MIRCompiler::emitTerminator(const Terminator& term, const std::string& pref
                 }
             }, t.func);
             if (funcLabel.empty()) funcLabel = "unknown";
+            if (funcLabel == "print" || funcLabel == "println") {
+                // Built-in print: use temp reg, then explicitly jump to resume
+                if (!t.args.empty()) emitOperandToReg(t.args[0], 254);
+                if (!t.args.empty()) emitOperandToReg(t.args[0], 254);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Print));
+                emitReg(254);
+                // Explicitly jump to resume block (Jmp needs 2 Addr operands like TmGoto)
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                emitAddr(blockLabel(prefix, t.return_));
+                emitAddr(blockLabel(prefix, t.return_));
+            } else {
+                // Regular call: move args to param regs
+                for (size_t i = 0; i < t.args.size(); ++i) {
+                    uint8_t paramReg = static_cast<uint8_t>(i + 1);
+                    emitOperandToReg(t.args[i], paramReg);
+                }
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Call));
+                emitAddr(funcLabel);
+                // Explicitly jump to resume block (fixes block ordering)
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                emitAddr(blockLabel(prefix, t.return_));
+                emitAddr(blockLabel(prefix, t.return_));
+            }
+        } else if constexpr (std::is_same_v<T, TmCallIndirect>) {
+            // Move arguments into param regs, then call via function pointer
+            for (size_t i = 0; i < t.args.size(); ++i) {
+                uint8_t paramReg = static_cast<uint8_t>(i + 1);
+                emitOperandToReg(t.args[i], paramReg);
+            }
+            // Load function pointer into temp reg, then call
+            emitOperandToReg(t.funcPtr, 250);
+            // Emit as regular Call with label "indirect" for now
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::Call));
-            emitAddr(funcLabel);
+            m_chunk.emitByte(static_cast<uint8_t>(OperandTag::Addr));
+            size_t patchOff = m_chunk.offset();
+            m_chunk.emitU32(0);
+            m_patches.push_back({patchOff, "_indirect_stub"});
+        } else if constexpr (std::is_same_v<T, TmCheckNull>) {
+            // Cmp value, 0; Jz nullTarget; fallthrough = okTarget
+            uint8_t valReg = 253;
+            emitOperandToReg(t.value, valReg);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+            uint8_t zr = 251;
+            emitReg(zr);
+            emitImm(0);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Cmp));
+            emitReg(valReg);
+            emitReg(zr);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jz));
+            emitAddr(blockLabel(prefix, t.nullTarget));
+            // okTarget: fallthrough — set label here so subsequent code lands here
+            m_labelOffsets[blockLabel(prefix, t.okTarget)] = static_cast<uint32_t>(m_chunk.offset());
         } else if constexpr (std::is_same_v<T, TmUnreachable>) {
-            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Nop));
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Halt));
         }
     }, term);
 }
@@ -141,12 +192,12 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
                 case ExprBinary::Sub: opc = OpCode::Sub; break;
                 case ExprBinary::Mul: opc = OpCode::Mul; break;
                 case ExprBinary::Div: opc = OpCode::Div; break;
-                case ExprBinary::Rem: opc = OpCode::Nop; break;
+                case ExprBinary::Rem: opc = OpCode::Rem; break;
                 case ExprBinary::Shl: opc = OpCode::Shl; break;
                 case ExprBinary::Shr: opc = OpCode::Shr; break;
-                case ExprBinary::BitAnd:
-                case ExprBinary::BitOr:
-                case ExprBinary::BitXor:
+                case ExprBinary::BitAnd: opc = OpCode::BitAnd; break;
+                case ExprBinary::BitOr: opc = OpCode::BitOr; break;
+                case ExprBinary::BitXor: opc = OpCode::BitXor; break;
                 case ExprBinary::And:
                 case ExprBinary::Or:
                     opc = OpCode::Nop; break;
@@ -167,10 +218,97 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
                 m_chunk.emitByte(static_cast<uint8_t>(OpCode::Cmp));
                 emitReg(lReg);
                 emitReg(rReg);
-                // TODO: convert flags to boolean result
-                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
-                emitReg(placeReg);
-                emitImm(0);
+
+                static int cmpLabelId = 0;
+                int id = cmpLabelId++;
+
+                // Emit: Push dest, 1; if (true) skip; Push dest, 0; end:
+                // After Cmp l,r: Z=1 if l==r, N=1 if l<r (signed)
+
+                auto emitSetTrue  = [&]() {
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                    emitReg(placeReg);
+                    emitImm(1);
+                };
+                auto emitSetFalse = [&]() {
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                    emitReg(placeReg);
+                    emitImm(0);
+                };
+                auto emitJmpEnd = [&](int n) {
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                    emitAddr("_ce" + std::to_string(n));
+                    emitAddr("_ce" + std::to_string(n));
+                };
+                auto emitEndLabel = [&](int n) {
+                    m_labelOffsets["_ce" + std::to_string(n)] =
+                        static_cast<uint32_t>(m_chunk.offset());
+                };
+
+                switch (v.op) {
+                case ExprBinary::Eq:
+                    // True if Z=1: set 1, Jz skip, set 0, end
+                    emitSetTrue();
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jz));
+                    emitAddr("_ce" + std::to_string(id));
+                    emitSetFalse();
+                    emitEndLabel(id);
+                    break;
+                case ExprBinary::Ne:
+                    // True if Z=0
+                    emitSetTrue();
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jnz));
+                    emitAddr("_ce" + std::to_string(id));
+                    emitSetFalse();
+                    emitEndLabel(id);
+                    break;
+                case ExprBinary::Lt:
+                    // True if N=1
+                    emitSetTrue();
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jn));
+                    emitAddr("_ce" + std::to_string(id));
+                    emitSetFalse();
+                    emitEndLabel(id);
+                    break;
+                case ExprBinary::Le:
+                    // True if Z=1 or N=1
+                    emitSetTrue();
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jz));
+                    emitAddr("_ce" + std::to_string(id));
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jn));
+                    emitAddr("_ce" + std::to_string(id));
+                    emitSetFalse();
+                    emitEndLabel(id);
+                    break;
+                case ExprBinary::Gt:
+                    // True if Z=0 and N=0. False if Z=1 or N=1.
+                    // Set 1; if false (Z|N) goto false; Jmp end; false: set 0; end:
+                    emitSetTrue();
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jz));
+                    emitAddr("_cf" + std::to_string(id));
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jn));
+                    emitAddr("_cf" + std::to_string(id));
+                    emitJmpEnd(id);
+                    m_labelOffsets["_cf" + std::to_string(id)] =
+                        static_cast<uint32_t>(m_chunk.offset());
+                    emitSetFalse();
+                    emitEndLabel(id);
+                    break;
+                case ExprBinary::Ge:
+                    // True if N=0. False if N=1.
+                    emitSetTrue();
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jn));
+                    emitAddr("_cf" + std::to_string(id));
+                    emitJmpEnd(id);
+                    m_labelOffsets["_cf" + std::to_string(id)] =
+                        static_cast<uint32_t>(m_chunk.offset());
+                    emitSetFalse();
+                    emitEndLabel(id);
+                    break;
+                default:
+                    emitSetFalse();
+                    break;
+                }
                 return;
             }
             m_chunk.emitByte(static_cast<uint8_t>(opc));
@@ -195,16 +333,54 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
                 emitReg(opndReg);
                 emitReg(placeReg);
             } else {
-                // TODO: Not, Deref
-                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Nop));
+                if (v.op == ExprUnary::Not) {
+                    uint8_t opndReg = 254;
+                    uint8_t zeroReg = 253;
+                    static int notLabelId = 0;
+                    int id = notLabelId++;
+                    std::string trueLabel = "_not_true" + std::to_string(id);
+                    std::string endLabel = "_not_end" + std::to_string(id);
+
+                    emitOperandToReg(v.opnd, opndReg);
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                    emitReg(zeroReg);
+                    emitImm(0);
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Cmp));
+                    emitReg(opndReg);
+                    emitReg(zeroReg);
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jz));
+                    emitAddr(trueLabel);
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                    emitReg(placeReg);
+                    emitImm(0);
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                    emitAddr(endLabel);
+                    emitAddr(endLabel);
+                    m_labelOffsets[trueLabel] = static_cast<uint32_t>(m_chunk.offset());
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                    emitReg(placeReg);
+                    emitImm(1);
+                    m_labelOffsets[endLabel] = static_cast<uint32_t>(m_chunk.offset());
+                } else {
+                    emitOperandToReg(v.opnd, placeReg);
+                }
             }
         } else if constexpr (std::is_same_v<T, RvCast>) {
             uint8_t srcReg = 254;
             emitOperandToReg(v.op, srcReg);
-            // TODO: use ItoF / FtoI based on types
-            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Mov));
-            emitReg(placeReg);
-            emitReg(srcReg);
+            if (v.ty && (v.ty->kind() == TyKind::Float || v.ty->kind() == TyKind::Double)) {
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::ItoF));
+                emitReg(srcReg);
+                emitReg(placeReg);
+            } else if (v.ty && (v.ty->kind() == TyKind::Int || v.ty->kind() == TyKind::Long)) {
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::FtoI));
+                emitReg(srcReg);
+                emitReg(placeReg);
+            } else {
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Mov));
+                emitReg(placeReg);
+                emitReg(srcReg);
+            }
         } else if constexpr (std::is_same_v<T, RvRef> || std::is_same_v<T, RvPtr>) {
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::Mov));
             emitReg(placeReg);

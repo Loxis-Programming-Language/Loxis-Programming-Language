@@ -34,10 +34,12 @@ private:
 
     LocalId lowerExpr(const Expr& expr);
     void lowerStmt(const Stmt& stmt);
-    MirBody lowerFn(const ItemFn& fn);
+    MirBody lowerFn(const ItemFun& fn);
 
     LocalId lowerPlace(const Expr& expr);
     LocalId unitLocal();
+    CoreTyPtr lowerType(const TypePtr& ty);
+    CoreTyPtr literalType(const ExprLit& lit);
 };
 
 } // namespace loxis::v2

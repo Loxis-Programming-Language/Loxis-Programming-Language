@@ -32,36 +32,22 @@ bool Lexer::isIdCont(char c) const { return c == '_' || std::isalnum(static_cast
 
 Tk Lexer::keyword(const std::string& s) const {
     static const std::unordered_map<std::string, Tk> kw = {
-        {"mod", Tk::KwMod}, {"use", Tk::KwUse}, {"fn", Tk::KwFn},
-        {"let", Tk::KwLet}, {"mut", Tk::KwMut}, {"struct", Tk::KwStruct},
-        {"enum", Tk::KwEnum}, {"trait", Tk::KwTrait}, {"impl", Tk::KwImpl},
+        {"package", Tk::KwPackage}, {"import", Tk::KwImport}, {"from", Tk::KwFrom},
+        {"fun", Tk::KwFun}, {"let", Tk::KwLet}, {"var", Tk::KwVar}, {"val", Tk::KwVal},
+        {"class", Tk::KwClass}, {"interface", Tk::KwInterface}, {"object", Tk::KwObject}, {"enum", Tk::KwEnum},
+        {"open", Tk::KwOpen}, {"abstract", Tk::KwAbstract}, {"data", Tk::KwData}, {"override", Tk::KwOverride},
+        {"init", Tk::KwInit}, {"companion", Tk::KwCompanion},
         {"for", Tk::KwFor}, {"while", Tk::KwWhile}, {"if", Tk::KwIf},
-        {"else", Tk::KwElse}, {"match", Tk::KwMatch}, {"return", Tk::KwReturn},
+        {"else", Tk::KwElse}, {"when", Tk::KwWhen}, {"return", Tk::KwReturn},
         {"break", Tk::KwBreak}, {"continue", Tk::KwContinue}, {"loop", Tk::KwLoop},
-        {"true", Tk::KwTrue}, {"false", Tk::KwFalse}, {"self", Tk::KwSelf},
-        {"super", Tk::KwSuper}, {"extern", Tk::KwExtern}, {"unsafe", Tk::KwUnsafe},
-        {"const", Tk::KwConst}, {"static", Tk::KwStatic}, {"as", Tk::KwAs},
-        {"where", Tk::KwWhere}, {"type", Tk::KwType}, {"ref", Tk::KwRef},
-        {"box", Tk::KwBox}, {"pub", Tk::KwPub}, {"priv", Tk::KwPriv},
-        {"pub(crate)", Tk::KwPubCrate},
+        {"true", Tk::KwTrue}, {"false", Tk::KwFalse}, {"null", Tk::KwNull},
+        {"is", Tk::KwIs}, {"in", Tk::KwIn}, {"as", Tk::KwAs},
+        {"where", Tk::KwWhere}, {"type", Tk::KwType}, {"const", Tk::KwConst},
+        {"public", Tk::KwPublic}, {"internal", Tk::KwInternal},
+        {"private", Tk::KwPrivate},
     };
     auto it = kw.find(s);
     return it != kw.end() ? it->second : Tk::Ident;
-}
-
-bool Lexer::trySuffix() {
-    static const char* suffs[] = {
-        "i16","i32","i64","u16","u32","u64","f32","f64",
-        "isize","usize","i8","u8"
-    };
-    for (const char* s : suffs) {
-        size_t n = std::strlen(s);
-        if (src.compare(pos, n, s) == 0) {
-            pos += n; col += static_cast<uint32_t>(n);
-            return true;
-        }
-    }
-    return false;
 }
 
 std::string Lexer::literalStr() {
@@ -116,22 +102,6 @@ std::vector<Token> Lexer::tokenize() {
             while (!atEnd() && isIdCont(peek())) advance();
             std::string lex = src.substr(start, pos - start);
             Tk kind = (lex == "_") ? Tk::Underscore : keyword(lex);
-            if (lex == "pub" && peek() == '(') {
-                size_t save = pos;
-                advance(); // '('
-                if (src.compare(pos, 5, "crate") == 0) {
-                    pos += 5; col += 5;
-                    if (peek() == ')') {
-                        advance();
-                        lex = "pub(crate)";
-                        kind = Tk::KwPubCrate;
-                    } else {
-                        pos = save; col = l.col + static_cast<uint32_t>(save - start);
-                    }
-                } else {
-                    pos = save; col = l.col + static_cast<uint32_t>(save - start);
-                }
-            }
             out.emplace_back(kind, lex, l);
             continue;
         }
@@ -141,7 +111,7 @@ std::vector<Token> Lexer::tokenize() {
             if (c == '0' && (peek(1) == 'x' || peek(1) == 'b' || peek(1) == 'o')) {
                 advance(); advance();
                 while (!atEnd() && (std::isxdigit(static_cast<unsigned char>(peek())) || peek() == '_')) advance();
-                trySuffix();
+
                 out.emplace_back(Tk::IntLit, src.substr(start, pos - start), l);
                 continue;
             }
@@ -159,10 +129,10 @@ std::vector<Token> Lexer::tokenize() {
                 else while (!atEnd() && (std::isdigit(static_cast<unsigned char>(peek())) || peek() == '_')) advance();
             }
             if (isFloat) {
-                trySuffix();
+
                 out.emplace_back(Tk::FloatLit, src.substr(start, pos - start), l);
             } else {
-                trySuffix();
+
                 out.emplace_back(Tk::IntLit, src.substr(start, pos - start), l);
             }
             continue;

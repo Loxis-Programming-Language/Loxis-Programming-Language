@@ -15,8 +15,16 @@ using PatPtr  = std::shared_ptr<struct Pat>;
 using TypePtr = std::shared_ptr<struct Type>;
 using ItemPtr = std::shared_ptr<struct Item>;
 
+enum class Visibility {
+    Private,
+    Internal,
+    Public,
+};
+
+enum class ClassModifier { None, Open, Abstract, Data };
+
 // ============================================================
-// Forward: Types
+// Types
 // ============================================================
 struct Path {
     std::vector<std::string> segs;
@@ -31,14 +39,14 @@ struct AstTyRef  { bool mut = false; TypePtr elem; };
 struct AstTyPtr { bool mut = false; TypePtr elem; };
 struct AstTyFn   { std::vector<TypePtr> params; TypePtr ret; };
 struct AstTyInfer {};
-struct AstTyNever {};
+struct AstTyNullable { TypePtr inner; };    // T?
 
-struct Type : std::variant<AstTyPath, AstTyTuple, AstTyArray, AstTySlice, AstTyRef, AstTyPtr, AstTyFn, AstTyInfer, AstTyNever> {
+struct Type : std::variant<AstTyPath, AstTyTuple, AstTyArray, AstTySlice, AstTyRef, AstTyPtr, AstTyFn, AstTyInfer, AstTyNullable> {
     using variant::variant;
 };
 
 // ============================================================
-// Forward: Patterns
+// Patterns
 // ============================================================
 struct PatWild {};
 struct PatBind { std::string name; bool mut = false; PatPtr sub; };
@@ -55,7 +63,7 @@ struct Pat : std::variant<PatWild, PatBind, PatLit, PatTuple, PatStruct, PatEnum
 };
 
 // ============================================================
-// Forward: Expressions
+// Expressions
 // ============================================================
 struct ExprLit {
     std::variant<int64_t,uint64_t,double,bool,char,std::string> val;
@@ -86,7 +94,15 @@ struct ExprIf { ExprPtr cond; ExprPtr then_; ExprPtr else_; };
 struct ExprWhile { ExprPtr cond; ExprPtr body; std::optional<std::string> label; };
 struct ExprFor { PatPtr pat; ExprPtr iter; ExprPtr body; std::optional<std::string> label; };
 struct ExprLoop { ExprPtr body; std::optional<std::string> label; };
-struct ExprMatch { ExprPtr scrut; std::vector<std::pair<PatPtr,ExprPtr>> arms; };
+
+// when expression (replaces match)
+struct WhenArm {
+    std::variant<ExprPtr, PatPtr, std::monostate> condition; // expr, pattern, or empty (else)
+    ExprPtr body;
+    bool isElse = false;
+};
+struct ExprWhen { ExprPtr scrut; std::vector<WhenArm> arms; };
+
 struct ExprBreak { std::optional<std::string> label; ExprPtr expr; };
 struct ExprContinue { std::optional<std::string> label; };
 struct ExprReturn { ExprPtr expr; };
@@ -96,17 +112,29 @@ struct ExprDeref { ExprPtr expr; };
 struct ExprTry { ExprPtr expr; };
 struct ExprCast { ExprPtr expr; TypePtr ty; };
 
+// Nullable & type test expressions
+struct ExprSafeCall { ExprPtr recv; std::string method; std::vector<ExprPtr> args; };
+struct ExprSafeField { ExprPtr recv; std::string field; };
+struct ExprElvis { ExprPtr lhs; ExprPtr rhs; };
+struct ExprForceUnwrap { ExprPtr expr; };
+struct ExprIs { ExprPtr expr; TypePtr ty; };
+struct ExprIsNot { ExprPtr expr; TypePtr ty; };
+struct ExprNull {};
+struct ExprStringTemplate { std::vector<std::variant<std::string, ExprPtr>> parts; };
+
 struct Expr : std::variant<
     ExprLit, ExprPath, ExprTuple, ExprArray, ExprStruct, ExprCall, ExprMethodCall,
     ExprField, ExprIndex, ExprUnary, ExprBinary, ExprAssign, ExprBlock, ExprIf,
-    ExprWhile, ExprFor, ExprLoop, ExprMatch, ExprBreak, ExprContinue, ExprReturn,
-    ExprClosure, ExprRef, ExprDeref, ExprTry, ExprCast
+    ExprWhile, ExprFor, ExprLoop, ExprWhen, ExprBreak, ExprContinue, ExprReturn,
+    ExprClosure, ExprRef, ExprDeref, ExprTry, ExprCast,
+    ExprSafeCall, ExprSafeField, ExprElvis, ExprForceUnwrap,
+    ExprIs, ExprIsNot, ExprNull, ExprStringTemplate
 > {
     using variant::variant;
 };
 
 // ============================================================
-// Forward: Statements
+// Statements
 // ============================================================
 struct StmtLet { PatPtr pat; TypePtr ty; ExprPtr init; };
 struct StmtExpr { ExprPtr expr; bool semi; };
@@ -117,7 +145,7 @@ struct Stmt : std::variant<StmtLet, StmtExpr, StmtItem> {
 };
 
 // ============================================================
-// Forward: Items (top-level)
+// Items (top-level)
 // ============================================================
 struct GenericParam {
     enum Kind { Type, Const } kind;
@@ -127,39 +155,128 @@ struct GenericParam {
 
 struct WhereBound {
     TypePtr ty;
-    Path trait;
+    Path path;  // type:path for bound (was "trait", now generic)
 };
 
-struct Field { std::string name; TypePtr ty; std::optional<ExprPtr> def; };
-struct Variant { std::string name; std::vector<Field> fields; bool tuple = false; };
-struct TraitMethod { std::string name; std::vector<std::pair<std::string,TypePtr>> params; TypePtr ret; ExprPtr def; };
-struct UseTree {
-    enum Kind { Simple, Nested, Glob } kind;
-    Path path;
-    std::vector<UseTree> nested;
-    std::optional<std::string> rename;
+struct FieldDecl {
+    std::string name;
+    TypePtr ty;
+    bool isVal = true;     // val (immutable) or var (mutable)
+    ExprPtr initializer;
 };
 
-struct ItemFn {
-    std::string name; bool pub = false;
+struct ParamDecl {
+    std::string name;
+    TypePtr ty;
+    bool isVal = false;    // val → property
+    bool isVar = false;    // var → mutable property
+    ExprPtr default_;
+};
+
+// Import
+struct ImportItem { std::string name; std::optional<std::string> alias; };
+struct ItemImport { Path module; std::vector<ImportItem> items; bool importModule = true; };
+
+// Function
+struct ItemFun {
+    std::string name;
+    Visibility visibility = Visibility::Public;
     std::vector<GenericParam> generics;
     std::vector<std::pair<std::string,TypePtr>> params;
     TypePtr ret;
     std::vector<WhereBound> where_;
     ExprPtr body;
-    bool unsafe = false, ext = false;
+    bool isOpen = false;
+    bool isOverride = false;
+    bool isAbstract = false;
 };
-struct ItemStruct { std::string name; bool pub = false; std::vector<GenericParam> generics; std::vector<Field> fields; std::vector<WhereBound> where_; };
-struct ItemEnum { std::string name; bool pub = false; std::vector<GenericParam> generics; std::vector<Variant> vars; std::vector<WhereBound> where_; };
-struct ItemTrait { std::string name; bool pub = false; std::vector<GenericParam> generics; std::vector<TraitMethod> methods; std::vector<Path> supers; };
-struct ItemImpl { std::vector<GenericParam> generics; TypePtr ty; std::optional<Path> trait; std::vector<WhereBound> where_; std::vector<ItemFn> methods; };
-struct ItemMod { std::string name; bool pub = false; std::vector<ItemPtr> items; bool inline_ = false; };
-struct ItemUse { bool pub = false; UseTree tree; };
-struct ItemStatic { std::string name; bool pub = false; TypePtr ty; ExprPtr init; bool mut = false; };
-struct ItemConst { std::string name; bool pub = false; TypePtr ty; ExprPtr init; };
+
+// Class
+struct ItemClass {
+    std::string name;
+    Visibility visibility = Visibility::Public;
+    ClassModifier modifier = ClassModifier::None;
+    std::vector<GenericParam> generics;
+    std::vector<ParamDecl> primaryCtor;
+    std::optional<Path> superClass;
+    std::vector<ExprPtr> superClassArgs;
+    std::vector<Path> interfaces;
+    std::vector<WhereBound> where_;
+    // Body
+    std::vector<FieldDecl> fields;
+    std::vector<ItemFun> methods;
+    std::vector<StmtPtr> initBlocks;
+};
+
+// Interface
+struct InterfaceMethodDecl {
+    std::string name;
+    std::vector<std::pair<std::string,TypePtr>> params;
+    TypePtr ret;
+    ExprPtr defaultBody;
+};
+
+struct ItemInterface {
+    std::string name;
+    Visibility visibility = Visibility::Public;
+    std::vector<GenericParam> generics;
+    std::vector<Path> supers;
+    std::vector<InterfaceMethodDecl> methods;
+};
+
+// Enum class
+struct EnumVariant {
+    std::string name;
+    std::vector<std::pair<std::string,TypePtr>> fields;
+    bool isTuple = false;
+};
+
+struct ItemEnumClass {
+    std::string name;
+    Visibility visibility = Visibility::Public;
+    std::vector<GenericParam> generics;
+    std::vector<Path> interfaces;
+    std::vector<EnumVariant> variants;
+    std::vector<FieldDecl> properties;
+    std::vector<ItemFun> methods;
+};
+
+// Object (singleton)
+struct ItemObject {
+    std::string name;
+    Visibility visibility = Visibility::Public;
+    std::optional<Path> superClass;
+    std::vector<Path> interfaces;
+    std::vector<FieldDecl> fields;
+    std::vector<ItemFun> methods;
+    std::vector<StmtPtr> initBlocks;
+};
+
+// Top-level properties
+struct ItemVal {
+    std::string name;
+    Visibility visibility = Visibility::Public;
+    TypePtr ty;
+    ExprPtr init;
+};
+
+struct ItemVar {
+    std::string name;
+    Visibility visibility = Visibility::Public;
+    TypePtr ty;
+    ExprPtr init;
+};
+
+struct ItemConst {
+    std::string name;
+    Visibility visibility = Visibility::Public;
+    TypePtr ty;
+    ExprPtr init;
+};
 
 struct Item : std::variant<
-    ItemFn, ItemStruct, ItemEnum, ItemTrait, ItemImpl, ItemMod, ItemUse, ItemStatic, ItemConst
+    ItemFun, ItemClass, ItemEnumClass, ItemInterface, ItemObject,
+    ItemImport, ItemVal, ItemVar, ItemConst
 > {
     using variant::variant;
 };
@@ -169,6 +286,7 @@ struct Item : std::variant<
 // ============================================================
 struct Module {
     std::string name;
+    std::optional<Path> packageName;
     std::vector<ItemPtr> items;
     SourceLoc loc;
 };

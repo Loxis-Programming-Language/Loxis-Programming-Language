@@ -15,9 +15,17 @@ enum class Tk : uint16_t {
     // literals
     Ident, IntLit, FloatLit, StringLit, CharLit,
     // keywords
-    KwMod, KwUse, KwFn, KwLet, KwMut, KwStruct, KwEnum, KwTrait, KwImpl, KwFor, KwWhile, KwIf, KwElse, KwMatch,
-    KwReturn, KwBreak, KwContinue, KwLoop, KwTrue, KwFalse, KwSelf, KwSuper, KwExtern, KwUnsafe, KwConst, KwStatic,
-    KwAs, KwWhere, KwType, KwRef, KwBox, KwPub, KwPriv, KwPubCrate,
+    KwPackage, KwImport, KwFrom,
+    KwFun, KwLet, KwVar, KwVal,
+    KwClass, KwInterface, KwObject, KwEnum,
+    KwOpen, KwAbstract, KwData, KwOverride,
+    KwInit, KwCompanion,
+    KwFor, KwWhile, KwIf, KwElse, KwWhen,
+    KwReturn, KwBreak, KwContinue, KwLoop,
+    KwTrue, KwFalse, KwNull,
+    KwIs, KwIn, KwAs,
+    KwWhere, KwType, KwConst,
+    KwPublic, KwInternal, KwPrivate,
     // punct
     LParen, RParen, LBrace, RBrace, LBracket, RBracket,
     Comma, Dot, DotDot, DotDotEq, Colon, DColon, Semi, Arrow, FatArrow, Pound, Dollar, At,
@@ -27,7 +35,7 @@ enum class Tk : uint16_t {
     AndAnd, OrOr,
     Shl, Shr,
     PlusEq, MinusEq, StarEq, SlashEq, PercentEq, AmpEq, PipeEq, CaretEq, ShlEq, ShrEq,
-    // newline (significant whitespace for v1 compat, but v2 uses semi mostly)
+    // newline
     Newline,
     // misc
     Underscore,
@@ -49,40 +57,44 @@ inline const char* tkName(Tk k) {
     case Tk::FloatLit: return "float";
     case Tk::StringLit: return "string";
     case Tk::CharLit: return "char";
-    case Tk::KwMod: return "'mod'";
-    case Tk::KwUse: return "'use'";
-    case Tk::KwFn: return "'fn'";
+    case Tk::KwPackage: return "'package'";
+    case Tk::KwImport: return "'import'";
+    case Tk::KwFrom: return "'from'";
+    case Tk::KwFun: return "'fun'";
     case Tk::KwLet: return "'let'";
-    case Tk::KwMut: return "'mut'";
-    case Tk::KwStruct: return "'struct'";
+    case Tk::KwVar: return "'var'";
+    case Tk::KwVal: return "'val'";
+    case Tk::KwClass: return "'class'";
+    case Tk::KwInterface: return "'interface'";
+    case Tk::KwObject: return "'object'";
     case Tk::KwEnum: return "'enum'";
-    case Tk::KwTrait: return "'trait'";
-    case Tk::KwImpl: return "'impl'";
+    case Tk::KwOpen: return "'open'";
+    case Tk::KwAbstract: return "'abstract'";
+    case Tk::KwData: return "'data'";
+    case Tk::KwOverride: return "'override'";
+    case Tk::KwInit: return "'init'";
+    case Tk::KwCompanion: return "'companion'";
     case Tk::KwFor: return "'for'";
     case Tk::KwWhile: return "'while'";
     case Tk::KwIf: return "'if'";
     case Tk::KwElse: return "'else'";
-    case Tk::KwMatch: return "'match'";
+    case Tk::KwWhen: return "'when'";
     case Tk::KwReturn: return "'return'";
     case Tk::KwBreak: return "'break'";
     case Tk::KwContinue: return "'continue'";
     case Tk::KwLoop: return "'loop'";
     case Tk::KwTrue: return "'true'";
     case Tk::KwFalse: return "'false'";
-    case Tk::KwSelf: return "'self'";
-    case Tk::KwSuper: return "'super'";
-    case Tk::KwExtern: return "'extern'";
-    case Tk::KwUnsafe: return "'unsafe'";
-    case Tk::KwConst: return "'const'";
-    case Tk::KwStatic: return "'static'";
+    case Tk::KwNull: return "'null'";
+    case Tk::KwIs: return "'is'";
+    case Tk::KwIn: return "'in'";
     case Tk::KwAs: return "'as'";
     case Tk::KwWhere: return "'where'";
     case Tk::KwType: return "'type'";
-    case Tk::KwRef: return "'ref'";
-    case Tk::KwBox: return "'box'";
-    case Tk::KwPub: return "'pub'";
-    case Tk::KwPriv: return "'priv'";
-    case Tk::KwPubCrate: return "'pub(crate)'";
+    case Tk::KwConst: return "'const'";
+    case Tk::KwPublic: return "'public'";
+    case Tk::KwInternal: return "'internal'";
+    case Tk::KwPrivate: return "'private'";
     case Tk::LParen: return "'('";
     case Tk::RParen: return "')'";
     case Tk::LBrace: return "'{'";

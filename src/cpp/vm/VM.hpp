@@ -32,6 +32,8 @@ private:
 	static constexpr uint8_t
 	TAG_HEAP = 2;  // register holds heap offset
 	static constexpr uint8_t
+	TAG_NULL = 4;   // register holds null reference
+	static constexpr uint8_t
 	TAG_FLOAT = 3;  // register holds float64 bits
 
 public:

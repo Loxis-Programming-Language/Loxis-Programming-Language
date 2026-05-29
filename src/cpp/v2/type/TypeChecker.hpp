@@ -43,8 +43,14 @@ private:
     bool isInteger(TyPtr t);
     bool isBool(TyPtr t);
     bool sameType(TyPtr a, TyPtr b);
+    bool isSubtype(TyPtr a, TyPtr b);
     bool isPrimitiveCastable(TyPtr from, TyPtr to);
     bool isMutablePlace(ExprPtr e, Scope* sc);
+
+    // Class/interface helpers
+    const MethodInfo* lookupMethod(TyPtr recv, const std::string& name);
+    const FieldInfo*  lookupField(TyPtr recv, const std::string& name);
+    TyPtr unwrapNullable(TyPtr t);
 };
 
 } // namespace

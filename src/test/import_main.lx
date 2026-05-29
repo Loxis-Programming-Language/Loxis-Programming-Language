@@ -1,0 +1,6 @@
+from import_math import add
+
+fun main() -> int {
+    print(add(20, 22))
+    return add(20, 22)
+}

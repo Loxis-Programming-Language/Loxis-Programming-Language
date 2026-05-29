@@ -53,10 +53,12 @@ struct TmSwitchInt { Operand discr; std::vector<std::pair<int64_t,BlockId>> valu
 struct TmSwitchDiscr { LocalId local; std::vector<BlockId> targets; BlockId otherwise; };
 struct TmReturn {};
 struct TmCall { Operand func; std::vector<Operand> args; LocalId dest; BlockId return_; };
+struct TmCallIndirect { Operand funcPtr; std::vector<Operand> args; LocalId dest; BlockId return_; };
+struct TmCheckNull { Operand value; BlockId nullTarget; BlockId okTarget; };
 struct TmUnreachable {};
 
 struct Terminator : std::variant<
-    TmGoto, TmSwitchInt, TmSwitchDiscr, TmReturn, TmCall, TmUnreachable
+    TmGoto, TmSwitchInt, TmSwitchDiscr, TmReturn, TmCall, TmCallIndirect, TmCheckNull, TmUnreachable
 > {
     using variant::variant;
 };
@@ -69,9 +71,12 @@ struct StStorageLive { LocalId local; };
 struct StStorageDead { LocalId local; };
 struct StSetDiscriminant { LocalId place; uint32_t variant; };
 struct StDrop { LocalId local; };
+struct StPush { LocalId local; }; // push register to data stack
+struct StPop  { LocalId local; }; // pop data stack to register
 
 struct Statement : std::variant<
-    StAssign, StStorageLive, StStorageDead, StSetDiscriminant, StDrop
+    StAssign, StStorageLive, StStorageDead, StSetDiscriminant, StDrop,
+    StPush, StPop
 > {
     using variant::variant;
 };

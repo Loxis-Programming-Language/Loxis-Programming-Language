@@ -24,7 +24,7 @@ private:
     bool isIdStart(char c) const;
     bool isIdCont(char c) const;
     Tk keyword(const std::string& s) const;
-    bool trySuffix();
+
     std::string literalStr();
     std::string literalChar();
 };

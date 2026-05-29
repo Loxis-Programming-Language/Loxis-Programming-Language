@@ -30,7 +30,6 @@ private:
 
     // basic helpers
     std::string expectIdent();
-    std::string expectIdentOrKw();
     bool isItemStart();
     void skipToBoundary();
     void error(const std::string& msg);
@@ -39,24 +38,30 @@ private:
     std::vector<GenericParam> parseGenerics();
     std::vector<WhereBound> parseWhere();
     TypePtr parseRet();
+    std::vector<ParamDecl> parseClassParams();
     std::vector<std::pair<std::string,TypePtr>> parseFnParams();
     Path parsePath();
     Path parseTypePath();
     std::vector<TypePtr> parseGenericArgs();
     void expectGt();
+    Visibility parseVisibility();
+    Path parseDottedPath();
+
+    // class modifiers
+    ClassModifier parseClassModifier();
 
     // items
     ItemPtr parseItem();
-    ItemFn parseFnBody(bool pub, bool unsafe, bool ext);
-    ItemPtr parseStruct(bool pub);
-    ItemPtr parseEnum(bool pub);
-    ItemPtr parseTrait(bool pub);
-    ItemPtr parseImpl();
-    ItemPtr parseMod(bool pub);
-    ItemPtr parseUse(bool pub);
-    ItemPtr parseConst(bool pub);
-    ItemPtr parseStatic(bool pub);
-    UseTree parseUseTree();
+    ItemFun parseFun(Visibility vis);
+    ItemPtr parseClass(Visibility vis, ClassModifier mod);
+    ItemPtr parseInterface(Visibility vis);
+    ItemPtr parseEnumClass(Visibility vis);
+    ItemPtr parseObject(Visibility vis);
+    ItemPtr parseVal(Visibility vis);
+    ItemPtr parseVar(Visibility vis);
+    ItemPtr parseConst(Visibility vis);
+    ItemPtr parseImport();
+    ItemPtr parseFromImport();
 
     // statements
     StmtPtr parseStmt();
@@ -66,6 +71,7 @@ private:
     // expressions
     ExprPtr parseExpr();
     ExprPtr parseAssign();
+    ExprPtr parseElvis();
     ExprPtr parseRange();
     ExprPtr parseOr();
     ExprPtr parseAnd();
@@ -85,13 +91,14 @@ private:
     ExprPtr parseWhile(std::optional<std::string> label);
     ExprPtr parseFor(std::optional<std::string> label);
     ExprPtr parseLoop(std::optional<std::string> label);
-    ExprPtr parseMatch();
+    ExprPtr parseWhen();
     ExprPtr parseBreak();
     ExprPtr parseContinue();
     ExprPtr parseReturn();
     ExprPtr parseClosure();
     ExprPtr parseStructExpr(Path path);
     ExprPtr parseLiteral();
+    ExprPtr parseNull();
 
     // patterns
     PatPtr parsePat();
