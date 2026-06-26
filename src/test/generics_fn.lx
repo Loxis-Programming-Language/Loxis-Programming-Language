@@ -1,0 +1,8 @@
+fun identity<T>(x: T) -> T {
+    return x
+}
+
+fun main() -> int {
+    print(identity<int>(42))
+    return 0
+}

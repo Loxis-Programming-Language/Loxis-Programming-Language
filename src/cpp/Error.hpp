@@ -27,18 +27,6 @@ struct GalVMError : std::runtime_error {
 			: std::runtime_error(msg), loc{"<unknown>", 0, 0} {}
 };
 
-struct LexError : GalVMError {
-	using GalVMError::GalVMError;
-};
-
-struct ParseError : GalVMError {
-	using GalVMError::GalVMError;
-};
-
-struct IRError : GalVMError {
-	using GalVMError::GalVMError;
-};
-
 struct RuntimeError : GalVMError {
 	using GalVMError::GalVMError;
 };

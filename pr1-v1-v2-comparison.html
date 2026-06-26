@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loxis PR #1: v1 vs v2</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18202a;
+      --muted: #596575;
+      --line: #d8dde5;
+      --paper: #f7f8fb;
+      --panel: #ffffff;
+      --blue: #1769aa;
+      --green: #16794d;
+      --amber: #a55c00;
+      --red: #b42318;
+      --violet: #6842c2;
+      --shadow: 0 12px 32px rgba(20, 32, 48, 0.08);
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .wrap {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .hero {
+      min-height: 360px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      align-items: center;
+      gap: 36px;
+      padding: 44px 0 34px;
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(34px, 5vw, 64px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 0;
+      max-width: 720px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: #2b3542;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .diagram {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+
+    .lane {
+      display: grid;
+      grid-template-columns: 86px 1fr;
+      gap: 14px;
+      align-items: center;
+      margin: 12px 0;
+    }
+
+    .lane strong {
+      font-size: 18px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .step {
+      min-height: 58px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      display: grid;
+      align-content: center;
+      font-size: 13px;
+      color: #263241;
+      background: #fbfcfe;
+    }
+
+    .step.v1 { border-left: 4px solid var(--blue); }
+    .step.v2 { border-left: 4px solid var(--green); }
+    .step.todo { border-left: 4px solid var(--amber); background: #fff9ef; }
+
+    section {
+      padding: 34px 0;
+    }
+
+    h2 {
+      margin: 0 0 18px;
+      font-size: 26px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid.cols-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid.cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: 0 6px 18px rgba(20, 32, 48, 0.04);
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      color: #fff;
+      border-radius: 999px;
+      padding: 4px 9px;
+      margin-bottom: 12px;
+    }
+
+    .tag.v1 { background: var(--blue); }
+    .tag.v2 { background: var(--green); }
+    .tag.status { background: var(--amber); }
+    .tag.risk { background: var(--red); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 6px 18px rgba(20, 32, 48, 0.04);
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+      padding: 14px 16px;
+    }
+
+    th {
+      background: #eef3f8;
+      color: #273242;
+      font-size: 14px;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    code {
+      background: #eef1f5;
+      border: 1px solid #dce2ea;
+      border-radius: 6px;
+      padding: 1px 5px;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    .codeblock {
+      margin: 0;
+      background: #111827;
+      color: #d8e7ff;
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .callout {
+      border-left: 5px solid var(--amber);
+      background: #fff8ea;
+      padding: 16px 18px;
+      border-radius: 8px;
+      color: #4c3920;
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .bar {
+      height: 12px;
+      border-radius: 999px;
+      background: #e6ebf1;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+    }
+
+    .done { background: var(--green); }
+    .partial { background: var(--amber); }
+    .proto { background: var(--violet); }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 24px 0 34px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 860px) {
+      .hero,
+      .grid.cols-2,
+      .grid.cols-3 {
+        grid-template-columns: 1fr;
+      }
+
+      .steps {
+        grid-template-columns: 1fr;
+      }
+
+      .lane {
+        grid-template-columns: 1fr;
+      }
+
+      th, td {
+        padding: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap hero">
+      <div>
+        <h1>Loxis v1 和 v2 的区别</h1>
+        <p class="lead">基于 PR #1 的 diff：v1 是当前可运行的编译器管线；v2 是新增的一套更接近 Rust/C++ 系统语言方向的编译器骨架，包含 AST、parser、MIR、类型系统和标准库草案，但入口目前还没有真正接通完整前端。</p>
+        <div class="meta">
+          <span class="pill">PR #1</span>
+          <span class="pill">39 files changed</span>
+          <span class="pill">4726 insertions</span>
+          <span class="pill">73 deletions</span>
+        </div>
+      </div>
+      <div class="diagram" aria-label="compiler pipeline comparison">
+        <div class="lane">
+          <strong>v1</strong>
+          <div class="steps">
+            <div class="step v1">Lexer</div>
+            <div class="step v1">Parser</div>
+            <div class="step v1">IRGen + Compiler</div>
+            <div class="step v1">VM</div>
+          </div>
+        </div>
+        <div class="lane">
+          <strong>v2</strong>
+          <div class="steps">
+            <div class="step v2">Lexer + Parser</div>
+            <div class="step v2">Scope + TypeChecker</div>
+            <div class="step v2">MIR + Lowering</div>
+            <div class="step todo">Driver 未完全接线</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <div class="wrap">
+        <h2>一句话结论</h2>
+        <div class="grid cols-3">
+          <article class="card">
+            <span class="tag v1">v1</span>
+            <h3>当前主线实现</h3>
+            <p>语法较小，直接从现有 AST 生成 IR，再编译成 VM bytecode 运行。PR 里只对 v1 做了 keyword token、CRLF、异常和 VM 分支修复。</p>
+          </article>
+          <article class="card">
+            <span class="tag v2">v2</span>
+            <h3>新编译器架构</h3>
+            <p>新增独立命名空间 <code>loxis::v2</code>，目标是支持模块、泛型、trait、struct、enum、模式匹配、引用、raw pointer、MIR 和更正式的类型系统。</p>
+          </article>
+          <article class="card">
+            <span class="tag status">当前状态</span>
+            <h3>更像原型包</h3>
+            <p><code>Driver.cpp</code> 里 frontend/typecheck 代码被 <code>#if 0</code> 包住，当前运行时创建的是空 <code>Module</code>，所以 v2 还不是完整可用编译器。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>核心差异</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>维度</th>
+              <th>v1</th>
+              <th>v2</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>定位</td>
+              <td>现有 Loxis 编译器，重点是把当前语言子集跑通。</td>
+              <td>下一代编译器，目标是系统语言级别的语义模型。</td>
+            </tr>
+            <tr>
+              <td>入口</td>
+              <td><code>src/cpp/main.cpp</code> 构建为 <code>Loinx</code>。</td>
+              <td><code>src/cpp/main_v2.cpp</code> 构建为 <code>LoinxV2</code>。</td>
+            </tr>
+            <tr>
+              <td>语法规模</td>
+              <td>函数、类、变量、if、while、return、print、表达式、数组/成员访问等。</td>
+              <td>新增规格覆盖 module/use、fn、let mut、struct、enum、trait、impl、match、closure、try、cast、引用和指针。</td>
+            </tr>
+            <tr>
+              <td>Token</td>
+              <td>原本 keyword 依赖 <code>Ident + lexeme</code>；PR 中改成 <code>KwFun</code>、<code>KwClass</code> 等专用 token。</td>
+              <td>有独立 v2 token 定义，面向更丰富的 Rust-like 语法。</td>
+            </tr>
+            <tr>
+              <td>中间表示</td>
+              <td>AST 直接生成当前 IR，再交给 backend 编译。</td>
+              <td>新增 MIR：local、basic block、terminator、statement，用 Lowering 从 AST 降到 MIR。</td>
+            </tr>
+            <tr>
+              <td>类型系统</td>
+              <td>已有较轻量的类型处理，主要服务当前语法。</td>
+              <td>新增 <code>TypeChecker</code>、<code>Scope</code>、<code>Type</code>，覆盖 primitive、tuple、array、ref、raw pointer、function、struct、enum、trait 方向。</td>
+            </tr>
+            <tr>
+              <td>标准库</td>
+              <td>没有这次新增的独立 <code>std</code> 草案。</td>
+              <td>新增 <code>std/core.lxs</code>、<code>option.lxs</code>、<code>result.lxs</code>、<code>vec.lxs</code>、<code>string.lxs</code>、<code>io.lxs</code>。</td>
+            </tr>
+            <tr>
+              <td>可运行性</td>
+              <td>主线仍按原管线运行。</td>
+              <td>代码量完整，但 driver 当前没有启用真实 lexer/parser/typechecker 接线。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>v2 新增模块</h2>
+        <div class="grid cols-3">
+          <article class="card">
+            <h3>Frontend</h3>
+            <p><code>v2/frontend/Lexer.*</code> 和 <code>Parser.*</code> 新增独立前端。Parser 文件约 1100 行，是 PR 里最大的新增点。</p>
+            <div class="bar"><span class="done" style="width: 72%"></span></div>
+          </article>
+          <article class="card">
+            <h3>AST</h3>
+            <p><code>v2/AST.hpp</code> 定义了 Path、Type、Pattern、Expression、Statement、Item、Module 等更完整的语言表面结构。</p>
+            <div class="bar"><span class="done" style="width: 78%"></span></div>
+          </article>
+          <article class="card">
+            <h3>Type</h3>
+            <p><code>v2/type</code> 提供 Scope、Symbol、Type 和 TypeChecker，开始处理作用域、函数返回、循环、引用、cast 等语义。</p>
+            <div class="bar"><span class="partial" style="width: 55%"></span></div>
+          </article>
+          <article class="card">
+            <h3>MIR</h3>
+            <p><code>v2/mir/MIR.hpp</code> 定义 basic block、local、operand、statement、terminator，明显比 v1 IR 更适合后续优化。</p>
+            <div class="bar"><span class="done" style="width: 70%"></span></div>
+          </article>
+          <article class="card">
+            <h3>Backend</h3>
+            <p><code>Lowering</code> 把 v2 AST 降到 MIR，<code>MIRCompiler</code> 把 MIR 编译到当前 VM 的 <code>Chunk</code>。</p>
+            <div class="bar"><span class="partial" style="width: 60%"></span></div>
+          </article>
+          <article class="card">
+            <h3>Driver</h3>
+            <p>存在 <code>compileAndRun</code>，但当前真实 frontend/typecheck 调用被禁用，实际只创建空模块再跑后续流程。</p>
+            <div class="bar"><span class="proto" style="width: 25%"></span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>PR 里对 v1 的改动</h2>
+        <div class="grid cols-2">
+          <article class="card">
+            <h3>词法和解析更明确</h3>
+            <p>v1 的 keyword 现在变成专用 token，不再靠字符串比较判断 <code>fun</code>、<code>class</code>、<code>var</code>、<code>if</code> 等。错误信息也从 token 数字变成可读文本。</p>
+          </article>
+          <article class="card">
+            <h3>兼容和错误处理</h3>
+            <p>lexer 支持 CRLF；main 里 <code>verbose</code> 参数处理更稳；异常打印从吞掉 <code>RuntimeError</code> 变为输出 <code>GalVMError</code> 和普通 exception。</p>
+          </article>
+          <article class="card">
+            <h3>VM 小修</h3>
+            <p>删除了 <code>VM.cpp</code> 里一个重复的 <code>OperandTag::Reg</code> 分支，让 <code>Imm64</code> 分支逻辑更清晰。</p>
+          </article>
+          <article class="card">
+            <h3>构建调整</h3>
+            <p>MSVC 下加入 <code>/utf-8</code>，并新增 <code>LoinxV2</code> target。原 <code>Loinx</code> target 仍然存在。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>当前风险点</h2>
+        <div class="callout">
+          <strong>不要把 v2 当成完整可运行的新编译器。</strong>
+          PR 标题写的是完整 developer source package，但从 <code>Driver.cpp</code> 看，v2 的 lexer、parser、scope builder、type checker 调用还被 <code>#if 0</code> 禁用。也就是说代码结构已经放进来了，但端到端编译真实 v2 源码这件事还没接上。
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>建议 Review 重点</h2>
+        <div class="grid cols-2">
+          <pre class="codeblock">1. 先确认 Loinx v1 是否仍能正常构建和跑测试
+2. 单独构建 LoinxV2，确认新增代码是否编译通过
+3. 检查 Driver.cpp 的 #if 0 是否是临时提交
+4. 检查 std/*.lxs 是否只是草案，还是要进入主线
+5. 评估 CMake GLOB_RECURSE 是否符合项目风格</pre>
+          <pre class="codeblock">完整 diff:
+git diff main...origin/pr/1
+
+只看 v2:
+git diff main...origin/pr/1 -- src/cpp/v2
+
+只看 v1 改动:
+git diff main...origin/pr/1 -- src/cpp/main.cpp src/cpp/frontend src/cpp/vm</pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      Generated from local PR ref <code>origin/pr/1</code>. No merge was performed.
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,28 @@
+package loxis
+
+// ============================================================
+//  Loxis Standard Prelude — auto-loaded for every program
+// ============================================================
+
+// --- Assertion ---
+fun require(condition: bool, message: str) -> unit {
+    if (!condition) { error(message) }
+}
+fun TODO() -> noreturn { error("TODO") }
+
+// --- Numeric ---
+fun max(x: int, y: int) -> int { if (x > y) { return x } return y }
+fun min(x: int, y: int) -> int { if (x < y) { return x } return y }
+fun abs(v: int) -> int { if (v < 0) { return -v } return v }
+
+// --- Array (backed by halloc/hread/hset/hfree) ---
+// Layout: [len:9B] [elem0:9B] [elem1:9B] ...
+fun arrayNew(n: int) -> int {
+    val arr = halloc(9 + n * 9)
+    hset(arr, 0, n)
+    return arr
+}
+fun arrayGet(arr: int, idx: int) -> int { return hread(arr, 9 + idx * 9) }
+fun arraySet(arr: int, idx: int, value: int) -> unit { hset(arr, 9 + idx * 9, value) }
+fun arrayLen(arr: int) -> int { return hread(arr, 0) }
+fun arrayFree(arr: int) -> unit { hfree(arr) }

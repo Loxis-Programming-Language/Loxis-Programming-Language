@@ -1,0 +1,10 @@
+class List<T> {
+    fun size() -> int { return 1 }
+    fun get(i: int) -> T { return i }
+}
+
+fun main() -> int {
+    var xs = List<int>()
+    print(99)
+    return 0
+}

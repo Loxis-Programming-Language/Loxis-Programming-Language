@@ -1,0 +1,4 @@
+package loxis.mem
+
+// --- Heap memory (native wrappers) ---
+// halloc, hread, hset, hfree are VM built-ins

@@ -1,0 +1,10 @@
+class List<T> {
+    fun size() -> int {
+        return 3
+    }
+}
+
+fun main() -> int {
+    print(List<int>().size())
+    return 0
+}

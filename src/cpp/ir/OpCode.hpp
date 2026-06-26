@@ -3,10 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include <variant>
 #include <unordered_map>
-#include <optional>
-#include "../Error.hpp"
 
 enum class OpCode : uint8_t {
 	// Data movement
@@ -56,50 +53,22 @@ enum class OpCode : uint8_t {
 	Jn = 0x37,   // jump if NEG flag set
 	NullChk = 0x38, // null check: val_reg, null_target_addr
 	CallInd = 0x39, // indirect call: func_ptr_reg
+	VCall = 0x3A,   // virtual call: obj_reg, slot_imm, nargs_imm, return_addr
+	ICall = 0x3B,   // interface call: obj_reg, iface_typeid_imm, method_idx_imm, nargs_imm, return_addr
+	TypeOf = 0x3C,  // load typeId: obj_reg, result_reg
 
 	// I/O
 	Print = 0x40,
+	Write = 0x3F,  // print without newline
+
+	// System call
+	Syscall = 0x3D, // generic syscall: num in reg, args on stack, result in r0
+
+	// String operations
+	StrLen = 0x41,
+	ToStr = 0x42,  // int/float → string
 
 	// Termination
 	Halt = 0xFF
 };
 
-// Branch condition for IR
-enum class BranchCond : uint8_t {
-	Always = 0,
-	Zero = 1,
-	NonZero = 2,
-};
-
-struct CondRef {
-	BranchCond cond;
-};
-
-// IR value types
-struct RegId {
-	uint8_t id;
-};
-
-struct LabelRef {
-	std::string name;
-};
-
-using Value = std::variant<int64_t, RegId, LabelRef, std::string, CondRef>;
-
-struct IRInstruction {
-	OpCode op;
-	std::vector <Value> operands;
-	SourceLocation loc;
-};
-
-struct BasicBlock {
-	std::string label;
-	std::vector <IRInstruction> instructions;
-	std::optional <IRInstruction> terminator;
-	std::vector <std::string> successors;
-};
-
-struct IRProgram {
-	std::vector <BasicBlock> blocks;
-	std::vector <std::vector<uint8_t>> typePool;
-};

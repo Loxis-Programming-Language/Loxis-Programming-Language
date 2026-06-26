@@ -17,6 +17,7 @@ public:
 private:
     std::vector<Token> toks;
     size_t pos = 0;
+    bool m_quietErrors = false;     // suppress error output during speculative parse
 
     // token helpers
     Token& peek(size_t off = 0);
@@ -43,7 +44,7 @@ private:
     Path parsePath();
     Path parseTypePath();
     std::vector<TypePtr> parseGenericArgs();
-    void expectGt();
+    bool expectGt();
     Visibility parseVisibility();
     Path parseDottedPath();
 
@@ -85,6 +86,7 @@ private:
     ExprPtr parseCast();
     ExprPtr parsePrefix();
     ExprPtr parsePostfix();
+    bool tryAttachGenericArgs(ExprPtr& expr);
     ExprPtr parsePrimary();
     ExprPtr parseBlock();
     ExprPtr parseIf();

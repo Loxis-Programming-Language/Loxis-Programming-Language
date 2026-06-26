@@ -15,6 +15,23 @@ enum class OperandTag : uint8_t {
 	Addr = 0x04   // 4-byte bytecode address
 };
 
+// Runtime itable entry for interface dispatch
+struct RuntimeItableEntry {
+	uint32_t interfaceTypeId = ~0u;
+	std::vector<uint32_t> methodOffsets; // indexed by interface method index
+};
+
+// Runtime vtable entry per class
+struct VTableEntry {
+	std::vector<uint32_t> methodOffsets;  // indexed by vtable slot
+	std::vector<RuntimeItableEntry> itable;       // one entry per implemented interface
+};
+
+struct PatchSite {
+	size_t offset;      // Bytecode offset where address needs to be patched
+	std::string label;    // Label name to resolve
+};
+
 struct Chunk {
 	std::vector <uint8_t> code;
 	std::vector <std::string> strings;  // Interned string pool
@@ -23,6 +40,9 @@ struct Chunk {
 	// Type pool — preserves generic types in bytecode (no erasure)
 	std::vector <std::vector<uint8_t>> typePool;
 	std::unordered_map <std::string, uint32_t> typeIndices;
+
+	// VTable / itable metadata for OOP dispatch
+	std::vector<VTableEntry> vtables;
 
 	Chunk() = default;
 

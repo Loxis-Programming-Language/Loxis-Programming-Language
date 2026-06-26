@@ -17,6 +17,9 @@ target_include_directories(loxis_vm PUBLIC
 add_library(loxis_v2
         src/cpp/v2/backend/Lowering.cpp
         src/cpp/v2/backend/MIRCompiler.cpp
+        src/cpp/v2/hir/HirBuilder.cpp
+        src/cpp/v2/hir/Monomorphizer.cpp
+        src/cpp/v2/driver/ModuleLoader.cpp
         src/cpp/v2/driver/Driver.cpp
         src/cpp/v2/frontend/Lexer.cpp
         src/cpp/v2/frontend/Parser.cpp
@@ -28,22 +31,12 @@ target_include_directories(loxis_v2 PUBLIC
 
 target_link_libraries(loxis_v2 PUBLIC loxis_vm)
 
-# v2 is the default Loxis compiler.
 add_executable(Loxis
         src/cpp/main_v2.cpp
 )
 
 target_link_libraries(Loxis PRIVATE loxis_v2)
 
-# v1 is kept only as a deprecated compatibility target.
-option(LOXIS_BUILD_V1_DEPRECATED "Build the deprecated v1 compiler target" OFF)
-if(LOXIS_BUILD_V1_DEPRECATED)
-    message(WARNING "LoxisV1 is deprecated; the default Loxis target uses v2.")
-    add_executable(LoxisV1
-            src/cpp/main.cpp
-            src/cpp/frontend/Lexer.cpp
-            src/cpp/frontend/Parser.cpp
-            src/cpp/ir/IRGen.cpp
-            src/cpp/backend/Compiler.cpp)
-    target_link_libraries(LoxisV1 PRIVATE loxis_vm)
-endif()
+add_executable(LSPTest
+        src/cpp/tools/LSPTest.cpp
+)

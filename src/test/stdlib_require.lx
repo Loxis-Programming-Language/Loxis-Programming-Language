@@ -1,0 +1,5 @@
+fun main() -> int {
+    require(true, "ok")
+    print(1)
+    return 0
+}

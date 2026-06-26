@@ -1,0 +1,9 @@
+fun main() -> None {
+    val name = "World"
+    val age = 25
+    write("Hello, ")
+    write(name)
+    print("!")
+    write("Age: ")
+    print(age)
+}

@@ -24,6 +24,7 @@ private:
 	std::stack <size_t> m_callStack;
 	std::stack <std::pair<int64_t, uint8_t>> m_dataStack;  // value + rtag
 	Heap m_heap;
+	std::vector<std::string> m_runtimeStrings;       // Runtime-interned strings
 
 	static constexpr uint8_t
 	FLAG_ZERO = 0x01;
@@ -71,4 +72,8 @@ private:
 	int64_t readIntOperand(const JitOperand &operand) const;
 
 	std::string readStringOperand(const JitOperand &operand) const;
+	uint32_t internRuntimeString(const std::string& s);
+	// Unified syscall entry — all native VM functions go through here
+	// Args passed in registers: r1..r4, result in r0
+	void invokeSyscall(uint8_t op);
 };

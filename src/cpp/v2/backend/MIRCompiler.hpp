@@ -3,21 +3,23 @@
 #include <string>
 #include <unordered_map>
 #include "../../backend/Chunk.hpp"
-#include "../../backend/Compiler.hpp"
 #include "../mir/MIR.hpp"
+#include "Lowering.hpp"
 
 namespace loxis::v2 {
 
 class MIRCompiler {
 public:
-    Chunk compile(const std::vector<MirBody>& bodies);
+    Chunk compile(const LoweringOutput& output);
 
 private:
     Chunk m_chunk;
     std::vector<PatchSite> m_patches;
     std::unordered_map<std::string, uint32_t> m_labelOffsets;
+    std::vector<LoweredClass> m_classes;
 
     void compileBody(const MirBody& body);
+    void buildVTableMetadata();
     void emitStatement(const Statement& stmt);
     void emitTerminator(const Terminator& term, const std::string& prefix);
     void emitRvalue(LocalId place, const Rvalue& rv);

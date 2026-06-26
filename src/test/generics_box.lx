@@ -1,0 +1,8 @@
+class Box<T>(val value: T) {
+}
+
+fun main() -> int {
+    var b = Box<int>(10)
+    print(b.value)
+    return 0
+}

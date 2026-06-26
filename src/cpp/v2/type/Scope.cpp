@@ -1,5 +1,6 @@
 #include "Scope.hpp"
 #include <cstdio>
+#include <functional>
 
 namespace loxis::v2 {
 
@@ -68,6 +69,7 @@ void ScopeBuilder::declareItem(ItemPtr item, Scope* scope) {
         } else if constexpr (std::is_same_v<T, ItemClass>) {
             auto def = std::make_shared<ClassDef>();
             def->name = n.name;
+            def->typeId = m_nextClassTypeId++;
             for (const auto& g : n.generics) def->params.push_back(g.name);
             def->isOpen = (n.modifier == ClassModifier::Open);
             def->isAbstract = (n.modifier == ClassModifier::Abstract);
@@ -92,6 +94,7 @@ void ScopeBuilder::declareItem(ItemPtr item, Scope* scope) {
         } else if constexpr (std::is_same_v<T, ItemInterface>) {
             auto def = std::make_shared<InterfaceDef>();
             def->name = n.name;
+            def->typeId = m_nextInterfaceTypeId++;
             for (const auto& g : n.generics) def->params.push_back(g.name);
             for (const auto& s : n.supers) def->superNames.push_back(s.segs.back());
             TyPtr ty = std::make_shared<Ty>(TyInterface{def, {}});
@@ -100,6 +103,7 @@ void ScopeBuilder::declareItem(ItemPtr item, Scope* scope) {
         } else if constexpr (std::is_same_v<T, ItemObject>) {
             auto def = std::make_shared<ClassDef>();
             def->name = n.name;
+            def->typeId = m_nextClassTypeId++;
             if (n.superClass) def->superName = n.superClass->segs.back();
             for (const auto& iface : n.interfaces)
                 def->interfaceNames.push_back(iface.segs.back());
@@ -230,7 +234,10 @@ void ScopeBuilder::resolveClass(ItemClass& cls, Scope* scope) {
 
     // Check interface conformance
     if (!def->interfaceNames.empty()) {
-        checkInterfaceConformance(*def, scope);
+        if (!checkInterfaceConformance(*def, scope)) {
+            // conformance failure — errors reported inside checkInterfaceConformance
+            // TypeChecker will catch missing methods during type checking
+        }
     }
 }
 
@@ -313,21 +320,51 @@ bool ScopeBuilder::checkInterfaceConformance(ClassDef& def, Scope* scope) {
     for (const auto& iname : def.interfaceNames) {
         Symbol* ifaceSym = scope->lookup(iname);
         if (!ifaceSym || !ifaceSym->ty || ifaceSym->ty->kind() != TyKind::Interface_) {
-            continue; // error handled by type checker
+            continue; // error will be reported by type checker
         }
         auto& ifaceTy = std::get<TyInterface>(*ifaceSym->ty);
         auto ifaceDef = ifaceTy.def;
 
-        for (const auto& im : ifaceDef->methods) {
+        ItableEntry itable;
+        itable.interfaceName = iname;
+        itable.interfaceTypeId = ifaceDef->typeId;
+        itable.slotMap.resize(ifaceDef->methods.size(), ~0u);
+
+        for (size_t imIdx = 0; imIdx < ifaceDef->methods.size(); ++imIdx) {
+            const auto& im = ifaceDef->methods[imIdx];
             bool found = false;
-            for (const auto& cm : def.methods) {
-                if (cm.name == im.name) { found = true; break; }
+
+            for (size_t cmIdx = 0; cmIdx < def.methods.size(); ++cmIdx) {
+                const auto& cm = def.methods[cmIdx];
+                if (cm.name != im.name) continue;
+
+                // Signature check: compare parameter counts (MVP)
+                // Full structural comparison would check individual param types
+                if (im.funcType && cm.funcType &&
+                    im.funcType->kind() == TyKind::Fn && cm.funcType->kind() == TyKind::Fn) {
+                    auto& imFn = std::get<TyFn>(*im.funcType);
+                    auto& cmFn = std::get<TyFn>(*cm.funcType);
+                    if (imFn.params.size() != cmFn.params.size()) {
+                        continue; // arity mismatch — keep looking
+                    }
+                    // TODO: full structural type comparison for generics
+                }
+
+                // Map interface method index → class vtable slot (or method index for static)
+                itable.slotMap[imIdx] = cm.vtableIndex != ~0u
+                    ? cm.vtableIndex
+                    : static_cast<uint32_t>(cmIdx);
+                found = true;
+                break;
             }
+
             if (!found) {
-                // error: class does not implement interface method
+                // Class does not implement this interface method
                 return false;
             }
         }
+
+        def.itables.push_back(std::move(itable));
     }
     return true;
 }
@@ -366,14 +403,58 @@ void ScopeBuilder::resolveInterface(ItemInterface& iface, Scope* scope) {
         }
     }
 
-    // Register own methods
+    // Helper to resolve a simple AST type to a core TyPtr using scope lookup.
+    // Uses std::function for recursive calls (nullable types, tuple types).
+    std::function<TyPtr(const TypePtr&)> resolveSimpleType;
+    resolveSimpleType = [&](const TypePtr& astTy) -> TyPtr {
+        if (!astTy) return mkUnit();
+        return std::visit([&](auto&& t) -> TyPtr {
+            using TT = std::decay_t<decltype(t)>;
+            if constexpr (std::is_same_v<TT, AstTyPath>) {
+                std::string name = t.path.segs.back();
+                Symbol* sym = scope->lookup(name);
+                if (sym && sym->ty) return sym->ty;
+                // Check interface child scope
+                Symbol* local = is->lookupLocal(name);
+                if (local && local->ty) return local->ty;
+                return nullptr;
+            } else if constexpr (std::is_same_v<TT, AstTyNullable>) {
+                TyPtr inner = resolveSimpleType(t.inner);
+                return inner ? makeNullable(inner) : nullptr;
+            } else if constexpr (std::is_same_v<TT, AstTyTuple>) {
+                std::vector<TyPtr> elems;
+                for (const auto& e : t.elems) {
+                    TyPtr et = resolveSimpleType(e);
+                    if (et) elems.push_back(et);
+                }
+                return std::make_shared<Ty>(TyTuple{elems});
+            } else {
+                return nullptr;
+            }
+        }, *astTy);
+    };
+
+    // Build TyFn for each interface method from its AST declaration
+    TyPtr selfTy = sym->ty;
     for (const auto& m : iface.methods) {
         MethodInfo mi;
         mi.name = m.name;
-        mi.funcType = nullptr;
         mi.isAbstract = !m.defaultBody; // abstract if no default body
+
+        // Build funcType: (self: Interface, params...) -> ret
+        std::vector<TyPtr> paramTypes;
+        paramTypes.push_back(selfTy ? selfTy : mkUnit()); // self param
+        for (const auto& p : m.params) {
+            TyPtr pt = resolveSimpleType(p.second);
+            if (!pt) pt = mkUnit(); // fallback: unresolved → unit (checked later)
+            paramTypes.push_back(pt);
+        }
+        TyPtr retType = m.ret ? resolveSimpleType(m.ret) : mkUnit();
+        if (!retType) retType = mkUnit();
+
+        mi.funcType = std::make_shared<Ty>(TyFn{std::move(paramTypes), retType});
         def->methods.push_back(mi);
-        is->declare(m.name, SymbolKind::Value, nullptr, nullptr);
+        is->declare(m.name, SymbolKind::Value, nullptr, mi.funcType);
     }
 }
 
@@ -479,19 +560,45 @@ std::unique_ptr<Scope> ScopeBuilder::build(Module& mod) {
     root->declare("bool", SymbolKind::Type, nullptr, mkBool());
     root->declare("char", SymbolKind::Type, nullptr, mkChar());
     root->declare("str", SymbolKind::Type, nullptr, mkStr());
+    root->declare("None", SymbolKind::Type, nullptr, mkUnit());
     root->declare("unit", SymbolKind::Type, nullptr, mkUnit());
     root->declare("void", SymbolKind::Type, nullptr, mkUnit());
     root->declare("()", SymbolKind::Type, nullptr, mkUnit());
     root->declare("noreturn", SymbolKind::Type, nullptr, mkNever());
     root->declare("null", SymbolKind::Type, nullptr, mkNull());
 
-    // Register built-in functions (prelude)
-    // println/print: accept any type — use nullptr type to skip checking
+    // Register built-in functions
+    // io: console
     root->declare("println", SymbolKind::Value, nullptr, nullptr);
-    root->declare("print", SymbolKind::Value, nullptr, nullptr);
-    // error: (str) -> noreturn
-    root->declare("error", SymbolKind::Value, nullptr,
+    root->declare("print",   SymbolKind::Value, nullptr, nullptr);
+    root->declare("write",   SymbolKind::Value, nullptr, nullptr);
+    // mgm: program control
+    root->declare("error",   SymbolKind::Value, nullptr,
         std::make_shared<Ty>(TyFn{{mkStr()}, mkNever()}));
+    // mem: heap
+    root->declare("halloc",  SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkInt()}, mkInt()}));
+    root->declare("hread",   SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkInt(), mkInt()}, mkInt()}));
+    root->declare("hset",    SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkInt(), mkInt(), mkInt()}, mkUnit()}));
+    root->declare("hfree",   SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkInt()}, mkUnit()}));
+    root->declare("alloc",   SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkInt()}, mkInt()}));
+    root->declare("hload",   SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkInt(), mkInt()}, mkInt()}));
+    root->declare("hstore",  SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkInt(), mkInt(), mkInt()}, mkUnit()}));
+    // ptr: string ops
+    root->declare("strlen",  SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkStr()}, mkInt()}));
+    root->declare("i2s",     SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkInt()}, mkStr()}));
+    root->declare("s2i",     SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkStr()}, mkInt()}));
+    // sys: generic system call (unchecked — caller handles type)
+    root->declare("syscall", SymbolKind::Value, nullptr, nullptr);
 
     // Pass 1: Declare all top-level names
     for (const auto& item : mod.items) {

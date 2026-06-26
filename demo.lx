@@ -1,0 +1,64 @@
+package demo
+
+// --- OOP Definitions (parse + type-check pass) ---
+open class Animal(val name: str) {
+    open fun speak(): str = "..."
+}
+class Dog(name: str, val breed: str) : Animal(name) {
+    override fun speak(): str = "Woof"
+}
+interface Pet { fun play(): str }
+class Cat(name: str) : Animal(name), Pet {
+    override fun speak(): str = "Meow"
+    override fun play(): str = "chasing toy"
+}
+data class Point(val x: int, val y: int)
+object Config { val version: str = "1.0" }
+enum class Color { RED, GREEN, BLUE }
+
+// --- Functions ---
+
+fun add(a: int, b: int) -> int { return a + b }
+fun mul(a: int, b: int) -> int { return a * b }
+
+fun countdown(n: int) -> int {
+    print(n)
+    if n <= 0 { return 0 }
+    return countdown(n - 1)
+}
+
+fun fib(n: int) -> int {
+    if n <= 1 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fun factorial(n: int) -> int {
+    if n <= 1 { return 1 }
+    return n * factorial(n - 1)
+}
+
+// --- Main ---
+
+fun main() {
+    print("Loxis v2.1 Demo")
+
+    print("--- Arithmetic ---")
+    print(add(10, 32))
+    print(mul(10, 32))
+
+    print("--- Fibonacci ---")
+    var i = 0
+    while i < 10 {
+        print(fib(i))
+        i = i + 1
+    }
+
+    print("--- Factorial ---")
+    print(factorial(5))
+    print(factorial(6))
+
+    print("--- Countdown ---")
+    countdown(3)
+
+    print("Done.")
+}

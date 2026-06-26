@@ -1,0 +1,6 @@
+import loxis.io
+
+fun main() -> int {
+    print(fortyTwo())
+    return 0
+}

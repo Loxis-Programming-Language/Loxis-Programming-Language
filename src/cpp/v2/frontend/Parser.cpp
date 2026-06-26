@@ -61,7 +61,9 @@ void Parser::skipToBoundary() {
 }
 
 void Parser::error(const std::string& msg) {
-    std::cerr << "parse error: " << msg << " at " << peek().loc.fmt() << "\n";
+    if (!m_quietErrors) {
+        std::cerr << "parse error: " << msg << " at " << peek().loc.fmt() << "\n";
+    }
 }
 
 // ---------- constructor / entry ----------
@@ -202,6 +204,17 @@ Path Parser::parsePath() {
             p.segs.push_back(expectIdent());
         }
     }
+    if (check(Tk::Lt)) {
+        size_t save = pos;
+        m_quietErrors = true;
+        auto args = parseGenericArgs();
+        m_quietErrors = false;
+        if (args.empty()) {
+            pos = save; // backtrack: < was comparison, not generic
+        } else {
+            p.args.insert(p.args.end(), args.begin(), args.end());
+        }
+    }
     return p;
 }
 
@@ -233,12 +246,14 @@ std::vector<TypePtr> Parser::parseGenericArgs() {
         out.push_back(parseType());
         if (!match(Tk::Comma)) break;
     }
-    expectGt();
+    if (!expectGt()) {
+        return {}; // failure → caller should backtrack
+    }
     return out;
 }
 
-void Parser::expectGt() {
-    if (match(Tk::Gt)) return;
+bool Parser::expectGt() {
+    if (match(Tk::Gt)) return true;
     if (check(Tk::Shr)) {
         Token t = peek();
         t.kind = Tk::Gt;
@@ -246,9 +261,10 @@ void Parser::expectGt() {
         toks[pos] = t;
         toks.insert(toks.begin() + pos + 1, Token{Tk::Gt, ">", t.loc});
         advance();
-        return;
+        return true;
     }
     error("expected '>'");
+    return false;
 }
 
 Visibility Parser::parseVisibility() {
@@ -741,11 +757,11 @@ ExprPtr Parser::parseRange() {
     ExprPtr lhs = parseOr();
     if (match(Tk::DotDot)) {
         ExprPtr rhs = parseOr();
-        return std::make_shared<Expr>(ExprBinary{static_cast<ExprBinary::Op>(90), lhs, rhs});
+        return std::make_shared<Expr>(ExprRange{lhs, rhs, false});
     }
     if (match(Tk::DotDotEq)) {
         ExprPtr rhs = parseOr();
-        return std::make_shared<Expr>(ExprBinary{static_cast<ExprBinary::Op>(91), lhs, rhs});
+        return std::make_shared<Expr>(ExprRange{lhs, rhs, true});
     }
     return lhs;
 }
@@ -771,6 +787,8 @@ ExprPtr Parser::parseAnd() {
 ExprPtr Parser::parseCmp() {
     ExprPtr lhs = parseBitOr();
     while (true) {
+        // NOTE: tryAttachGenericArgs disabled in comparisons — < is always comparison here.
+        // Generic args in expressions (like foo<Int>(x)) use parsePostfix path instead.
         ExprBinary::Op op;
         if (match(Tk::EqEq)) op = ExprBinary::Eq;
         else if (match(Tk::Ne)) op = ExprBinary::Ne;
@@ -889,9 +907,30 @@ ExprPtr Parser::parsePrefix() {
     return parsePostfix();
 }
 
+bool Parser::tryAttachGenericArgs(ExprPtr& expr) {
+    if (!expr || !std::holds_alternative<ExprPath>(*expr)) return false;
+    if (!check(Tk::Lt)) return false;
+
+    size_t save = pos;
+    m_quietErrors = true;
+    auto args = parseGenericArgs();
+    m_quietErrors = false;
+    if (args.empty()) {
+        pos = save;
+        return false;
+    }
+
+    auto& path = std::get<ExprPath>(*expr).path;
+    path.args.insert(path.args.end(), args.begin(), args.end());
+    return true;
+}
+
 ExprPtr Parser::parsePostfix() {
     ExprPtr expr = parsePrimary();
     while (true) {
+        if (tryAttachGenericArgs(expr)) {
+            continue;
+        }
         if (check(Tk::LParen)) {
             std::vector<ExprPtr> args;
             advance();
@@ -1054,15 +1093,18 @@ ExprPtr Parser::parsePrimary() {
                             j++;
                         }
                         std::string exprStr = content.substr(exprStart, j - exprStart - 1);
-                        // can't parse from string here — store as literal for now
-                        tmpl.parts.push_back(exprStr);
+                        // Create an expression path for the variable/expression
+                        auto varExpr = std::make_shared<Expr>(ExprPath{Path{{exprStr}, {}}});
+                        tmpl.parts.push_back(varExpr);
                         i = j;
                         continue;
                     } else if (std::isalpha(static_cast<unsigned char>(content[i+1])) || content[i+1] == '_') {
                         if (!lit.empty()) { tmpl.parts.push_back(lit); lit.clear(); }
                         size_t j = i + 1;
                         while (j < content.size() && (std::isalnum(static_cast<unsigned char>(content[j])) || content[j] == '_')) j++;
-                        tmpl.parts.push_back(content.substr(i + 1, j - i - 1));
+                        std::string varName = content.substr(i + 1, j - i - 1);
+                        auto varExpr = std::make_shared<Expr>(ExprPath{Path{{varName}, {}}});
+                        tmpl.parts.push_back(varExpr);
                         i = j;
                         continue;
                     }

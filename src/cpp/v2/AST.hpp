@@ -6,6 +6,7 @@
 #include <variant>
 #include <optional>
 #include "Token.hpp"
+#include "type/Type.hpp"
 
 namespace loxis::v2 {
 
@@ -68,14 +69,39 @@ struct Pat : std::variant<PatWild, PatBind, PatLit, PatTuple, PatStruct, PatEnum
 struct ExprLit {
     std::variant<int64_t,uint64_t,double,bool,char,std::string> val;
 };
-struct ExprPath { Path path; };
+struct ExprPath { Path path;
+    bool isField = false;       // Set by TypeChecker: this.field access via bare name
+    uint32_t fieldOffset = 0;   // Byte offset in object
+    TyPtr resolvedTy = nullptr; // TypeChecker: fully resolved type (including generic substitution)
+};
 struct ExprTuple { std::vector<ExprPtr> elems; };
 struct ExprArray { std::vector<ExprPtr> elems; };
 struct ExprFieldInit { std::string name; ExprPtr expr; };
-struct ExprStruct { Path path; std::vector<ExprFieldInit> fields; bool rest = false; };
-struct ExprCall { ExprPtr func; std::vector<ExprPtr> args; };
-struct ExprMethodCall { ExprPtr recv; std::string method; std::vector<ExprPtr> args; };
-struct ExprField { ExprPtr obj; std::string field; };
+struct ExprStruct { Path path; std::vector<ExprFieldInit> fields; bool rest = false;
+    // Filled by TypeChecker for backend construction:
+    uint32_t totalFieldSize = 0;       // total size for heap allocation
+    uint32_t typeId = ~0u;             // class type ID for heap header
+    uint32_t vtableEntryCount = 0;     // number of vtable slots
+    std::vector<std::string> vtableMethodNames; // qualified method names indexed by vtable slot
+    std::vector<TyPtr> resolvedTypeArgs; // TypeChecker: concrete generic args
+};
+struct ExprCall {
+    ExprPtr func;
+    std::vector<ExprPtr> args;
+    std::string ctorLabel; // "ClassName.init" when calling a constructor
+    std::vector<TyPtr> resolvedTypeArgs; // TypeChecker: concrete generic args
+    TyPtr resolvedTy = nullptr; // TypeChecker: return type of the call
+};
+struct ExprMethodCall { ExprPtr recv; std::string method; std::vector<ExprPtr> args;
+    std::string qualifiedName;        // "ClassName.method" for static dispatch
+    uint32_t vtableIndex = ~0u;
+    bool isInterfaceDispatch = false;
+    uint32_t ifaceTypeId = ~0u;
+    uint32_t ifaceMethodIndex = 0;
+};
+struct ExprField { ExprPtr obj; std::string field;
+    uint32_t fieldOffset = 0;         // Filled by TypeChecker: byte offset in object
+};
 struct ExprIndex { ExprPtr obj; ExprPtr idx; };
 struct ExprUnary {
     enum Op { Neg, Not, Deref, Ref, RefMut } op;
@@ -92,7 +118,17 @@ struct ExprAssign {
 struct ExprBlock { std::vector<StmtPtr> stmts; ExprPtr tail; };
 struct ExprIf { ExprPtr cond; ExprPtr then_; ExprPtr else_; };
 struct ExprWhile { ExprPtr cond; ExprPtr body; std::optional<std::string> label; };
-struct ExprFor { PatPtr pat; ExprPtr iter; ExprPtr body; std::optional<std::string> label; };
+struct ExprRange { ExprPtr start; ExprPtr end; bool inclusive = false; };
+struct ExprFor {
+    PatPtr pat;
+    ExprPtr iter;
+    ExprPtr body;
+    std::optional<std::string> label;
+    enum class IterKind : uint8_t { None, IntRange, IntRangeInclusive, Array, Iterable };
+    IterKind iterKind = IterKind::None;
+    uint64_t arrayLen = 0;
+    std::string iterClassName;
+};
 struct ExprLoop { ExprPtr body; std::optional<std::string> label; };
 
 // when expression (replaces match)
@@ -125,7 +161,7 @@ struct ExprStringTemplate { std::vector<std::variant<std::string, ExprPtr>> part
 struct Expr : std::variant<
     ExprLit, ExprPath, ExprTuple, ExprArray, ExprStruct, ExprCall, ExprMethodCall,
     ExprField, ExprIndex, ExprUnary, ExprBinary, ExprAssign, ExprBlock, ExprIf,
-    ExprWhile, ExprFor, ExprLoop, ExprWhen, ExprBreak, ExprContinue, ExprReturn,
+    ExprWhile, ExprRange, ExprFor, ExprLoop, ExprWhen, ExprBreak, ExprContinue, ExprReturn,
     ExprClosure, ExprRef, ExprDeref, ExprTry, ExprCast,
     ExprSafeCall, ExprSafeField, ExprElvis, ExprForceUnwrap,
     ExprIs, ExprIsNot, ExprNull, ExprStringTemplate
@@ -206,6 +242,12 @@ struct ItemClass {
     std::vector<FieldDecl> fields;
     std::vector<ItemFun> methods;
     std::vector<StmtPtr> initBlocks;
+    // Filled by TypeChecker for backend codegen:
+    uint32_t totalFieldSize = 0;
+    uint32_t typeId = ~0u;
+    uint32_t vtableEntryCount = 0;
+    std::vector<std::string> vtableMethodNames;
+    std::vector<ItableEntry> itables;
 };
 
 // Interface

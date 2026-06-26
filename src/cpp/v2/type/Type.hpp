@@ -56,6 +56,14 @@ struct InterfaceDef {
     std::vector<std::string> params;
     std::vector<MethodInfo> methods;     // declared methods
     std::vector<std::string> superNames; // super-interfaces
+    uint32_t typeId = ~0u;             // assigned during codegen, unique per interface type
+};
+
+// Maps interface method index → class method index for runtime interface dispatch
+struct ItableEntry {
+    std::string interfaceName;
+    std::vector<uint32_t> slotMap;       // interface_method_index -> class_method_index
+    uint32_t interfaceTypeId = ~0u;      // typeId of the interface (for ICall)
 };
 
 struct ClassDef {
@@ -66,10 +74,12 @@ struct ClassDef {
     std::vector<uint32_t> vtable;      // indices into methods[] for virtual dispatch
     std::optional<std::string> superName;
     std::vector<std::string> interfaceNames;
+    std::vector<ItableEntry> itables;   // one entry per implemented interface
     bool isOpen = false;
     bool isAbstract = false;
     bool isData = false;
     uint32_t totalFieldSize = 0;       // total size of own fields (fields * 9 bytes)
+    uint32_t typeId = ~0u;             // assigned during codegen, unique per class type
 };
 
 struct TyNever {};
@@ -113,6 +123,7 @@ struct Ty : std::variant<
     bool isNever() const { return kind()==TyKind::Never; }
     bool isError() const { return kind()==TyKind::Error; }
     bool isNull() const { return kind()==TyKind::Null; }
+    bool isStr() const { return kind()==TyKind::Str; }
 };
 
 inline TyKind Ty::kind() const {

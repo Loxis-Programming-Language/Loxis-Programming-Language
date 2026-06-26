@@ -1,0 +1,7 @@
+package loxis.fileio
+
+// --- File I/O (stub — syscall 10 reserved) ---
+
+fun openFile(path: str) -> int {
+    return syscall(10, path)
+}

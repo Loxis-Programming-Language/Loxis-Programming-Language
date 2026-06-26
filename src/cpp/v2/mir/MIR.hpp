@@ -4,13 +4,26 @@
 #include <vector>
 #include <memory>
 #include <variant>
-#include "../AST.hpp"
 #include "../type/Type.hpp"
 
 namespace loxis::v2 {
 
 using LocalId = uint32_t;
 using BlockId = uint32_t;
+
+// ============================================================
+// MIR-level operators (decoupled from AST)
+// ============================================================
+enum class MirBinOp {
+    Add, Sub, Mul, Div, Rem, Shl, Shr, BitAnd, BitOr, BitXor,
+    And, Or, Eq, Ne, Lt, Le, Gt, Ge
+};
+
+enum class MirUnaryOp { Neg, Not, Deref, Ref, RefMut, ToStr };
+
+enum class MirAssignOp {
+    Set, AddEq, SubEq, MulEq, DivEq, RemEq, AmpEq, PipeEq, CaretEq, ShlEq, ShrEq
+};
 
 // ============================================================
 // Operand (copy/move by value)
@@ -29,18 +42,24 @@ struct Operand : std::variant<OpCopy, OpMove, OpConst> {
 struct RvUse { Operand op; };
 struct RvRef { bool mut_; LocalId local; };
 struct RvPtr { bool mut_; LocalId local; };
-struct RvBinary { ExprBinary::Op op; Operand l, r; };
-struct RvUnary { ExprUnary::Op op; Operand opnd; };
+struct RvBinary { MirBinOp op; Operand l, r; };
+struct RvUnary { MirUnaryOp op; Operand opnd; };
 struct RvCast { Operand op; CoreTyPtr ty; };
 struct RvAggregate { enum Kind { Tuple, Array, Adt } kind; uint32_t variant = 0; std::vector<Operand> ops; };
 struct RvField { LocalId local; uint32_t field; };
+struct RvHStore { uint32_t offset; Operand value; };
 struct RvIndex { LocalId local; Operand idx; };
 struct RvLen { LocalId local; };
 struct RvDiscriminant { LocalId local; };
+struct RvAlloc { uint32_t size; uint32_t typeId; };
+struct RvVTableSlot { LocalId obj; uint32_t slot; };
+struct RvTypeId { LocalId obj; };
+struct RvIsCheck { LocalId obj; uint32_t targetTypeId; };
 
 struct Rvalue : std::variant<
     RvUse, RvRef, RvPtr, RvBinary, RvUnary, RvCast,
-    RvAggregate, RvField, RvIndex, RvLen, RvDiscriminant
+    RvAggregate, RvField, RvHStore, RvIndex, RvLen, RvDiscriminant,
+    RvAlloc, RvVTableSlot, RvTypeId, RvIsCheck
 > {
     using variant::variant;
 };
@@ -56,9 +75,12 @@ struct TmCall { Operand func; std::vector<Operand> args; LocalId dest; BlockId r
 struct TmCallIndirect { Operand funcPtr; std::vector<Operand> args; LocalId dest; BlockId return_; };
 struct TmCheckNull { Operand value; BlockId nullTarget; BlockId okTarget; };
 struct TmUnreachable {};
+struct TmVirtualCall { LocalId recv; uint32_t vtableSlot; std::vector<Operand> args; LocalId dest; BlockId return_; };
+struct TmInterfaceCall { LocalId recv; uint32_t ifaceTypeId; uint32_t methodIdx; std::vector<Operand> args; LocalId dest; BlockId return_; };
 
 struct Terminator : std::variant<
-    TmGoto, TmSwitchInt, TmSwitchDiscr, TmReturn, TmCall, TmCallIndirect, TmCheckNull, TmUnreachable
+    TmGoto, TmSwitchInt, TmSwitchDiscr, TmReturn, TmCall, TmCallIndirect, TmCheckNull, TmUnreachable,
+    TmVirtualCall, TmInterfaceCall
 > {
     using variant::variant;
 };
@@ -71,8 +93,8 @@ struct StStorageLive { LocalId local; };
 struct StStorageDead { LocalId local; };
 struct StSetDiscriminant { LocalId place; uint32_t variant; };
 struct StDrop { LocalId local; };
-struct StPush { LocalId local; }; // push register to data stack
-struct StPop  { LocalId local; }; // pop data stack to register
+struct StPush { LocalId local; };
+struct StPop  { LocalId local; };
 
 struct Statement : std::variant<
     StAssign, StStorageLive, StStorageDead, StSetDiscriminant, StDrop,
@@ -94,7 +116,7 @@ struct BasicBlock {
 // ============================================================
 struct LocalDecl {
     CoreTyPtr ty;
-    std::string name; // for debug
+    std::string name;
     bool mut_ = false;
 };
 
@@ -102,11 +124,10 @@ struct LocalDecl {
 // MirBody (one per function)
 // ============================================================
 struct MirBody {
-    std::vector<LocalDecl> locals; // local 0 = return place
+    std::vector<LocalDecl> locals;
     std::vector<BasicBlock> blocks;
     std::string name;
     CoreTyPtr ret_ty;
-    // locals[1..=n] = arguments
 };
 
 } // namespace

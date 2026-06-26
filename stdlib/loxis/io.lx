@@ -1,0 +1,11 @@
+package loxis.io
+
+// --- Console I/O ---
+
+fun writechar(c: int) -> unit {
+    write(c)
+}
+
+fun readchar() -> int {
+    return syscall(0)
+}

@@ -46,8 +46,15 @@ static const char *traceOpcodeName(OpCode op) {
 		case OpCode::Jn:    return "jn";
 		case OpCode::NullChk: return "nullchk";
 		case OpCode::CallInd: return "callind";
-		case OpCode::Print: return "print";
-		case OpCode::Halt:  return "halt";
+		case OpCode::VCall:  return "vcall";
+		case OpCode::ICall:  return "icall";
+		case OpCode::TypeOf: return "typeof";
+		case OpCode::Syscall: return "syscall";
+		case OpCode::Write:  return "write";
+		case OpCode::Print:  return "print";
+		case OpCode::StrLen: return "strlen";
+		case OpCode::ToStr:  return "tostr";
+		case OpCode::Halt:   return "halt";
 	}
 	return "?";
 }
@@ -164,6 +171,7 @@ bool VM::tryBuildJit() {
 			case OpCode::Jz:
 			case OpCode::Jn:
 			case OpCode::Call:
+			case OpCode::Write:
 				case OpCode::Print:
 			case OpCode::PushR:
 			case OpCode::PopR:
@@ -200,9 +208,21 @@ bool VM::tryBuildJit() {
 			case OpCode::ItoF:
 			case OpCode::FtoI:
 			case OpCode::FNeg:
-				case OpCode::NullChk:
-				case OpCode::CallInd:
+			case OpCode::NullChk:
+			case OpCode::CallInd:
+			case OpCode::TypeOf:
+			case OpCode::StrLen:
+			case OpCode::ToStr:
 				operandCount = 2;
+				break;
+			case OpCode::Syscall:
+				operandCount = 1; // syscall number in reg
+				break;
+			case OpCode::VCall:
+				operandCount = 4; // obj_reg, slot_imm, nargs_imm, return_addr
+				break;
+			case OpCode::ICall:
+				operandCount = 5; // obj_reg, iface_typeid_imm, method_idx_imm, nargs_imm, return_addr
 				break;
 			case OpCode::Skip:
 				// 0 or 1 operands: peek if next byte is an Addr tag
@@ -256,12 +276,64 @@ std::string VM::readStringOperand(const JitOperand &operand) const {
 		uint8_t reg = static_cast<uint8_t>(operand.intVal);
 		if (m_rtag[reg] == 1) {
 			uint32_t strIdx = static_cast<uint32_t>(m_regs[reg]);
+			if (strIdx < m_runtimeStrings.size()) {
+				return m_runtimeStrings[strIdx];
+			}
 			if (strIdx < m_chunk.strings.size()) {
 				return m_chunk.strings[strIdx];
 			}
 		}
 	}
 	return {};
+}
+
+uint32_t VM::internRuntimeString(const std::string& s) {
+	uint32_t idx = static_cast<uint32_t>(m_runtimeStrings.size());
+	m_runtimeStrings.push_back(s);
+	return idx;
+}
+
+void VM::invokeSyscall(uint8_t op) {
+	enum { S_READCHAR=0, S_S2I=1, S_TYPEOF=2, S_WRITE=10, S_PRINT=11,
+	       S_HALLOC=20, S_HREAD=21, S_HSET=22, S_HFREE=23,
+	       S_STRLEN=30, S_I2S=31, S_ERROR=99 };
+	switch (op) {
+	case S_READCHAR: { int c=std::cin.get(); m_regs[0]=c; m_rtag[0]=0; break; }
+	case S_S2I: {
+		uint32_t si=static_cast<uint32_t>(m_regs[1]); std::string s;
+		if(si<m_runtimeStrings.size())s=m_runtimeStrings[si];
+		else if(si<m_chunk.strings.size())s=m_chunk.strings[si];
+		try{m_regs[0]=std::stoll(s);}catch(...){m_regs[0]=0;} m_rtag[0]=0; break; }
+	case S_TYPEOF: { m_regs[0]=m_heap.getTypeId(static_cast<uint32_t>(m_regs[1])); m_rtag[0]=0; break; }
+	case S_WRITE: {
+		int64_t v=m_regs[1];
+		if(m_rtag[1]==0)std::cout<<v;
+		else if(m_rtag[1]==1){uint32_t si=static_cast<uint32_t>(v);
+		if(si<m_runtimeStrings.size())std::cout<<m_runtimeStrings[si];
+		else if(si<m_chunk.strings.size())std::cout<<m_chunk.strings[si];} break; }
+	case S_PRINT: {
+		int64_t v=m_regs[1];
+		if(m_rtag[1]==0)std::cout<<v<<"\n";
+		else if(m_rtag[1]==1){uint32_t si=static_cast<uint32_t>(v);
+		if(si<m_runtimeStrings.size())std::cout<<m_runtimeStrings[si]<<"\n";
+		else if(si<m_chunk.strings.size())std::cout<<m_chunk.strings[si]<<"\n";} break; }
+	case S_HALLOC: { m_regs[0]=m_heap.alloc(static_cast<uint32_t>(m_regs[1]),0); m_rtag[0]=TAG_HEAP; break; }
+	case S_HREAD: { auto c=m_heap.load(static_cast<uint32_t>(m_regs[1])+static_cast<uint32_t>(m_regs[2])); m_regs[0]=c.first; m_rtag[0]=c.second; break; }
+	case S_HSET: { m_heap.store(static_cast<uint32_t>(m_regs[1])+static_cast<uint32_t>(m_regs[2]),m_regs[3],m_rtag[3]); break; }
+	case S_HFREE: { m_heap.free(static_cast<uint32_t>(m_regs[1])); break; }
+	case S_STRLEN: {
+		uint32_t si=static_cast<uint32_t>(m_regs[1]); int64_t len=0;
+		if(si<m_runtimeStrings.size())len=m_runtimeStrings[si].size();
+		else if(si<m_chunk.strings.size())len=m_chunk.strings[si].size();
+		m_regs[0]=len; m_rtag[0]=0; break; }
+	case S_I2S: { m_regs[0]=internRuntimeString(std::to_string(m_regs[1])); m_rtag[0]=1; break; }
+	case S_ERROR: {
+		uint32_t si=static_cast<uint32_t>(m_regs[1]);
+		if(si<m_runtimeStrings.size())std::cerr<<m_runtimeStrings[si]<<std::endl;
+		else if(si<m_chunk.strings.size())std::cerr<<m_chunk.strings[si]<<std::endl;
+		m_regs[0]=1; m_rtag[0]=0; break; }
+	default: m_regs[0]=-1; m_rtag[0]=0; break;
+	}
 }
 
 void VM::execJitInstruction(const JitInstruction &instr, bool &halted) {
@@ -381,6 +453,19 @@ void VM::execJitInstruction(const JitInstruction &instr, bool &halted) {
 			auto &val = instr.operands[2];
 			uint8_t srcReg = static_cast<uint8_t>(src.intVal);
 			uint8_t dstReg = static_cast<uint8_t>(dst.intVal);
+
+			// String concatenation: both operands tagged as strings
+			if (m_rtag[srcReg] == 1 && val.tag == OperandTag::Reg) {
+				uint8_t valReg = static_cast<uint8_t>(val.intVal);
+				if (m_rtag[valReg] == 1) {
+					std::string lhs = readStringOperand(src);
+					std::string rhs = readStringOperand(val);
+					m_regs[dstReg] = static_cast<int64_t>(internRuntimeString(lhs + rhs));
+					m_rtag[dstReg] = 1;
+					m_jitIp++;
+					break;
+				}
+			}
 			int64_t operand = readIntOperand(val);
 			m_regs[dstReg] = m_regs[srcReg] + operand;
 			m_rtag[dstReg] = 0;
@@ -558,11 +643,19 @@ void VM::execJitInstruction(const JitInstruction &instr, bool &halted) {
 			auto &r1 = instr.operands[1];
 			uint8_t reg0 = static_cast<uint8_t>(r0.intVal);
 			uint8_t reg1 = static_cast<uint8_t>(r1.intVal);
-			int64_t val0 = m_regs[reg0];
-			int64_t val1 = m_regs[reg1];
 			m_flags = 0;
-			if (val0 == val1) m_flags |= FLAG_ZERO;
-			if (val0 < val1) m_flags |= FLAG_NEG;
+			// String comparison
+			if (m_rtag[reg0] == 1 && m_rtag[reg1] == 1) {
+				std::string s0 = readStringOperand(r0);
+				std::string s1 = readStringOperand(r1);
+				if (s0 == s1) m_flags |= FLAG_ZERO;
+				if (s0 < s1)  m_flags |= FLAG_NEG;
+			} else {
+				int64_t val0 = m_regs[reg0];
+				int64_t val1 = m_regs[reg1];
+				if (val0 == val1) m_flags |= FLAG_ZERO;
+				if (val0 < val1)  m_flags |= FLAG_NEG;
+			}
 			m_jitIp++;
 			break;
 		}
@@ -701,7 +794,32 @@ void VM::execJitInstruction(const JitInstruction &instr, bool &halted) {
 			break;
 		}
 
-		case OpCode::Print: {
+		case OpCode::Write: {
+				auto &val = instr.operands[0];
+				if (val.tag == OperandTag::Imm64) {
+					std::cout << val.intVal;
+				} else if (val.tag == OperandTag::StrIdx) {
+					if (val.strIdx < m_chunk.strings.size()) {
+						std::cout << m_chunk.strings[val.strIdx];
+					}
+				} else if (val.tag == OperandTag::Reg) {
+					uint8_t reg = static_cast<uint8_t>(val.intVal);
+					if (m_rtag[reg] == 0) {
+						std::cout << m_regs[reg];
+					} else if (m_rtag[reg] == 1) {
+						uint32_t strIdx = static_cast<uint32_t>(m_regs[reg]);
+						if (strIdx < m_runtimeStrings.size()) {
+							std::cout << m_runtimeStrings[strIdx];
+						} else if (strIdx < m_chunk.strings.size()) {
+							std::cout << m_chunk.strings[strIdx];
+						}
+					}
+				}
+				m_jitIp++;
+				break;
+			}
+
+			case OpCode::Print: {
 			auto &val = instr.operands[0];
 			if (val.tag == OperandTag::Imm64) {
 				std::cout << val.intVal << "\n";
@@ -715,11 +833,127 @@ void VM::execJitInstruction(const JitInstruction &instr, bool &halted) {
 					std::cout << m_regs[reg] << "\n";
 				} else if (m_rtag[reg] == 1) {
 					uint32_t strIdx = static_cast<uint32_t>(m_regs[reg]);
-					if (strIdx < m_chunk.strings.size()) {
+					if (strIdx < m_runtimeStrings.size()) {
+						std::cout << m_runtimeStrings[strIdx] << "\n";
+					} else if (strIdx < m_chunk.strings.size()) {
 						std::cout << m_chunk.strings[strIdx] << "\n";
 					}
 				}
 			}
+			m_jitIp++;
+			break;
+		}
+
+		case OpCode::StrLen: {
+			auto &src = instr.operands[0];
+			auto &dstOp = instr.operands[1];
+			uint8_t dstReg = static_cast<uint8_t>(dstOp.intVal);
+			int64_t len = 0;
+			if (src.tag == OperandTag::StrIdx) {
+				if (src.strIdx < m_chunk.strings.size())
+					len = static_cast<int64_t>(m_chunk.strings[src.strIdx].size());
+			} else if (src.tag == OperandTag::Reg) {
+				uint8_t srcReg = static_cast<uint8_t>(src.intVal);
+				if (m_rtag[srcReg] == 1) {
+					uint32_t strIdx = static_cast<uint32_t>(m_regs[srcReg]);
+					if (strIdx < m_runtimeStrings.size())
+						len = static_cast<int64_t>(m_runtimeStrings[strIdx].size());
+					else if (strIdx < m_chunk.strings.size())
+						len = static_cast<int64_t>(m_chunk.strings[strIdx].size());
+				}
+			}
+			m_regs[dstReg] = len;
+			m_rtag[dstReg] = 0;
+			m_jitIp++;
+			break;
+		}
+		case OpCode::ToStr: {
+			auto &src = instr.operands[0];
+			auto &dstOp = instr.operands[1];
+			uint8_t dstReg = static_cast<uint8_t>(dstOp.intVal);
+			std::string str;
+			if (src.tag == OperandTag::StrIdx) {
+				if (src.strIdx < m_chunk.strings.size())
+					str = m_chunk.strings[src.strIdx];
+			} else if (src.tag == OperandTag::Reg) {
+				uint8_t srcReg = static_cast<uint8_t>(src.intVal);
+				if (m_rtag[srcReg] == 0) {
+					str = std::to_string(m_regs[srcReg]);
+				} else if (m_rtag[srcReg] == 1) {
+					uint32_t strIdx = static_cast<uint32_t>(m_regs[srcReg]);
+					if (strIdx < m_runtimeStrings.size())
+						str = m_runtimeStrings[strIdx];
+					else if (strIdx < m_chunk.strings.size())
+						str = m_chunk.strings[strIdx];
+				}
+			} else if (src.tag == OperandTag::Imm64) {
+				str = std::to_string(src.intVal);
+			}
+			m_regs[dstReg] = static_cast<int64_t>(internRuntimeString(str));
+			m_rtag[dstReg] = 1;
+			m_jitIp++;
+			break;
+		}
+
+
+		case OpCode::VCall: {
+			// Virtual call: obj_reg, slot_imm, nargs_imm, return_addr
+			uint8_t objReg = static_cast<uint8_t>(instr.operands[0].intVal);
+			uint32_t slot = static_cast<uint32_t>(instr.operands[1].intVal);
+			int64_t heapOffset = m_regs[objReg];
+			uint32_t typeId = m_heap.getTypeId(static_cast<uint32_t>(heapOffset));
+			size_t target = 0;
+			if (typeId < m_chunk.vtables.size() && slot < m_chunk.vtables[typeId].methodOffsets.size()) {
+				if (resolveJitTarget(m_chunk.vtables[typeId].methodOffsets[slot], target)) {
+					m_callStack.push(m_jitIp + 1);
+					m_jitIp = target;
+					return;
+				}
+			}
+			halted = true;
+			return;
+		}
+
+		case OpCode::ICall: {
+			// Interface call: obj_reg, iface_typeid_imm, method_idx_imm, nargs_imm, return_addr
+			uint8_t objReg = static_cast<uint8_t>(instr.operands[0].intVal);
+			uint32_t ifaceTypeId = static_cast<uint32_t>(instr.operands[1].intVal);
+			uint32_t methodIdx = static_cast<uint32_t>(instr.operands[2].intVal);
+			int64_t heapOffset = m_regs[objReg];
+			uint32_t objTypeId = m_heap.getTypeId(static_cast<uint32_t>(heapOffset));
+			if (objTypeId < m_chunk.vtables.size()) {
+				const auto& vte = m_chunk.vtables[objTypeId];
+				for (const auto& ite : vte.itable) {
+					if (ite.interfaceTypeId == ifaceTypeId && methodIdx < ite.methodOffsets.size()) {
+						size_t target;
+						if (resolveJitTarget(ite.methodOffsets[methodIdx], target)) {
+							m_callStack.push(m_jitIp + 1);
+							m_jitIp = target;
+							return;
+						}
+					}
+				}
+			}
+			halted = true;
+			return;
+		}
+
+		case OpCode::TypeOf: {
+			// Load typeId from object header into result register
+			uint8_t objReg = static_cast<uint8_t>(instr.operands[0].intVal);
+			uint8_t resReg = static_cast<uint8_t>(instr.operands[1].intVal);
+			int64_t heapOffset = m_regs[objReg];
+			uint32_t typeId = m_heap.getTypeId(static_cast<uint32_t>(heapOffset));
+			m_regs[resReg] = static_cast<int64_t>(typeId);
+			m_rtag[resReg] = 0;
+			m_jitIp++;
+			break;
+		}
+
+		case OpCode::Syscall: {
+			uint8_t reg = static_cast<uint8_t>(instr.operands[0].intVal);
+			uint8_t num = static_cast<uint8_t>(m_regs[reg]);
+				invokeSyscall(num);
 			m_jitIp++;
 			break;
 		}

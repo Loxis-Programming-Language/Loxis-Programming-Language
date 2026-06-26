@@ -14,6 +14,7 @@ class TypeChecker {
 public:
     bool checkModule(Module& mod);
     const std::vector<std::string>& getErrors() const { return errors; }
+    Scope* getScope() const { return rootScope; }
 private:
     std::unique_ptr<Scope> rootOwner;
     Scope* rootScope = nullptr;
@@ -51,6 +52,14 @@ private:
     const MethodInfo* lookupMethod(TyPtr recv, const std::string& name);
     const FieldInfo*  lookupField(TyPtr recv, const std::string& name);
     TyPtr unwrapNullable(TyPtr t);
+
+    // Smart casting / flow typing helpers
+    struct TypeRefinement {
+        std::string varName;
+        TyPtr refinedType;
+    };
+    std::vector<TypeRefinement> extractRefinements(const Expr& cond, Scope* sc, bool& isInvert);
+    void applyRefinements(Scope* target, const std::vector<TypeRefinement>& refs);
 };
 
 } // namespace

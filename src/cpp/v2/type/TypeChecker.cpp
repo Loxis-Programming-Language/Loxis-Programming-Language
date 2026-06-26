@@ -1,4 +1,5 @@
 #include "TypeChecker.hpp"
+#include "TypeSubst.hpp"
 #include <variant>
 #include <cassert>
 #include <cstdio>
@@ -33,6 +34,7 @@ TyPtr TypeChecker::unwrapNullable(TyPtr t) {
 bool TypeChecker::isSubtype(TyPtr a, TyPtr b) {
     if (!a || !b) return false;
     if (sameType(a, b)) return true;
+    if (b->kind() == TyKind::Param || a->kind() == TyKind::Param) return true;
     // noreturn <: T (bottom)
     if (a->isNever()) return true;
     // null <: T? (null literal is subtype of any nullable)
@@ -125,10 +127,26 @@ bool TypeChecker::sameType(TyPtr a, TyPtr b) {
                 if (!sameType(aa.args[i], ab.args[i])) return false;
             return true;
         }
-        case TyKind::Class_:
-            return std::get<TyClass>(*a).def->name == std::get<TyClass>(*b).def->name;
-        case TyKind::Interface_:
-            return std::get<TyInterface>(*a).def->name == std::get<TyInterface>(*b).def->name;
+        case TyKind::Class_: {
+            auto& ca = std::get<TyClass>(*a);
+            auto& cb = std::get<TyClass>(*b);
+            if (ca.def->name != cb.def->name) return false;
+            if (ca.args.size() != cb.args.size()) return false;
+            for (size_t i = 0; i < ca.args.size(); ++i)
+                if (!sameType(ca.args[i], cb.args[i])) return false;
+            return true;
+        }
+        case TyKind::Interface_: {
+            auto& ia = std::get<TyInterface>(*a);
+            auto& ib = std::get<TyInterface>(*b);
+            if (ia.def->name != ib.def->name) return false;
+            if (ia.args.size() != ib.args.size()) return false;
+            for (size_t i = 0; i < ia.args.size(); ++i)
+                if (!sameType(ia.args[i], ib.args[i])) return false;
+            return true;
+        }
+        case TyKind::Param:
+            return std::get<TyParam>(*a).name == std::get<TyParam>(*b).name;
         case TyKind::Null:
             return true;
         default:
@@ -217,7 +235,34 @@ TyPtr TypeChecker::resolvePathType(const Path& path, Scope* sc) {
             error("path does not refer to a type: " + s); return mkError();
         }
     }
-    return sym && sym->ty ? sym->ty : mkError();
+    if (!sym || !sym->ty) return mkError();
+
+    if (path.args.empty()) return sym->ty;
+
+    std::vector<TyPtr> argTys;
+    for (const auto& arg : path.args) {
+        argTys.push_back(resolveType(*arg, sc));
+    }
+
+    TyPtr base = sym->ty;
+    if (base->kind() == TyKind::Class_) {
+        auto& cls = std::get<TyClass>(*base);
+        if (argTys.size() != cls.def->params.size()) {
+            error("generic argument count mismatch for " + cls.def->name);
+            return mkError();
+        }
+        return std::make_shared<Ty>(TyClass{cls.def, argTys});
+    }
+    if (base->kind() == TyKind::Interface_) {
+        auto& iface = std::get<TyInterface>(*base);
+        if (argTys.size() != iface.def->params.size()) {
+            error("generic argument count mismatch for " + iface.def->name);
+            return mkError();
+        }
+        return std::make_shared<Ty>(TyInterface{iface.def, argTys});
+    }
+    error("type arguments on non-generic type");
+    return mkError();
 }
 
 TyPtr TypeChecker::resolveType(const Type& surfaceType, Scope* sc) {
@@ -336,15 +381,87 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc) {
                     if (sym) break;
                     search = search->parent();
                 }
-                if (!sym) { error("unresolved path: " + s); return mkError(); }
+                if (!sym) {
+                    // Fallback: check if this is a field on 'this' in enclosing class scope
+                    Scope* fs = sc;
+                    while (fs) {
+                        if (auto cd = fs->classDef()) {
+                            for (const auto& f : cd->fields) {
+                                if (f.name == s) {
+                                    n.isField = true;
+                                    n.fieldOffset = f.offset;
+                                    return f.type ? f.type : mkUnit();
+                                }
+                            }
+                        }
+                        fs = fs->parent();
+                    }
+                    error("unresolved path: " + s); return mkError();
+                }
             }
-            // If it's a type, return the type itself (for constructor calls)
             if (sym->kind == SymbolKind::Type || sym->kind == SymbolKind::Interface) {
-                return sym->ty ? sym->ty : mkError();
+                TyPtr ty = sym->ty ? sym->ty : mkError();
+                if (!n.path.args.empty()) {
+                    std::vector<TyPtr> argTys;
+                    for (const auto& arg : n.path.args) {
+                        argTys.push_back(resolveType(*arg, sc));
+                    }
+                    if (ty->kind() == TyKind::Class_) {
+                        auto& cls = std::get<TyClass>(*ty);
+                        if (argTys.size() != cls.def->params.size()) {
+                            error("generic argument count mismatch for " + cls.def->name);
+                            return mkError();
+                        }
+                        ty = std::make_shared<Ty>(TyClass{cls.def, argTys});
+                    } else if (ty->kind() == TyKind::Interface_) {
+                        auto& iface = std::get<TyInterface>(*ty);
+                        if (argTys.size() != iface.def->params.size()) {
+                            error("generic argument count mismatch for " + iface.def->name);
+                            return mkError();
+                        }
+                        ty = std::make_shared<Ty>(TyInterface{iface.def, argTys});
+                    }
+                }
+                return ty;
             }
-            // If it's a value, return its type
             if (sym->kind == SymbolKind::Value) {
-                return sym->ty ? sym->ty : mkUnit();
+                TyPtr ty = sym->ty ? sym->ty : mkUnit();
+                // Check if this is a class field — mark for field access lowering
+                if (n.path.segs.size() == 1 && n.path.args.empty()) {
+                    Scope* fs = sc;
+                    while (fs) {
+                        if (auto cd = fs->classDef()) {
+                            for (const auto& f : cd->fields) {
+                                if (f.name == n.path.segs[0]) {
+                                    n.isField = true;
+                                    n.fieldOffset = f.offset;
+                                    if (!sym->ty && f.type) ty = f.type;
+                                    break;
+                                }
+                            }
+                        }
+                        fs = fs->parent();
+                    }
+                }
+                if (!n.path.args.empty() && sym->node) {
+                    if (auto* fun = static_cast<ItemFun*>(sym->node)) {
+                        if (!fun->generics.empty()) {
+                            std::vector<TyPtr> typeArgs;
+                            for (const auto& ta : n.path.args) {
+                                typeArgs.push_back(resolveType(*ta, sc));
+                            }
+                            if (typeArgs.size() != fun->generics.size()) {
+                                error("generic argument count mismatch for " + fun->name);
+                                return mkError();
+                            }
+                            std::vector<std::string> names;
+                            for (const auto& g : fun->generics) names.push_back(g.name);
+                            ty = substituteType(ty, makeSubstMap(names, typeArgs));
+                        }
+                    }
+                }
+                n.resolvedTy = ty;
+                return ty;
             }
             error("path did not resolve to value or type"); return mkError();
 
@@ -373,8 +490,22 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc) {
                     if (!fi) { error("unknown field '" + f.name + "' in " + cls.def->name); }
                     else if (f.expr) {
                         TyPtr ft = checkExpr(f.expr, sc);
-                        if (fi->type && !sameType(ft, fi->type)) error("field type mismatch for '" + f.name + "'");
+                        TyPtr expected = fi->type;
+                        auto subst = classSubstMap(structTy);
+                        if (!subst.empty() && expected) expected = substituteType(expected, subst);
+                        if (expected && !sameType(ft, expected)) error("field type mismatch for '" + f.name + "'");
                     }
+                }
+                // Annotate AST node for lowering
+                n.totalFieldSize = cls.def->totalFieldSize;
+                n.typeId = cls.def->typeId;
+                n.resolvedTypeArgs = cls.args; // Concrete generic args
+                n.vtableEntryCount = static_cast<uint32_t>(cls.def->vtable.size());
+                for (uint32_t vi : cls.def->vtable) {
+                    if (vi < cls.def->methods.size())
+                        n.vtableMethodNames.push_back(cls.def->name + "." + cls.def->methods[vi].name);
+                    else
+                        n.vtableMethodNames.push_back("");
                 }
             }
             return structTy;
@@ -392,11 +523,11 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc) {
             // Constructor call: callee is a class type
             if (callee->kind() == TyKind::Class_) {
                 auto& cls = std::get<TyClass>(*callee);
-                // Check args against primary constructor params
-                // Constructor params come from primaryCtor fields (val/var params)
-                // They're registered as fields; we accept any args for now
                 for (const auto& a : n.args) checkExpr(a, sc);
-                return callee; // Dog(args) → returns Dog
+                n.ctorLabel = cls.def->name + ".init";
+                n.resolvedTypeArgs = cls.args; // Concrete generic args
+                n.resolvedTy = callee;
+                return callee;
             }
 
             // Function call
@@ -407,11 +538,35 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc) {
                 TyPtr argTy = checkExpr(n.args[i], sc);
                 if (!isSubtype(argTy, fn.params[i])) error("call argument type mismatch");
             }
+            // Store resolved generic type args from the path
+            if (auto* pe = std::get_if<ExprPath>(n.func.get())) {
+                if (!pe->path.args.empty()) {
+                    for (const auto& arg : pe->path.args) {
+                        n.resolvedTypeArgs.push_back(resolveType(*arg, sc));
+                    }
+                }
+            }
+            n.resolvedTy = fn.ret;
             return fn.ret;
 
         } else if constexpr (std::is_same_v<T, ExprMethodCall>) {
             TyPtr recv = checkExpr(n.recv, sc);
             if (!recv || recv->isError()) return mkError();
+
+            // Determine dispatch kind for the backend
+            TyPtr inner = recv->nullable ? unwrapNullable(recv) : recv;
+            if (inner->kind() == TyKind::Interface_) {
+                n.isInterfaceDispatch = true;
+                auto& iface = std::get<TyInterface>(*inner);
+                n.ifaceTypeId = iface.def->typeId;
+                // Find method index within the interface
+                for (size_t i = 0; i < iface.def->methods.size(); ++i) {
+                    if (iface.def->methods[i].name == n.method) {
+                        n.ifaceMethodIndex = static_cast<uint32_t>(i);
+                        break;
+                    }
+                }
+            }
 
             const MethodInfo* mi = lookupMethod(recv, n.method);
             if (!mi) {
@@ -419,10 +574,16 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc) {
                 return mkError();
             }
 
-            // Check args against method params
+            n.vtableIndex = mi->vtableIndex;
+            if (inner->kind() == TyKind::Class_) {
+                n.qualifiedName = std::get<TyClass>(*inner).def->name + "." + n.method;
+            }
+
             if (mi->funcType && mi->funcType->kind() == TyKind::Fn) {
-                auto& mfn = std::get<TyFn>(*mi->funcType);
-                // First param is 'self'; args start at index 1
+                TyPtr fnTy = mi->funcType;
+                auto subst = classSubstMap(recv);
+                if (!subst.empty()) fnTy = substituteType(fnTy, subst);
+                auto& mfn = std::get<TyFn>(*fnTy);
                 size_t selfOffset = 1;
                 if (n.args.size() + selfOffset != mfn.params.size())
                     error("method call arity mismatch for '" + n.method + "'");
@@ -445,8 +606,11 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc) {
 
             const FieldInfo* fi = lookupField(base, n.field);
             if (fi) {
-                if (fi->type) return fi->type;
-                return freshInfer(); // field type not resolved yet
+                n.fieldOffset = fi->offset;
+                TyPtr ft = fi->type ? fi->type : freshInfer();
+                auto subst = classSubstMap(base);
+                if (!subst.empty()) ft = substituteType(ft, subst);
+                return ft;
             }
             error("field '" + n.field + "' not found on type " + base->toString());
             return mkError();
@@ -485,7 +649,14 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc) {
             TyPtr l = checkExpr(n.l, sc);
             TyPtr r = checkExpr(n.r, sc);
             switch (n.op) {
-                case ExprBinary::Add: case ExprBinary::Sub: case ExprBinary::Mul:
+                case ExprBinary::Add:
+                    // String concatenation
+                    if (l->isStr() && r->isStr()) return mkStr();
+                    // Numeric
+                    if (!isNumeric(l) || !isNumeric(r)) { error("numeric op on non-numeric"); return mkError(); }
+                    if (!sameType(l, r)) { error("numeric op type mismatch"); return mkError(); }
+                    return l;
+                case ExprBinary::Sub: case ExprBinary::Mul:
                 case ExprBinary::Div: case ExprBinary::Rem:
                     if (!isNumeric(l) || !isNumeric(r)) { error("numeric op on non-numeric"); return mkError(); }
                     if (!sameType(l, r)) { error("numeric op type mismatch"); return mkError(); }
@@ -540,9 +711,25 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc) {
         } else if constexpr (std::is_same_v<T, ExprIf>) {
             TyPtr cond = checkExpr(n.cond, sc);
             if (!isBool(cond)) error("if condition must be bool");
-            TyPtr t = checkExpr(n.then_, sc);
+
+            // Smart casting: extract type refinements from the condition
+            bool invertRefinements = false;
+            auto refinements = extractRefinements(*n.cond, sc, invertRefinements);
+
+            // Then branch: use refinements (non-inverted)
+            Scope thenScope(sc);
+            if (!invertRefinements) {
+                applyRefinements(&thenScope, refinements);
+            }
+            TyPtr t = checkExpr(n.then_, &thenScope);
+
             if (n.else_) {
-                TyPtr el = checkExpr(n.else_, sc);
+                // Else branch: use inverted refinements
+                Scope elseScope(sc);
+                if (invertRefinements) {
+                    applyRefinements(&elseScope, refinements);
+                }
+                TyPtr el = checkExpr(n.else_, &elseScope);
                 if (!sameType(t, el)) { error("if/else branch type mismatch"); return mkError(); }
                 return t;
             }
@@ -556,11 +743,49 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc) {
             loopStack.pop_back();
             return mkUnit();
 
+        } else if constexpr (std::is_same_v<T, ExprRange>) {
+            TyPtr start = checkExpr(n.start, sc);
+            TyPtr end = checkExpr(n.end, sc);
+            if (!isInteger(start) || !isInteger(end)) error("range bounds must be integers");
+            return mkInt();
+
         } else if constexpr (std::is_same_v<T, ExprFor>) {
             TyPtr iter = checkExpr(n.iter, sc);
-            (void)iter;
+            TyPtr elemTy = mkInt();
+
+            if (std::holds_alternative<ExprRange>(*n.iter)) {
+                const auto& range = std::get<ExprRange>(*n.iter);
+                n.iterKind = range.inclusive
+                    ? ExprFor::IterKind::IntRangeInclusive
+                    : ExprFor::IterKind::IntRange;
+            } else if (iter->kind() == TyKind::Array) {
+                n.iterKind = ExprFor::IterKind::Array;
+                elemTy = std::get<TyArray>(*iter).elem;
+                if (std::holds_alternative<ExprArray>(*n.iter)) {
+                    n.arrayLen = std::get<ExprArray>(*n.iter).elems.size();
+                } else {
+                    n.arrayLen = std::get<TyArray>(*iter).len;
+                }
+            } else if (lookupMethod(iter, "size") && lookupMethod(iter, "get")) {
+                n.iterKind = ExprFor::IterKind::Iterable;
+                if (iter->kind() == TyKind::Class_) {
+                    n.iterClassName = std::get<TyClass>(*iter).def->name;
+                }
+                const MethodInfo* getM = lookupMethod(iter, "get");
+                if (getM && getM->funcType && getM->funcType->kind() == TyKind::Fn) {
+                    TyPtr ret = std::get<TyFn>(*getM->funcType).ret;
+                    auto subst = classSubstMap(iter);
+                    elemTy = subst.empty() ? ret : substituteType(ret, subst);
+                }
+            } else {
+                error("for-in requires integer range, array literal, or iterable with size()/get()");
+                return mkError();
+            }
+
+            Scope bodyScope(sc);
+            checkPat(n.pat, elemTy, &bodyScope);
             loopStack.push_back({mkUnit(), n.label});
-            checkExpr(n.body, sc);
+            checkExpr(n.body, &bodyScope);
             loopStack.pop_back();
             return mkUnit();
 
@@ -574,14 +799,19 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc) {
             TyPtr scrut = n.scrut ? checkExpr(n.scrut, sc) : nullptr;
             TyPtr result = nullptr;
             for (const auto& arm : n.arms) {
+                Scope armScope(sc);
                 if (auto* cond = std::get_if<ExprPtr>(&arm.condition)) {
                     if (*cond) {
                         TyPtr condTy = checkExpr(*cond, sc);
                         if (scrut && !sameType(condTy, scrut))
                             error("when condition type does not match scrutinee");
+                        // Apply smart casting refinements from the arm condition
+                        bool invert = false;
+                        auto refs = extractRefinements(**cond, sc, invert);
+                        if (!invert) applyRefinements(&armScope, refs);
                     }
                 }
-                TyPtr armTy = arm.body ? checkExpr(arm.body, sc) : mkUnit();
+                TyPtr armTy = arm.body ? checkExpr(arm.body, &armScope) : mkUnit();
                 if (!result) result = armTy;
                 else if (!sameType(result, armTy)) error("when arm type mismatch");
             }
@@ -720,11 +950,20 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
         using T = std::decay_t<decltype(n)>;
 
         if constexpr (std::is_same_v<T, ItemFun>) {
+            Scope fnScope(sc);
+            for (size_t gi = 0; gi < n.generics.size(); ++gi) {
+                fnScope.declare(
+                    n.generics[gi].name,
+                    SymbolKind::Type,
+                    nullptr,
+                    std::make_shared<Ty>(TyParam{n.generics[gi].name, static_cast<uint32_t>(gi)}));
+            }
+
             std::vector<TyPtr> paramTys;
             for (const auto& p : n.params)
-                paramTys.push_back(resolveType(*p.second, sc));
+                paramTys.push_back(resolveType(*p.second, &fnScope));
 
-            TyPtr retTy = n.ret ? resolveType(*n.ret, sc) : mkUnit();
+            TyPtr retTy = n.ret ? resolveType(*n.ret, &fnScope) : mkUnit();
             TyPtr fnTy = std::make_shared<Ty>(TyFn{paramTys, retTy});
 
             Symbol* sym = sc->lookup(n.name);
@@ -733,7 +972,6 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
             TyPtr saved = currentRetTy;
             currentRetTy = retTy;
 
-            Scope fnScope(sc);
             for (size_t i = 0; i < n.params.size(); ++i)
                 fnScope.declare(n.params[i].first, SymbolKind::Value, nullptr, paramTys[i]);
 
@@ -785,6 +1023,10 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
                     if (fd.ty) {
                         if (!isSubtype(initTy, fieldTy)) error("field initializer type mismatch for '" + fd.name + "'");
                     }
+                    // Update scope symbol with resolved field type
+                    if (Symbol* fsym = classScope->lookupLocal(fd.name)) {
+                        fsym->ty = fieldTy;
+                    }
                 }
             }
 
@@ -807,6 +1049,20 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
                     if (Symbol* sym = classScope->lookupLocal(m.name)) sym->ty = methodTy;
                 }
                 checkItem(std::make_shared<Item>(m), classScope);
+            }
+
+            // Populate ItemClass annotations for backend code generation
+            if (classDef) {
+                n.totalFieldSize = classDef->totalFieldSize;
+                n.typeId = classDef->typeId;
+                n.itables = classDef->itables;
+                n.vtableEntryCount = static_cast<uint32_t>(classDef->vtable.size());
+                for (uint32_t vi : classDef->vtable) {
+                    if (vi < classDef->methods.size())
+                        n.vtableMethodNames.push_back(n.name + "." + classDef->methods[vi].name);
+                    else
+                        n.vtableMethodNames.push_back("");
+                }
             }
 
         } else if constexpr (std::is_same_v<T, ItemEnumClass>) {
@@ -858,6 +1114,90 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
             if (Symbol* sym = sc->lookupLocal(n.name)) sym->ty = ty;
         }
     }, *i);
+}
+
+// ============================================================
+// Smart casting / flow typing
+// ============================================================
+std::vector<TypeChecker::TypeRefinement> TypeChecker::extractRefinements(const Expr& cond, Scope* sc, bool& isInvert) {
+    isInvert = false;
+    return std::visit([&](const auto& e) -> std::vector<TypeRefinement> {
+        using T = std::decay_t<decltype(e)>;
+
+        if constexpr (std::is_same_v<T, ExprIs>) {
+            // x is Type → refine x to Type in then-branch
+            if (auto* path = std::get_if<ExprPath>(e.expr.get())) {
+                std::string varName = path->path.segs.empty() ? "" : path->path.segs.back();
+                if (!varName.empty()) {
+                    TyPtr targetTy = e.ty ? resolveType(*e.ty, sc) : nullptr;
+                    return {{varName, targetTy}};
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, ExprIsNot>) {
+            // x !is Type → refine x to Type in else-branch (invert)
+            isInvert = true;
+            if (auto* path = std::get_if<ExprPath>(e.expr.get())) {
+                std::string varName = path->path.segs.empty() ? "" : path->path.segs.back();
+                if (!varName.empty()) {
+                    TyPtr targetTy = e.ty ? resolveType(*e.ty, sc) : nullptr;
+                    return {{varName, targetTy}};
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, ExprBinary>) {
+            if (e.op == ExprBinary::Ne) {
+                // x != null → refine T? to T in then-branch
+                if (auto* path = std::get_if<ExprPath>(e.l.get())) {
+                    if (std::holds_alternative<ExprNull>(*e.r)) {
+                        std::string varName = path->path.segs.empty() ? "" : path->path.segs.back();
+                        return {{varName, nullptr}}; // nullptr means "unwrap nullable"
+                    }
+                }
+                // null != x → refine T? to T in then-branch
+                if (auto* path = std::get_if<ExprPath>(e.r.get())) {
+                    if (std::holds_alternative<ExprNull>(*e.l)) {
+                        std::string varName = path->path.segs.empty() ? "" : path->path.segs.back();
+                        return {{varName, nullptr}};
+                    }
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, ExprUnary>) {
+            if (e.op == ExprUnary::Not) {
+                // !(x is Type) → invert: then/else swap
+                bool innerInvert = false;
+                auto inner = extractRefinements(*e.operand, sc, innerInvert);
+                isInvert = !innerInvert; // invert the invert flag
+                return inner;
+            }
+        }
+
+        return {};
+    }, cond);
+}
+
+void TypeChecker::applyRefinements(Scope* target, const std::vector<TypeRefinement>& refs) {
+    for (const auto& r : refs) {
+        if (r.varName.empty()) continue;
+        Symbol* sym = target->lookupLocal(r.varName);
+        if (!sym) {
+            // Try parent scope
+            sym = target->lookup(r.varName);
+        }
+        if (sym && sym->ty) {
+            TyPtr refined;
+            // nullptr means "unwrap nullable"
+            if (!r.refinedType && sym->ty->nullable) {
+                refined = unwrapNullable(sym->ty);
+            } else if (r.refinedType) {
+                refined = r.refinedType;
+            }
+            if (refined) {
+                target->declare(r.varName, sym->kind, sym->node, refined);
+            }
+        }
+    }
 }
 
 bool TypeChecker::checkModule(Module& mod) {

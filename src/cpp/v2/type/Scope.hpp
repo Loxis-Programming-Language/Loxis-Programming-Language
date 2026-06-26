@@ -74,6 +74,10 @@ private:
     void buildVTable(ClassDef& def);
     // Check that all interface methods are implemented
     bool checkInterfaceConformance(ClassDef& def, Scope* scope);
+
+    // Sequential typeId counters for runtime dispatch
+    uint32_t m_nextClassTypeId = 0;
+    uint32_t m_nextInterfaceTypeId = 0;
 };
 
 } // namespace
