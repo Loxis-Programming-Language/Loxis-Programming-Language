@@ -9,10 +9,12 @@ if(MSVC)
 endif()
 
 add_library(loxis_vm
-        src/cpp/vm/VM.cpp)
+        src/cpp/vm/VM.cpp
+        src/cpp/vm/GC.cpp)
 
 target_include_directories(loxis_vm PUBLIC
-        src/cpp)
+        src/cpp
+        src/aarc)
 
 add_library(loxis_v2
         src/cpp/v2/backend/Lowering.cpp
@@ -37,6 +39,19 @@ add_executable(Loxis
 
 target_link_libraries(Loxis PRIVATE loxis_v2)
 
+enable_testing()
+
+add_test(
+        NAME loxis_smoke
+        COMMAND powershell -ExecutionPolicy Bypass -File ${CMAKE_SOURCE_DIR}/tests/run_smoke.ps1 -Exe $<TARGET_FILE:Loxis>
+)
+
 add_executable(LSPTest
         src/cpp/tools/LSPTest.cpp
 )
+
+add_executable(bench_gc
+        src/cpp/tools/BenchGC.cpp
+)
+
+target_link_libraries(bench_gc PRIVATE loxis_v2)

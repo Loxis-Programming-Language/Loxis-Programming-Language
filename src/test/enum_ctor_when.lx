@@ -1,0 +1,20 @@
+enum class MaybeInt {
+    None,
+    Some(int)
+}
+
+fun unwrapOrZero(value: MaybeInt) -> int {
+    return when (value) {
+        MaybeInt::None() -> 0,
+        MaybeInt::Some(x) -> x,
+        else -> -1
+    }
+}
+
+fun main() -> int {
+    val a = MaybeInt::None()
+    val b = MaybeInt::Some(42)
+    print(unwrapOrZero(a))
+    print(unwrapOrZero(b))
+    return 0
+}

@@ -1,0 +1,16 @@
+// GC cycle probe: every iteration builds a two-node cycle and drops both
+// locals. Reference counting must leak every one of them; a cycle collector
+// must reclaim them. Nothing here is reachable at exit.
+class Node(var next: Node?, var tag: int)
+
+fun main() -> int {
+    var i = 0
+    while i < 2000 {
+        val a = Node(null, i)
+        val b = Node(a, i)
+        a.next = b
+        i += 1
+    }
+    print(999)
+    return 0
+}

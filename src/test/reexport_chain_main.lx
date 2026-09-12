@@ -1,0 +1,7 @@
+import reexport_mid
+
+fun main() -> int {
+    print(lowFunc())
+    print(midFunc())
+    return 0
+}

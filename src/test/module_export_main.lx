@@ -1,0 +1,6 @@
+from module_export_lib import { visible }
+
+fun main() -> int {
+    print(visible())
+    return 0
+}

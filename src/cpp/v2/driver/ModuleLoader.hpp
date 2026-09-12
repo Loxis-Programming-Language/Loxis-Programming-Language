@@ -26,11 +26,15 @@ private:
         const Path& module,
         const std::filesystem::path& importingDir) const;
 
+    bool isExported(const Item& item) const;
+    bool matchesImportList(const Item& item, const ItemImport& import) const;
+
     void appendModule(
         Module& out,
         const std::filesystem::path& file,
         std::set<std::filesystem::path>& loading,
-        std::set<std::filesystem::path>& loaded);
+        std::set<std::filesystem::path>& loaded,
+        const ItemImport* importedBy = nullptr);
 };
 
 } // namespace loxis::v2

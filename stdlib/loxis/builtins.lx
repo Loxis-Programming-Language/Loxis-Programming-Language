@@ -1,0 +1,26 @@
+package loxis.builtins
+
+// ============================================================
+//  Loxis Builtins — extended VM primitives
+// ============================================================
+//
+//  These wrap VM operations that aren't in the auto-loaded prelude.
+//  Import this module explicitly when you need low-level access.
+//
+//  VM syscalls used:
+//    0  READCHAR  — read one char from stdin
+//    2  TYPEOF    — get type id of a heap object
+//    3  CHR       — int code → single-char string
+
+// --- Type reflection ---
+
+fun typeof(obj: int) -> int {
+    return syscall(2, obj)
+}
+
+// --- Character conversion ---
+// chr is also available as a compiler builtin (no import needed)
+
+// --- Low-level syscall ---
+// syscall is a compiler builtin (no import needed).
+// This file just documents the available syscall numbers.

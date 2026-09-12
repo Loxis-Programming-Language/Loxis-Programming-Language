@@ -15,6 +15,7 @@ private:
     Scope* m_scope = nullptr;
     std::vector<std::string> m_genericParams;       // stack of active generic param names
     std::vector<size_t> m_genericDepthStack;         // counts per nesting level
+    std::vector<HirFn> m_generatedFns;
 
     void pushGenerics(const std::vector<GenericParam>& params);
     void popGenerics();
@@ -25,6 +26,8 @@ private:
     static MirBinOp toMirBinOp(ExprBinary::Op op);
     static MirUnaryOp toMirUnaryOp(ExprUnary::Op op);
     static MirAssignOp toMirAssignOp(ExprAssign::Op op);
+    static std::string binaryOperatorName(ExprBinary::Op op);
+    static std::string unaryOperatorName(ExprUnary::Op op);
 
     HirExprPtr buildExpr(const ExprPtr& expr);
     HirStmtPtr buildStmt(const StmtPtr& stmt);
@@ -32,13 +35,15 @@ private:
 
     HirFn buildFn(const ItemFun& fn);
     HirClass buildClass(const ItemClass& cls);
+    HirClass buildObject(const ItemObject& obj);
+    HirFn buildInterfaceMethod(const std::string& ifaceName, const InterfaceMethodDecl& method, const std::vector<GenericParam>& generics);
 
     HirExprPtr desugarFor(const ExprFor& e);
     HirExprPtr wrapWithPat(const PatPtr& pat, HirExprPtr elem, HirExprPtr body);
     HirExprPtr makeIntLit(int64_t v);
     HirExprPtr makeBin(MirBinOp op, HirExprPtr l, HirExprPtr r);
     HirExprPtr makeAssign(HirExprPtr lhs, HirExprPtr rhs);
-    HirExprPtr makeLet(const std::string& name, HirExprPtr init, HirExprPtr body);
+    HirExprPtr makeLet(const std::string& name, HirExprPtr init, HirExprPtr body, CoreTyPtr ty = nullptr);
     HirExprPtr makeWhile(HirExprPtr cond, HirExprPtr body, const std::optional<std::string>& label);
     HirExprPtr makeMethodCall(HirExprPtr recv, const std::string& qualifiedName, std::vector<HirExprPtr> args);
     HirExprPtr makeIndex(HirExprPtr obj, HirExprPtr idx);

@@ -1,0 +1,31 @@
+// Starvation-bound correctness probe.
+//
+// One tiny cycle is dropped early and then nothing cyclic ever happens again:
+// the loop allocates acyclic garbage only, so suspect pressure never reaches
+// the threshold and the committed heap never reaches the memory target (the
+// allocator reuses). Only the starvation bound can collect that cycle, and if
+// it does not, the cycle lives forever.
+//
+// Expected under --gc=aarc --gc-stats: trigStarve >= 1, cycleByPolicy >= 2,
+// live = 0.
+class Node(var next: Node?, var tag: int)
+
+fun makeCycle() -> unit {
+    val a = Node(null, 1)
+    val b = Node(a, 2)
+    a.next = b
+}
+
+fun main() -> int {
+    makeCycle()
+
+    var i = 0
+    var sum = 0
+    while i < 20000 {
+        val n = Node(null, i)
+        sum = sum + n.tag
+        i += 1
+    }
+    print(sum)
+    return 0
+}

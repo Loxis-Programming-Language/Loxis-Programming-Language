@@ -42,13 +42,24 @@ struct FieldInfo {
     bool isVal = true;
 };
 
+struct EnumVariantInfo {
+    std::string name;
+    std::vector<FieldInfo> fields;
+    bool isTuple = false;
+    uint32_t discriminant = 0;
+    uint32_t payloadSize = 0;
+};
+
 struct MethodInfo {
     std::string name;
     TyPtr funcType;             // (self, params...) -> ret
+    uint32_t arity = 0;         // number of source parameters (excluding self)
     uint32_t vtableIndex = ~0u; // ~0u = static/final dispatch
     bool isOpen = false;
     bool isAbstract = false;
     bool isOverride = false;
+    bool isInterfaceDefault = false;   // injected into class from interface default
+    std::string defaultIfaceName;      // which interface provided the default
 };
 
 struct InterfaceDef {
@@ -70,6 +81,7 @@ struct ClassDef {
     std::string name;
     std::vector<std::string> params;
     std::vector<FieldInfo> fields;     // own fields (offset from own payload start)
+    std::vector<EnumVariantInfo> variants;
     std::vector<MethodInfo> methods;   // own methods (includes overrides)
     std::vector<uint32_t> vtable;      // indices into methods[] for virtual dispatch
     std::optional<std::string> superName;
@@ -78,6 +90,7 @@ struct ClassDef {
     bool isOpen = false;
     bool isAbstract = false;
     bool isData = false;
+    bool isEnum = false;
     uint32_t totalFieldSize = 0;       // total size of own fields (fields * 9 bytes)
     uint32_t typeId = ~0u;             // assigned during codegen, unique per class type
 };

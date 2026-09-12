@@ -1,0 +1,15 @@
+package test
+
+import loxis.io
+
+fun main() -> int {
+    var content = chr(97) + chr(98) + chr(10) + chr(99) + chr(100)
+    writeText("_t.txt", content)
+
+    val lines = readLines("_t.txt")
+    print(lines.size())
+    print(lines.get(0))
+    print(lines.get(1))
+    remove("_t.txt")
+    return 0
+}

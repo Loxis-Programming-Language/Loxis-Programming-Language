@@ -1,0 +1,9 @@
+enum class MaybeInt {
+    None,
+    Some(int)
+}
+
+fun main() -> int {
+    print(7)
+    return 0
+}

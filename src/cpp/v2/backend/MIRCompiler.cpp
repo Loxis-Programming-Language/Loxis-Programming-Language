@@ -10,7 +10,14 @@ Chunk MIRCompiler::compile(const LoweringOutput& output) {
     m_labelOffsets.clear();
     m_classes = output.classes;
 
-    // Synthetic entry point: call main, then halt
+    // Synthetic entry point: initialize persistent globals, call main, then halt.
+    for (const auto& initializer : output.globalInitializers) {
+        m_chunk.emitByte(static_cast<uint8_t>(OpCode::Call));
+        emitAddr(initializer.initLabel);
+        m_chunk.emitByte(static_cast<uint8_t>(OpCode::GStore));
+        emitImm(static_cast<int64_t>(initializer.slot));
+        emitReg(0);
+    }
     m_chunk.emitByte(static_cast<uint8_t>(OpCode::Call));
     m_chunk.emitByte(static_cast<uint8_t>(OperandTag::Addr));
     size_t entryPatch = m_chunk.offset();
@@ -34,6 +41,8 @@ Chunk MIRCompiler::compile(const LoweringOutput& output) {
 
 void MIRCompiler::buildVTableMetadata() {
     for (auto& lc : m_classes) {
+        if (lc.typeId == ~0u) continue;
+
         VTableEntry vte;
         for (const auto& mn : lc.vtableMethodNames) {
             try {
@@ -55,11 +64,14 @@ void MIRCompiler::buildVTableMetadata() {
             }
             vte.itable.push_back(std::move(ie));
         }
-        m_chunk.vtables.push_back(std::move(vte));
+        if (m_chunk.vtables.size() <= lc.typeId)
+            m_chunk.vtables.resize(static_cast<size_t>(lc.typeId) + 1);
+        m_chunk.vtables[lc.typeId] = std::move(vte);
     }
 }
 
 void MIRCompiler::compileBody(const MirBody& body) {
+    m_currentBody = &body;
     std::string prefix = body.name;
     uint32_t startOffset = static_cast<uint32_t>(m_chunk.offset());
     m_labelOffsets[body.name] = startOffset;
@@ -74,6 +86,7 @@ void MIRCompiler::compileBody(const MirBody& body) {
         }
         emitTerminator(bb.term, prefix);
     }
+    m_currentBody = nullptr;
 }
 
 void MIRCompiler::emitStatement(const Statement& stmt) {
@@ -93,6 +106,12 @@ void MIRCompiler::emitStatement(const Statement& stmt) {
         } else if constexpr (std::is_same_v<T, StPop>) {
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::PopR));
             emitReg(localToReg(s.local));
+        } else if constexpr (std::is_same_v<T, StGlobalStore>) {
+            uint8_t valueReg = 254;
+            emitOperandToReg(s.value, valueReg);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::GStore));
+            emitImm(static_cast<int64_t>(s.slot));
+            emitReg(valueReg);
         } else if constexpr (std::is_same_v<T, StDrop>) {
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::Nop));
         }
@@ -228,12 +247,110 @@ void MIRCompiler::emitTerminator(const Terminator& term, const std::string& pref
                 m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
                 emitAddr(blockLabel(prefix, t.return_));
                 emitAddr(blockLabel(prefix, t.return_));
+            } else if (funcLabel == "strchar" || funcLabel == "strslice" ||
+                       funcLabel == "strindexof") {
+                uint8_t numReg = 251;
+                int64_t syscallNum = 32;
+                if (funcLabel == "strslice") syscallNum = 33;
+                else if (funcLabel == "strindexof") syscallNum = 34;
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                emitReg(numReg);
+                emitImm(syscallNum);
+                for (size_t i = 0; i < t.args.size() && i < 4; ++i) {
+                    emitOperandToReg(t.args[i], static_cast<uint8_t>(i + 1));
+                }
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Syscall));
+                emitReg(numReg);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                emitAddr(blockLabel(prefix, t.return_));
+                emitAddr(blockLabel(prefix, t.return_));
+            } else if (funcLabel == "nativeFileReadText" ||
+                       funcLabel == "nativeFileWriteText" ||
+                       funcLabel == "nativeFileAppendText" ||
+                       funcLabel == "nativeFileRemove") {
+                uint8_t numReg = 251;
+                int64_t syscallNum = 40;
+                if (funcLabel == "nativeFileWriteText") syscallNum = 41;
+                else if (funcLabel == "nativeFileAppendText") syscallNum = 42;
+                else if (funcLabel == "nativeFileRemove") syscallNum = 43;
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                emitReg(numReg);
+                emitImm(syscallNum);
+                for (size_t i = 0; i < t.args.size() && i < 4; ++i) {
+                    emitOperandToReg(t.args[i], static_cast<uint8_t>(i + 1));
+                }
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Syscall));
+                emitReg(numReg);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                emitAddr(blockLabel(prefix, t.return_));
+                emitAddr(blockLabel(prefix, t.return_));
+            } else if (funcLabel == "itof") {
+                uint8_t srcReg = 253;
+                if (t.args.size() >= 1) emitOperandToReg(t.args[0], srcReg);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::ItoF));
+                emitReg(srcReg);
+                emitReg(0);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                emitAddr(blockLabel(prefix, t.return_));
+                emitAddr(blockLabel(prefix, t.return_));
+            } else if (funcLabel == "ftoi") {
+                uint8_t srcReg = 253;
+                if (t.args.size() >= 1) emitOperandToReg(t.args[0], srcReg);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::FtoI));
+                emitReg(srcReg);
+                emitReg(0);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                emitAddr(blockLabel(prefix, t.return_));
+                emitAddr(blockLabel(prefix, t.return_));
+            } else if (funcLabel == "fneg") {
+                uint8_t srcReg = 253;
+                if (t.args.size() >= 1) emitOperandToReg(t.args[0], srcReg);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::FNeg));
+                emitReg(srcReg);
+                emitReg(0);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                emitAddr(blockLabel(prefix, t.return_));
+                emitAddr(blockLabel(prefix, t.return_));
+            } else if (funcLabel == "fadd" || funcLabel == "fsub" ||
+                       funcLabel == "fmul" || funcLabel == "fdiv") {
+                uint8_t lReg = 252, rReg = 253;
+                if (t.args.size() >= 1) emitOperandToReg(t.args[0], lReg);
+                if (t.args.size() >= 2) emitOperandToReg(t.args[1], rReg);
+                OpCode op = OpCode::FAdd;
+                if (funcLabel == "fsub") op = OpCode::FSub;
+                else if (funcLabel == "fmul") op = OpCode::FMul;
+                else if (funcLabel == "fdiv") op = OpCode::FDiv;
+                m_chunk.emitByte(static_cast<uint8_t>(op));
+                if (op == OpCode::FAdd) {
+                    emitReg(0);
+                    emitReg(lReg);
+                    emitReg(rReg);
+                } else {
+                    emitReg(lReg);
+                    emitReg(rReg);
+                    emitReg(0);
+                }
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                emitAddr(blockLabel(prefix, t.return_));
+                emitAddr(blockLabel(prefix, t.return_));
             } else if (funcLabel == "s2i") {
                 // s2i(str) -> int: move str to r1, emit Syscall #1
                 uint8_t numReg = 251;
                 m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
                 emitReg(numReg);
                 emitImm(1);
+                if (t.args.size() >= 1) emitOperandToReg(t.args[0], 1); // arg → r1
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Syscall));
+                emitReg(numReg);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+                emitAddr(blockLabel(prefix, t.return_));
+                emitAddr(blockLabel(prefix, t.return_));
+            } else if (funcLabel == "chr") {
+                // chr(code: int) -> str: emit Syscall #3
+                uint8_t numReg = 251;
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                emitReg(numReg);
+                emitImm(3);
                 if (t.args.size() >= 1) emitOperandToReg(t.args[0], 1); // arg → r1
                 m_chunk.emitByte(static_cast<uint8_t>(OpCode::Syscall));
                 emitReg(numReg);
@@ -255,8 +372,15 @@ void MIRCompiler::emitTerminator(const Terminator& term, const std::string& pref
             } else {
                 // Regular call: move args to param regs
                 for (size_t i = 0; i < t.args.size(); ++i) {
+                    uint8_t tempReg = static_cast<uint8_t>(240 + i);
+                    emitOperandToReg(t.args[i], tempReg);
+                }
+                for (size_t i = 0; i < t.args.size(); ++i) {
+                    uint8_t tempReg = static_cast<uint8_t>(240 + i);
                     uint8_t paramReg = static_cast<uint8_t>(i + 1);
-                    emitOperandToReg(t.args[i], paramReg);
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::Mov));
+                    emitReg(paramReg);
+                    emitReg(tempReg);
                 }
                 m_chunk.emitByte(static_cast<uint8_t>(OpCode::Call));
                 emitAddr(funcLabel);
@@ -266,19 +390,48 @@ void MIRCompiler::emitTerminator(const Terminator& term, const std::string& pref
                 emitAddr(blockLabel(prefix, t.return_));
             }
         } else if constexpr (std::is_same_v<T, TmCallIndirect>) {
-            // Move arguments into param regs, then call via function pointer
-            for (size_t i = 0; i < t.args.size(); ++i) {
-                uint8_t paramReg = static_cast<uint8_t>(i + 1);
-                emitOperandToReg(t.args[i], paramReg);
-            }
-            // Load function pointer into temp reg, then call
             emitOperandToReg(t.funcPtr, 250);
-            // Emit as regular Call with label "indirect" for now
-            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Call));
-            m_chunk.emitByte(static_cast<uint8_t>(OperandTag::Addr));
-            size_t patchOff = m_chunk.offset();
-            m_chunk.emitU32(0);
-            m_patches.push_back({patchOff, "_indirect_stub"});
+            for (size_t i = 0; i < t.args.size(); ++i) {
+                uint8_t tempReg = static_cast<uint8_t>(240 + i);
+                emitOperandToReg(t.args[i], tempReg);
+            }
+            for (size_t i = 0; i < t.args.size(); ++i) {
+                uint8_t tempReg = static_cast<uint8_t>(240 + i);
+                uint8_t paramReg = static_cast<uint8_t>(i + 1);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Mov));
+                emitReg(paramReg);
+                emitReg(tempReg);
+            }
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::CallInd));
+            emitReg(250);
+            emitImm(static_cast<int64_t>(t.args.size()));
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+            emitAddr(blockLabel(prefix, t.return_));
+            emitAddr(blockLabel(prefix, t.return_));
+        } else if constexpr (std::is_same_v<T, TmClosureCall>) {
+            // Put closure object in r250 — VM CallInd detects TAG_HEAP,
+            // loads the function pointer from closure[0], shifts user
+            // args right by one slot, and inserts the closure as r1 (env).
+            emitOperandToReg(t.closure, 250);
+            for (size_t i = 0; i < t.args.size(); ++i) {
+                uint8_t tempReg = static_cast<uint8_t>(240 + i);
+                emitOperandToReg(t.args[i], tempReg);
+            }
+            for (size_t i = 0; i < t.args.size(); ++i) {
+                uint8_t tempReg = static_cast<uint8_t>(240 + i);
+                // User args start at r1 — VM shifts them to r2…rN+1
+                // and puts the closure env in r1.
+                uint8_t paramReg = static_cast<uint8_t>(i + 1);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Mov));
+                emitReg(paramReg);
+                emitReg(tempReg);
+            }
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::CallInd));
+            emitReg(250);
+            emitImm(static_cast<int64_t>(t.args.size()));
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Jmp));
+            emitAddr(blockLabel(prefix, t.return_));
+            emitAddr(blockLabel(prefix, t.return_));
         } else if constexpr (std::is_same_v<T, TmCheckNull>) {
             // Cmp value, 0; Jz nullTarget; fallthrough = okTarget
             uint8_t valReg = 253;
@@ -336,6 +489,56 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
             uint8_t rReg = 253;
             emitOperandToReg(v.l, lReg);
             emitOperandToReg(v.r, rReg);
+            CoreTyPtr placeTy = (m_currentBody && place < m_currentBody->locals.size())
+                ? m_currentBody->locals[place].ty
+                : nullptr;
+            bool isFloatOp = placeTy &&
+                (placeTy->kind() == TyKind::Float || placeTy->kind() == TyKind::Double);
+            if (isFloatOp && (v.op == MirBinOp::Add || v.op == MirBinOp::Sub ||
+                              v.op == MirBinOp::Mul || v.op == MirBinOp::Div)) {
+                auto operandNeedsItoF = [&](const Operand& op) -> bool {
+                    return std::visit([&](const auto& o) -> bool {
+                        using O = std::decay_t<decltype(o)>;
+                        if constexpr (std::is_same_v<O, OpCopy> || std::is_same_v<O, OpMove>) {
+                            if (!m_currentBody || o.local >= m_currentBody->locals.size()) return false;
+                            CoreTyPtr ty = m_currentBody->locals[o.local].ty;
+                            return ty && (ty->kind() == TyKind::Int || ty->kind() == TyKind::Long);
+                        } else if constexpr (std::is_same_v<O, OpConst>) {
+                            return std::holds_alternative<int64_t>(o.val) ||
+                                   std::holds_alternative<uint64_t>(o.val) ||
+                                   std::holds_alternative<bool>(o.val) ||
+                                   std::holds_alternative<char>(o.val);
+                        } else {
+                            return false;
+                        }
+                    }, op);
+                };
+                if (operandNeedsItoF(v.l)) {
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::ItoF));
+                    emitReg(lReg);
+                    emitReg(lReg);
+                }
+                if (operandNeedsItoF(v.r)) {
+                    m_chunk.emitByte(static_cast<uint8_t>(OpCode::ItoF));
+                    emitReg(rReg);
+                    emitReg(rReg);
+                }
+                OpCode fop = OpCode::FAdd;
+                if (v.op == MirBinOp::Sub) fop = OpCode::FSub;
+                else if (v.op == MirBinOp::Mul) fop = OpCode::FMul;
+                else if (v.op == MirBinOp::Div) fop = OpCode::FDiv;
+                m_chunk.emitByte(static_cast<uint8_t>(fop));
+                if (fop == OpCode::FAdd) {
+                    emitReg(placeReg);
+                    emitReg(lReg);
+                    emitReg(rReg);
+                } else {
+                    emitReg(lReg);
+                    emitReg(rReg);
+                    emitReg(placeReg);
+                }
+                return;
+            }
             OpCode opc = OpCode::Nop;
             bool addLike = false;
             switch (v.op) {
@@ -548,6 +751,51 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
             emitImm(static_cast<int64_t>(v.typeId));
             emitImm(static_cast<int64_t>(v.size));
             emitReg(placeReg);
+        } else if constexpr (std::is_same_v<T, RvClosure>) {
+            uint32_t envSize = static_cast<uint32_t>((1 + v.captures.size()) * 9u);
+            uint8_t sizeReg = 249;
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+            emitReg(sizeReg);
+            emitImm(static_cast<int64_t>(envSize));
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Alloc));
+            emitImm(static_cast<int64_t>(v.envTypeId));
+            emitReg(sizeReg);
+            emitReg(placeReg);
+
+            uint8_t fnReg = 250;
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+            emitReg(fnReg);
+            emitAddr(v.functionName);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+            emitReg(251);
+            emitImm(0);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::HStore));
+            emitReg(placeReg);
+            emitReg(251);
+            emitReg(fnReg);
+
+            for (size_t i = 0; i < v.captures.size(); ++i) {
+                uint8_t offReg = 251;
+                uint8_t valReg = 252;
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                emitReg(offReg);
+                emitImm(static_cast<int64_t>((i + 1) * 9));
+                emitOperandToReg(v.captures[i], valReg);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::HStore));
+                emitReg(placeReg);
+                emitReg(offReg);
+                emitReg(valReg);
+            }
+        } else if constexpr (std::is_same_v<T, RvClosureGet>) {
+            uint8_t offReg = 250;
+            uint8_t baseReg = localToReg(v.env);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+            emitReg(offReg);
+            emitImm(static_cast<int64_t>(v.offset + 9));
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::HLoad));
+            emitReg(baseReg);
+            emitReg(offReg);
+            emitReg(placeReg);
         } else if constexpr (std::is_same_v<T, RvField>) {
             uint8_t offReg = 250;
             uint8_t baseReg = localToReg(v.local);
@@ -635,6 +883,10 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
             emitReg(placeReg);
             emitImm(0);
             m_labelOffsets["_isc" + std::to_string(id)] = static_cast<uint32_t>(m_chunk.offset());
+        } else if constexpr (std::is_same_v<T, RvGlobalLoad>) {
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::GLoad));
+            emitImm(static_cast<int64_t>(v.slot));
+            emitReg(placeReg);
         } else if constexpr (std::is_same_v<T, RvTypeId>) {
             // TypeOf obj, result
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::TypeOf));
@@ -693,6 +945,10 @@ void MIRCompiler::emitOperandToReg(const Operand& op, uint8_t reg) {
                     m_chunk.emitU32(strIdx);
                 }
             }, o.val);
+        } else if constexpr (std::is_same_v<T, OpLabel>) {
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+            emitReg(reg);
+            emitAddr(o.label);
         } else if constexpr (std::is_same_v<T, OpCopy> || std::is_same_v<T, OpMove>) {
             uint8_t src = localToReg(o.local);
             if (src != reg) {

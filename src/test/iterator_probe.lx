@@ -1,0 +1,26 @@
+import loxis.collections.list
+import loxis.collections.iterator
+
+fun main() -> int {
+    val s: int? = 42
+    print(s ?: 0)
+
+    val items = listNew<int>(4)
+    items.push(10)
+    items.push(20)
+    items.push(30)
+
+    val iter = listIter<int>(items)
+    val a = iter.next()
+    val b = iter.next()
+    val c = iter.next()
+    val d = iter.next()
+
+    print(a != null)
+    print(a ?: 0)
+    print(b ?: 0)
+    print(c ?: 0)
+    print(d != null)
+
+    return 0
+}

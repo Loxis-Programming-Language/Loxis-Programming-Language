@@ -1,0 +1,6 @@
+from module_export_lib import { hidden }
+
+fun main() -> int {
+    print(hidden())
+    return 0
+}

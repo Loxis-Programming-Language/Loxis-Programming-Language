@@ -1,0 +1,32 @@
+package loxis.math
+
+fun clamp(value: int, low: int, high: int) -> int {
+    if value < low {
+        return low
+    }
+    if value > high {
+        return high
+    }
+    return value
+}
+
+fun gcd(a: int, b: int) -> int {
+    var x = abs(a)
+    var y = abs(b)
+    while y != 0 {
+        val r = x % y
+        x = y
+        y = r
+    }
+    return x
+}
+
+fun powInt(base: int, exp: int) -> int {
+    var result = 1
+    var i = 0
+    while i < exp {
+        result *= base
+        i += 1
+    }
+    return result
+}

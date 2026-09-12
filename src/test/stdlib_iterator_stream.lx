@@ -1,0 +1,12 @@
+import loxis.collections.iterator
+
+fun main() -> int {
+    print(1)
+    val iter = emptyIter<int>()
+    print(2)
+    val item = iter.next()
+    print(3)
+    print(item == null)
+    print(4)
+    return 0
+}

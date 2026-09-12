@@ -1,0 +1,21 @@
+interface Greeter {
+    fun greet(name: str) -> str {
+        return "default " + name
+    }
+}
+
+class Person : Greeter {
+    override fun greet(name: str) -> str {
+        return "custom " + name
+    }
+}
+
+fun useGreeter(g: Greeter, name: str) -> str {
+    return g.greet(name)
+}
+
+fun main() -> int {
+    val p = Person()
+    print(useGreeter(p, "World"))
+    return 0
+}

@@ -1,0 +1,4 @@
+fun main() -> int {
+    print(chr(65))
+    return 0
+}

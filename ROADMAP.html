@@ -1,430 +1,357 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Loxis v2 鈥?Implementation Roadmap</title>
+<title>Loxis Roadmap</title>
 <style>
   :root {
     --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
+    --fg: #c9d1d9;
     --muted: #8b949e;
-    --done: #3fb950;
-    --done-bg: #1a2e1f;
-    --wip: #d2991d;
-    --wip-bg: #2e2616;
-    --todo: #6e7681;
-    --todo-bg: #1c1d20;
-    --accent: #58a6ff;
-    --accent-bg: #1a2a40;
+    --border: #30363d;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --purple: #a371f7;
+    --card-bg: #161b22;
+    --hover: #1c2129;
   }
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
   body {
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     background: var(--bg);
-    color: var(--text);
+    color: var(--fg);
     line-height: 1.6;
     padding: 2rem;
     max-width: 960px;
     margin: 0 auto;
   }
-  header {
-    text-align: center;
-    margin-bottom: 3rem;
-  }
-  header h1 {
+  h1 {
     font-size: 2.2rem;
     font-weight: 700;
-    letter-spacing: -0.03em;
+    margin-bottom: 0.3rem;
+    letter-spacing: -0.02em;
   }
-  header h1 span { color: var(--accent); }
-  header p {
+  .subtitle {
     color: var(--muted);
-    margin-top: 0.4rem;
-    font-size: 1rem;
+    font-size: 0.95rem;
+    margin-bottom: 2rem;
+    font-style: italic;
   }
-  .summary-bar {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    margin-bottom: 2.5rem;
-    flex-wrap: wrap;
+  h2 {
+    font-size: 1.35rem;
+    margin: 2.5rem 0 1rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
   }
-  .summary-chip {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.45rem 1rem;
-    border-radius: 999px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    background: var(--surface);
-    border: 1px solid var(--border);
-  }
-  .summary-chip .dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-  }
-  .summary-chip .dot.done { background: var(--done); }
-  .summary-chip .dot.wip { background: var(--wip); }
-  .summary-chip .dot.todo { background: var(--todo); }
-
-  .phase {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    margin-bottom: 1.25rem;
-    overflow: hidden;
-    transition: border-color 0.2s;
-  }
-  .phase:hover { border-color: #475160; }
-  .phase-header {
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    padding: 1rem 1.3rem;
-    cursor: pointer;
-  }
-  .phase-num {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--muted);
-    width: 2.2rem;
-  }
-  .phase-status {
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 0.2rem 0.65rem;
-    border-radius: 999px;
-    white-space: nowrap;
-  }
-  .phase-status.done { background: var(--done-bg); color: var(--done); }
-  .phase-status.wip   { background: var(--wip-bg);  color: var(--wip); }
-  .phase-status.todo  { background: var(--todo-bg); color: var(--todo); }
-  .phase-title {
-    flex: 1;
-    font-weight: 600;
+  h3 {
     font-size: 1.05rem;
+    margin: 1.2rem 0 0.5rem;
+    color: var(--blue);
   }
-  .phase-body {
-    padding: 0 1.3rem 1.2rem 4.35rem;
-    display: none;
-  }
-  .phase.open .phase-body { display: block; }
+  .section-done h2 { color: var(--green); }
+  .section-done h3 { color: var(--fg); }
+  .section-progress h2 { color: var(--yellow); }
+  .section-planned h2 { color: var(--purple); }
 
-  .checklist { list-style: none; }
-  .checklist li {
-    padding: 0.35rem 0;
+  ul { list-style: none; padding-left: 0; }
+  li {
     display: flex;
     align-items: flex-start;
-    gap: 0.55rem;
-    font-size: 0.93rem;
-    color: var(--text);
-  }
-  .checklist li .mark { font-weight: 700; flex-shrink: 0; }
-  .checklist li .mark.yes { color: var(--done); }
-  .checklist li .mark.no  { color: var(--wip); }
-  .checklist li .mark.neutral { color: var(--muted); }
-  .checklist li .detail { color: var(--muted); font-size: 0.82rem; }
-
-  .need-tag {
-    display: inline-block;
-    font-size: 0.72rem;
-    padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    margin-left: 0.35rem;
-    background: var(--wip-bg);
-    color: var(--wip);
-    font-weight: 600;
-  }
-  .milestone {
-    margin-top: 0.9rem;
-    padding: 0.6rem 0.85rem;
+    gap: 0.5rem;
+    padding: 0.35rem 0.6rem;
     border-radius: 6px;
-    background: var(--accent-bg);
-    border-left: 3px solid var(--accent);
+    transition: background 0.15s;
+    font-size: 0.92rem;
+  }
+  li:hover { background: var(--hover); }
+  li .check { color: var(--green); font-weight:700; flex-shrink:0; width:1.2rem; }
+  li .uncheck { color: var(--muted); font-weight:400; flex-shrink:0; width:1.2rem; }
+  li strong { color: var(--fg); }
+  li code {
+    background: var(--border);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
     font-size: 0.85rem;
-    color: var(--accent);
+    color: var(--blue);
   }
-  .milestone strong { color: var(--text); }
-
-  footer {
-    text-align: center;
-    margin-top: 3rem;
+  li .src {
     color: var(--muted);
-    font-size: 0.82rem;
-    border-top: 1px solid var(--border);
-    padding-top: 1.5rem;
+    font-size: 0.78rem;
+    margin-left: 0.3rem;
   }
-  footer a { color: var(--accent); }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem 1.4rem;
+    margin: 0.8rem 0 1.4rem;
+  }
+  .card h3 { margin-top:0; }
+
+  .tag {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .tag-done { background: #1a3a1a; color: var(--green); }
+  .tag-progress { background: #3a2e0a; color: var(--yellow); }
+  .tag-planned { background: #2a1a3a; color: var(--purple); }
+
+  .stats {
+    display: flex;
+    gap: 1.5rem;
+    margin: 1.5rem 0 2rem;
+    flex-wrap: wrap;
+  }
+  .stat {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.8rem 1.2rem;
+    text-align: center;
+    min-width: 90px;
+  }
+  .stat .num { font-size: 1.7rem; font-weight: 700; }
+  .stat .label { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
+  .stat.done .num { color: var(--green); }
+  .stat.progress .num { color: var(--yellow); }
+  .stat.planned .num { color: var(--purple); }
+
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0.8rem 0;
+  }
+  .pipeline span {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    padding: 0.2rem 0.6rem;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  .pipeline span.arrow { border:none; background:none; color:var(--muted); padding:0.2rem 0.1rem; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+  .footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 3rem;
+  }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Loxis <span>v2</span> Implementation Roadmap</h1>
-  <p>Kotlin-inspired syntax &middot; systems-level performance &middot; custom VM backend</p>
-</header>
+<section class="section-done">
+<h1>Loxis Roadmap</h1>
+<p class="subtitle">Last updated &mdash; 2026-06-30</p>
 
-<div class="summary-bar">
-  <div class="summary-chip"><span class="dot done"></span> 4 done</div>
-  <div class="summary-chip"><span class="dot wip"></span> 5 in progress</div>
-  <div class="summary-chip"><span class="dot todo"></span> 1 remaining</div>
+<div class="stats">
+  <div class="stat done"><div class="num">60</div><div class="label">Done</div></div>
+  <div class="stat progress"><div class="num">8</div><div class="label">In Progress</div></div>
+  <div class="stat planned"><div class="num">24</div><div class="label">Planned</div></div>
 </div>
 
-<!-- Phase 1 -->
-<div class="phase open">
-  <div class="phase-header">
-    <span class="phase-num">1</span>
-    <span class="phase-status done">done</span>
-    <span class="phase-title">AST / Token / Type Definitions</span>
-  </div>
-  <div class="phase-body">
-    <ul class="checklist">
-      <li><span class="mark yes">&#10003;</span> AST nodes: expressions, statements, items (class, fun, enum, object, when, etc.)</li>
-      <li><span class="mark yes">&#10003;</span> Token kinds: full keyword set including <code>open</code>, <code>abstract</code>, <code>override</code>, <code>data</code>, <code>enum</code></li>
-      <li><span class="mark yes">&#10003;</span> Type representation: primitives, composites (tuple, array, slice, ref, fn, nullable, Never)</li>
-      <li><span class="mark yes">&#10003;</span> Class modifiers: <code>open</code>, <code>abstract</code>, <code>data</code>, <code>enum class</code>, <code>object</code></li>
-      <li><span class="mark yes">&#10003;</span> Interface &amp; inheritance types, constructor models, <code>init</code> blocks</li>
-      <li><span class="mark yes">&#10003;</span> MIR instruction set: 3-address code with labels, branches, calls, field access</li>
-    </ul>
-  </div>
+<h2>&#x2705; Done &mdash; Compiler Pipeline (v2)</h2>
+
+<div class="pipeline">
+  <span>.lx source</span><span class="arrow">&rarr;</span>
+  <span>Lexer</span><span class="arrow">&rarr;</span>
+  <span>Parser</span><span class="arrow">&rarr;</span>
+  <span>Scope</span><span class="arrow">&rarr;</span>
+  <span>TypeChecker</span><span class="arrow">&rarr;</span>
+  <span>HIR Builder</span><span class="arrow">&rarr;</span>
+  <span>Monomorphizer</span><span class="arrow">&rarr;</span>
+  <span>Lowering &rarr; MIR</span><span class="arrow">&rarr;</span>
+  <span>MIRCompiler &rarr; Bytecode</span><span class="arrow">&rarr;</span>
+  <span>VM</span>
 </div>
 
-<!-- Phase 2 -->
-<div class="phase open">
-  <div class="phase-header">
-    <span class="phase-num">2</span>
-    <span class="phase-status done">done</span>
-    <span class="phase-title">Lexer + Parser</span>
-  </div>
-  <div class="phase-body">
-    <ul class="checklist">
-      <li><span class="mark yes">&#10003;</span> Lexer: identifiers, keywords, numeric literals (hex/bin/oct/underscore), strings, chars, comments</li>
-      <li><span class="mark yes">&#10003;</span> Parser: classes (simple, body, constructor params, init blocks)</li>
-      <li><span class="mark yes">&#10003;</span> Parser: interfaces with default methods, abstract classes, data classes, objects, companion objects</li>
-      <li><span class="mark yes">&#10003;</span> Parser: enum classes with ADT variants (<code>Ok(val value: T)</code>)</li>
-      <li><span class="mark yes">&#10003;</span> Parser: functions, extension functions, closures, <code>when</code> expressions with patterns</li>
-      <li><span class="mark yes">&#10003;</span> Parser: <code>import</code> statements with alias support, package declarations</li>
-      <li><span class="mark yes">&#10003;</span> Parser: operators, string templates, safe calls (<code>?.</code>), elvis (<code>?:</code>), force unwrap (<code>!!</code>)</li>
-      <li><span class="mark yes">&#10003;</span> Parser: <code>as</code> casts, <code>is</code>/<code>!is</code> type checks, <code>try</code> expressions</li>
-    </ul>
-  </div>
-</div>
+<ul>
+  <li><span class="check">&#x2713;</span> <strong>Lexer</strong> &mdash; ~80 token kinds, string/char/number literals, comments, Kotlin-style significant newlines <span class="src">src/cpp/v2/frontend/Lexer.cpp</span></li>
+  <li><span class="check">&#x2713;</span> <strong>Parser</strong> &mdash; recursive-descent, full expression precedence, patterns, types, generics, imports <span class="src">src/cpp/v2/frontend/Parser.cpp</span></li>
+  <li><span class="check">&#x2713;</span> <strong>AST</strong> &mdash; 30+ expression variants, 8 pattern variants, 9 type variants, 8 item variants <span class="src">src/cpp/v2/AST.hpp</span></li>
+  <li><span class="check">&#x2713;</span> <strong>Scope builder</strong> &mdash; two-pass: declaration then resolution; class/interface/object/enum scopes; vtable + itable construction <span class="src">src/cpp/v2/type/Scope.cpp</span></li>
+  <li><span class="check">&#x2713;</span> <strong>Type checker</strong> &mdash; full expression/statement typing, subtype relation, method/field lookup, inference variables, numeric promotion, smart-cast <span class="src">src/cpp/v2/type/TypeChecker.cpp</span></li>
+  <li><span class="check">&#x2713;</span> <strong>HIR builder</strong> &mdash; AST &rarr; typed HIR with resolved generics, closure lowering, enum-ctor lowering, for-desugaring <span class="src">src/cpp/v2/hir/HirBuilder.cpp</span></li>
+  <li><span class="check">&#x2713;</span> <strong>Monomorphizer</strong> &mdash; generic instantiation scan + substitution pass; name mangling <span class="src">src/cpp/v2/hir/Monomorphizer.cpp</span></li>
+  <li><span class="check">&#x2713;</span> <strong>MIR lowering</strong> &mdash; HIR &rarr; CFG (MirBody, BasicBlock, Operand, Rvalue, Terminator); loop context, field/store dispatch <span class="src">src/cpp/v2/backend/Lowering.cpp</span></li>
+  <li><span class="check">&#x2713;</span> <strong>MIR compiler</strong> &mdash; MIR &rarr; bytecode; patch table for label resolution, vtable/itable metadata <span class="src">src/cpp/v2/backend/MIRCompiler.cpp</span></li>
+  <li><span class="check">&#x2713;</span> <strong>VM</strong> &mdash; register-based (256 int64 regs + type tags), JIT instruction decode, call stack, heap (9-byte cells, type-id header), syscall dispatch <span class="src">src/cpp/vm/VM.cpp, src/cpp/vm/Heap.hpp</span></li>
+  <li><span class="check">&#x2713;</span> <strong>Module loader</strong> &mdash; recursive import resolution, stdlib discovery, visibility filtering, selective import enforcement <span class="src">src/cpp/v2/driver/ModuleLoader.cpp</span></li>
+</ul>
 
-<!-- Phase 3 -->
-<div class="phase open">
-  <div class="phase-header">
-    <span class="phase-num">3</span>
-    <span class="phase-status done">done</span>
-    <span class="phase-title">Scope &amp; Name Resolution</span>
-  </div>
-  <div class="phase-body">
-    <ul class="checklist">
-      <li><span class="mark yes">&#10003;</span> Nested scopes: file-level, class body, method body, block scopes</li>
-      <li><span class="mark yes">&#10003;</span> Symbol registration: types, functions, fields, methods, enum variants</li>
-      <li><span class="mark yes">&#10003;</span> Class scope: <code>this</code>-binding, field offsets, vtable slot assignment</li>
-      <li><span class="mark yes">&#10003;</span> Inheritance: superclass resolution, method override checking, <code>super</code> access</li>
-      <li><span class="mark yes">&#10003;</span> Interface conformance: method completeness checking, vtable merge</li>
-      <li><span class="mark yes">&#10003;</span> Abstract method detection, default body recognition</li>
-      <li><span class="mark yes">&#10003;</span> Prelude type registration: <code>int</code>, <code>str</code>, <code>bool</code>, <code>unit</code>, <code>noreturn</code>, <code>Array</code>...</li>
-    </ul>
-  </div>
-</div>
+<h2>&#x2705; Done &mdash; Language Features <span class="tag tag-done">EXECUTABLE</span></h2>
 
+<div class="card"><h3>Functions &amp; Control Flow</h3><ul>
+  <li><span class="check">&#x2713;</span> Top-level functions &mdash; block bodies and expression-body shorthand</li>
+  <li><span class="check">&#x2713;</span> Local <code>val</code> / <code>var</code> bindings &mdash; with optional type annotations</li>
+  <li><span class="check">&#x2713;</span> Top-level immutable <code>val</code> declarations &mdash; lowered to synthetic getter functions</li>
+  <li><span class="check">&#x2713;</span> Function values and arity-based function overloading</li>
+  <li><span class="check">&#x2713;</span> Operator overloading baseline &mdash; binary <code>+</code>, unary operators, and equality</li>
+  <li><span class="check">&#x2713;</span> Integer arithmetic, comparisons, recursion</li>
+  <li><span class="check">&#x2713;</span> <code>if</code> / <code>else</code>, <code>while</code>, <code>loop</code>, <code>break</code> / <code>continue</code> with labels</li>
+  <li><span class="check">&#x2713;</span> <code>for .. in</code> over integer ranges and iterable classes</li>
+</ul></div>
 
-<!-- Tooling -->
-<div class="phase open">
-  <div class="phase-header">
-    <span class="phase-num">T</span>
-    <span class="phase-status done">done</span>
-    <span class="phase-title">LSP Language Server (TypeScript)</span>
-  </div>
-  <div class="phase-body">
-    <ul class="checklist">
-      <li><span class="mark yes">&#10003;</span> Lexer + parser ported from v2 C++ compiler (~3,900 lines of TypeScript)</li>
-      <li><span class="mark yes">&#10003;</span> Diagnostics: parse errors, bracket matching, return-type syntax lint</li>
-      <li><span class="mark yes">&#10003;</span> Completions: keywords, built-in types/functions, user-declared symbols</li>
-      <li><span class="mark yes">&#10003;</span> Hover: markdown docs for keywords, types, function signatures</li>
-      <li><span class="mark yes">&#10003;</span> Document symbols: hierarchical (classes contain methods, etc.)</li>
-      <li><span class="mark yes">&#10003;</span> Go-to-definition: same-file symbol navigation</li>
-      <li><span class="mark yes">&#10003;</span> VS Code extension: syntax highlighting + LSP client</li>
-      <li><span class="mark yes">&#10003;</span> Bundled with esbuild — single-file deploy, zero deps for server</li>
-    </ul>
-    <div class="milestone">
-      <strong>Repo:</strong> <code>D:\Development\Loxis-LSP</code> &middot; Install: <code>.\vscode-extension\install.ps1</code>
-    </div>
-  </div>
-</div>
-<!-- Phase 4 -->
-<div class="phase open">
-  <div class="phase-header">
-    <span class="phase-num">4</span>
-    <span class="phase-status wip">in progress</span>
-    <span class="phase-title">Type Checker</span>
-  </div>
-  <div class="phase-body">
-    <ul class="checklist">
-      <li><span class="mark yes">&#10003;</span> Expression typing: literals, paths, binary/unary ops, comparisons</li>
-      <li><span class="mark yes">&#10003;</span> Function calls with parameter arity &amp; type checking</li>
-      <li><span class="mark yes">&#10003;</span> Control flow: <code>if</code>, <code>when</code>, <code>while</code>, <code>for</code>, <code>loop</code>, <code>return</code></li>
-      <li><span class="mark yes">&#10003;</span> Nullable type system: safe calls, elvis, force unwrap, nullable comparison rules</li>
-      <li><span class="mark yes">&#10003;</span> Subtype checking: primitives, nullability (<code>T &lt;: T?</code>), <code>noreturn &lt;: T</code> (bottom)</li>
-      <li><span class="mark yes">&#10003;</span> Pattern matching type checking (destructuring, enum variants, wildcards)</li>
-      <li><span class="mark no">&#9679;</span> Class method dispatch &amp; virtual call resolution <span class="need-tag">needs more</span></li>
-      <li><span class="mark no">&#9679;</span> Smart casting / flow typing for <code>is</code> checks <span class="need-tag">needs more</span></li>
-      <li><span class="mark no">&#9679;</span> Interface method resolution in call expressions <span class="need-tag">needs more</span></li>
-      <li><span class="mark yes">&#10003;</span> Basic field access, array indexing, reference deref</li>
-    </ul>
-    <div class="milestone">
-      <strong>Next:</strong> Finish class method dispatch via vtable lookup, implement smart casting for <code>is</code> expressions, complete interface method resolution.
-    </div>
-  </div>
-</div>
+<div class="card"><h3>Types &amp; Generics</h3><ul>
+  <li><span class="check">&#x2713;</span> Primitive types &mdash; <code>int</code>, <code>long</code>, <code>float</code>, <code>double</code>, <code>bool</code>, <code>char</code>, <code>str</code>, <code>unit</code>, <code>noreturn</code></li>
+  <li><span class="check">&#x2713;</span> Generic functions &mdash; monomorphized at HIR level</li>
+  <li><span class="check">&#x2713;</span> Generic classes &mdash; <code>List&lt;T&gt;</code> with monomorphized methods</li>
+  <li><span class="check">&#x2713;</span> Type aliases &mdash; including aliases for function types</li>
+  <li><span class="check">&#x2713;</span> Type casting &mdash; <code>as</code>, <code>is</code>, <code>!is</code> with runtime type-id checks</li>
+</ul></div>
 
-<!-- Phase 5 -->
-<div class="phase open">
-  <div class="phase-header">
-    <span class="phase-num">5</span>
-    <span class="phase-status wip">in progress</span>
-    <span class="phase-title">Lowering (AST &rarr; MIR)</span>
-  </div>
-  <div class="phase-body">
-    <ul class="checklist">
-      <li><span class="mark yes">&#10003;</span> Expression lowering: arithmetic, comparisons, logical ops</li>
-      <li><span class="mark yes">&#10003;</span> Control flow lowering: <code>if</code>, <code>while</code>, <code>return</code></li>
-      <li><span class="mark yes">&#10003;</span> Function call lowering (direct calls)</li>
-      <li><span class="mark yes">&#10003;</span> String template lowering</li>
-      <li><span class="mark yes">&#10003;</span> Nullable ops lowering: safe call, elvis, force unwrap</li>
-      <li><span class="mark yes">&#10003;</span> Pattern matching (<code>when</code>) lowering</li>
-      <li><span class="mark yes">&#10003;</span> Variable assignment &amp; declaration</li>
-      <li><span class="mark no">&#9679;</span> Class constructor lowering <span class="need-tag">stubbed</span></li>
-      <li><span class="mark no">&#9679;</span> Object / singleton init lowering <span class="need-tag">stubbed</span></li>
-      <li><span class="mark no">&#9679;</span> Virtual dispatch via vtable <span class="need-tag">stubbed</span></li>
-      <li><span class="mark no">&#9679;</span> Interface dispatch <span class="need-tag">stubbed</span></li>
-      <li><span class="mark no">&#9679;</span> Field index resolution (currently hardcoded to 0) <span class="need-tag">stubbed</span></li>
-      <li><span class="mark no">&#9679;</span> <code>Result</code> desugaring to <code>match Ok/Err</code> <span class="need-tag">stubbed</span></li>
-    </ul>
-    <div class="milestone">
-      <strong>Next:</strong> Implement class constructor lowering (field init, init blocks), vtable dispatch, interface dispatch, proper field index resolution.
-    </div>
-  </div>
-</div>
+<div class="card"><h3>Classes</h3><ul>
+  <li><span class="check">&#x2713;</span> Class construction with heap allocation and field initialization</li>
+  <li><span class="check">&#x2713;</span> Field access and mutation (heap store/load)</li>
+  <li><span class="check">&#x2713;</span> Methods with <code>this</code> / <code>self</code> binding</li>
+  <li><span class="check">&#x2713;</span> Constructor parameters as properties (<code>val</code> / <code>var</code> in primary ctor)</li>
+  <li><span class="check">&#x2713;</span> Virtual dispatch (<code>VCall</code>) and interface dispatch (<code>ICall</code>) via vtable/itable</li>
+  <li><span class="check">&#x2713;</span> Interface default methods and overrides through interface dispatch</li>
+</ul></div>
 
-<!-- Phase 6 -->
-<div class="phase open">
-  <div class="phase-header">
-    <span class="phase-num">6</span>
-    <span class="phase-status wip">in progress</span>
-    <span class="phase-title">Backend (MIR &rarr; Bytecode)</span>
-  </div>
-  <div class="phase-body">
-    <ul class="checklist">
-      <li><span class="mark yes">&#10003;</span> Instruction selection for arithmetic, comparison, logical ops</li>
-      <li><span class="mark yes">&#10003;</span> Branch &amp; jump codegen</li>
-      <li><span class="mark yes">&#10003;</span> Function call codegen (direct calls, label-based)</li>
-      <li><span class="mark yes">&#10003;</span> Comparison&rarr;boolean fix applied</li>
-      <li><span class="mark yes">&#10003;</span> <code>Print</code> support via VM opcodes</li>
-      <li><span class="mark yes">&#10003;</span> Numeric type conversion stubs (ItoF, FtoI)</li>
-      <li><span class="mark no">&#9679;</span> Virtual call (<code>VCall</code>) opcode emission <span class="need-tag">needs more</span></li>
-      <li><span class="mark no">&#9679;</span> Interface call (<code>ICall</code>) opcode emission <span class="need-tag">needs more</span></li>
-      <li><span class="mark no">&#9679;</span> Null check (<code>NullChk</code>) opcode emission <span class="need-tag">needs more</span></li>
-      <li><span class="mark no">&#9679;</span> Vtable initialization in generated bytecode <span class="need-tag">needs more</span></li>
-      <li><span class="mark neutral">&ndash;</span> <code>Not</code> / <code>Deref</code> unary ops <span class="need-tag">stubbed</span></li>
-    </ul>
-    <div class="milestone">
-      <strong>Next:</strong> Complete VCall/ICall/NullChk opcode emission, wire up vtable init in chunk, finish Not/Deref.
-    </div>
-  </div>
-</div>
+<div class="card"><h3>Closures</h3><ul>
+  <li><span class="check">&#x2713;</span> Non-capturing lambdas &mdash; v2 <code>{ arg: Type -&gt; expression }</code> syntax, lowered as synthetic top-level functions</li>
+  <li><span class="check">&#x2713;</span> <strong>Capturing closures</strong> &mdash; heap-allocated environment objects; captured locals stored in env slots; closure call loads env pointer into r1 before indirect dispatch</li>
+</ul></div>
 
-<!-- Phase 7 -->
-<div class="phase open">
-  <div class="phase-header">
-    <span class="phase-num">7</span>
-    <span class="phase-status wip">in progress</span>
-    <span class="phase-title">VM Runtime</span>
-  </div>
-  <div class="phase-body">
-    <ul class="checklist">
-      <li><span class="mark yes">&#10003;</span> Stack-based bytecode VM with typed values</li>
-      <li><span class="mark yes">&#10003;</span> Arithmetic, comparison, branch, call, return instructions</li>
-      <li><span class="mark yes">&#10003;</span> Global variable storage &amp; access</li>
-      <li><span class="mark yes">&#10003;</span> Print instruction support</li>
-      <li><span class="mark yes">&#10003;</span> Max instruction cap for safe execution</li>
-      <li><span class="mark no">&#9679;</span> <code>TAG_NULL</code> runtime value representation <span class="need-tag">needs more</span></li>
-      <li><span class="mark no">&#9679;</span> Indirect call via function table <span class="need-tag">stubbed</span></li>
-      <li><span class="mark no">&#9679;</span> Vtable storage &amp; lookup at runtime <span class="need-tag">needs more</span></li>
-      <li><span class="mark neutral">&ndash;</span> Garbage collection / memory management <span class="need-tag">future</span></li>
-    </ul>
-    <div class="milestone">
-      <strong>Next:</strong> Implement TAG_NULL for proper null representation, wire up indirect call through function table, add vtable runtime storage.
-    </div>
-  </div>
-</div>
+<div class="card"><h3>Enums &amp; Pattern Matching</h3><ul>
+  <li><span class="check">&#x2713;</span> Enum class declaration &mdash; variants with optional tuple payloads</li>
+  <li><span class="check">&#x2713;</span> Enum construction &mdash; <code>Enum::Variant(args)</code> produces tagged heap object (discriminant at slot 0, payload fields from slot 9)</li>
+  <li><span class="check">&#x2713;</span> <code>when (scrut)</code> &mdash; discriminant-based branching with payload binding for tuple-payload variants</li>
+</ul></div>
 
-<!-- Phase 8 -->
-<div class="phase open">
-  <div class="phase-header">
-    <span class="phase-num">8</span>
-    <span class="phase-status wip">in progress</span>
-    <span class="phase-title">Module System</span>
-  </div>
-  <div class="phase-body">
-    <ul class="checklist">
-      <li><span class="mark yes">&#10003;</span> Multi-file compilation via <code>loadModuleGraph()</code></li>
-      <li><span class="mark yes">&#10003;</span> Module path resolution (<code>.lx</code> / <code>.lxs</code> file lookup)</li>
-      <li><span class="mark yes">&#10003;</span> Cyclic import detection with error reporting</li>
-      <li><span class="mark yes">&#10003;</span> Import graph traversal &amp; module merging</li>
-      <li><span class="mark yes">&#10003;</span> Test files demonstrating cross-module imports</li>
-      <li><span class="mark no">&#9679;</span> Prelude auto-import into every file <span class="need-tag">needs more</span></li>
-      <li><span class="mark no">&#9679;</span> Package-based path resolution (<code>com.example.foo</code> &rarr; directory traversal) <span class="need-tag">needs more</span></li>
-      <li><span class="mark no">&#9679;</span> Standard library path resolution (<code>loxis.*</code> &rarr; <code>stdlib/</code>) <span class="need-tag">needs more</span></li>
-    </ul>
-    <div class="milestone">
-      <strong>Next:</strong> Wire up prelude auto-import, implement package&rarr;directory path resolution, route <code>loxis.*</code> imports to stdlib directory.
-    </div>
-  </div>
-</div>
+<div class="card"><h3>Nullable Types</h3><ul>
+  <li><span class="check">&#x2713;</span> Nullable type syntax &mdash; <code>T?</code> parsed and type-checked</li>
+  <li><span class="check">&#x2713;</span> <code>null</code> literal &mdash; typed as <code>TyNull</code> throughout HIR</li>
+  <li><span class="check">&#x2713;</span> Elvis operator (<code>?:</code>) &mdash; null-check &rarr; fallback block lowering</li>
+  <li><span class="check">&#x2713;</span> Force unwrap (<code>!!</code>) &mdash; null-check &rarr; panic block lowering</li>
+  <li><span class="check">&#x2713;</span> Safe call / safe field (<code>?.</code>) &mdash; null-check &rarr; nullable-result block lowering</li>
+  <li><span class="check">&#x2713;</span> Resolved nullable HIR types &mdash; no more placeholder <code>mkInt()</code> for nullable nodes</li>
+  <li><span class="check">&#x2713;</span> Smart casts after null, <code>is</code>, and <code>!is</code> checks</li>
+</ul></div>
 
-<!-- Phase 9 -->
-<div class="phase">
-  <div class="phase-header">
-    <span class="phase-num">9</span>
-    <span class="phase-status todo">todo</span>
-    <span class="phase-title">Standard Library</span>
-  </div>
-  <div class="phase-body">
-    <ul class="checklist">
-      <li><span class="mark neutral">&ndash;</span> <code>loxis</code> (prelude) 鈥?core types, <code>Array&lt;T&gt;</code>, <code>List&lt;T&gt;</code>, <code>println</code>, <code>print</code>, <code>require</code></li>
-      <li><span class="mark neutral">&ndash;</span> <code>loxis.collections</code> 鈥?<code>MutableList&lt;T&gt;</code>, <code>Map&lt;K,V&gt;</code>, <code>Set&lt;T&gt;</code>, <code>MutableSet&lt;T&gt;</code></li>
-      <li><span class="mark neutral">&ndash;</span> <code>loxis.io</code> 鈥?<code>readln</code>, file I/O routines</li>
-      <li><span class="mark neutral">&ndash;</span> <code>loxis.math</code> 鈥?math functions, <code>Random</code></li>
-      <li><span class="mark neutral">&ndash;</span> <code>loxis.text</code> 鈥?<code>StringBuilder</code>, string utilities</li>
-    </ul>
-    <div class="milestone">
-      <strong>Waiting on:</strong> Phase 8 (Module System) 鈥?the standard library is written in Loxis (<code>.lx</code> files) and requires the module loader to be complete before it can be compiled and tested.
-    </div>
-  </div>
-</div>
+<div class="card"><h3>Modules &amp; Visibility</h3><ul>
+  <li><span class="check">&#x2713;</span> <code>import path::Module</code> &mdash; recursive dependency resolution</li>
+  <li><span class="check">&#x2713;</span> <code>from Module import { name, name as alias }</code> &mdash; selective symbol exposure</li>
+  <li><span class="check">&#x2713;</span> <code>private</code> visibility &mdash; items not exposed across module boundaries</li>
+  <li><span class="check">&#x2713;</span> <code>public</code> / <code>internal</code> visibility &mdash; exposed to importers</li>
+  <li><span class="check">&#x2713;</span> Stdlib discovery &mdash; <code>LOXIS_STDLIB</code> env var or ancestor-directory search</li>
+  <li><span class="check">&#x2713;</span> Re-export chains &mdash; selective and full imports propagate public symbols</li>
+  <li><span class="check">&#x2713;</span> Multi-file package resolution &mdash; dotted paths and directory index files</li>
+</ul></div>
 
-<footer>
-  <p>Loxis v2 &middot; last updated 2026-05-30 &middot; <a href="docs/spec.md">language spec</a></p>
-  <p style="margin-top:0.3rem;">Phases 1–3 + LSP complete &middot; Phases 4–8 active &middot; Phase 9 blocked on module system</p>
-</footer>
+<h2>&#x2705; Done &mdash; Standard Library <span class="tag tag-done">stdlib/loxis/</span></h2>
+<ul>
+  <li><span class="check">&#x2713;</span> <strong>prelude.lx</strong> &mdash; VM primitive wrappers (heap, string, syscall, float)</li>
+  <li><span class="check">&#x2713;</span> <strong>collections/list.lx</strong> &mdash; <code>List&lt;T&gt;</code> with <code>push</code>, <code>get</code>, <code>set</code>, <code>size</code>; HOFs: <code>listMap</code>, <code>listFilter</code>, <code>listForEach</code>, <code>listFold</code>, <code>listCount</code>, <code>listAny</code>, <code>listAll</code>; algorithms: <code>listAppend</code>, <code>listReverse</code>, <code>listReversed</code>, <code>listSortBy</code></li>
+  <li><span class="check">&#x2713;</span> <strong>text.lx</strong> &mdash; <code>len</code>, <code>concat</code>, <code>parseInt</code>, <code>toString</code>, <code>charCodeAt</code>, <code>slice</code>, <code>indexOf</code>, <code>contains</code></li>
+  <li><span class="check">&#x2713;</span> <strong>math.lx</strong> &mdash; integer math helpers</li>
+  <li><span class="check">&#x2713;</span> <strong>fileio.lx</strong> &mdash; <code>readText</code>, <code>writeText</code>, <code>appendText</code>, <code>removeFile</code> (VM syscalls)</li>
+  <li><span class="check">&#x2713;</span> <strong>functional.lx</strong> &mdash; <code>apply</code>, <code>twice</code> (works with capturing closures)</li>
+  <li><span class="check">&#x2713;</span> <strong>option.lx</strong> &mdash; generic <code>Option&lt;T&gt;</code> helpers</li>
+  <li><span class="check">&#x2713;</span> <strong>result.lx</strong> &mdash; generic <code>Result&lt;T, E&gt;</code> helpers</li>
+</ul>
 
-<script>
-  document.querySelectorAll(".phase-header").forEach(function(header) {
-    header.addEventListener("click", function() {
-      header.parentElement.classList.toggle("open");
-    });
-  });
-</script>
+<h2>&#x2705; Done &mdash; VM Builtins</h2>
+<ul>
+  <li><span class="check">&#x2713;</span> <strong>Console:</strong> <code>print</code>, <code>println</code>, <code>write</code>, <code>error</code></li>
+  <li><span class="check">&#x2713;</span> <strong>Heap:</strong> <code>alloc</code>/<code>halloc</code>, <code>hload</code>/<code>hread</code>, <code>hstore</code>/<code>hset</code>, <code>hfree</code></li>
+  <li><span class="check">&#x2713;</span> <strong>String:</strong> <code>strlen</code>, <code>s2i</code>, <code>i2s</code>, <code>strchar</code>, <code>strslice</code>, <code>strindexof</code></li>
+  <li><span class="check">&#x2713;</span> <strong>Float:</strong> <code>itof</code>, <code>ftoi</code>, <code>fadd</code>, <code>fsub</code>, <code>fmul</code>, <code>fdiv</code>, <code>fneg</code></li>
+  <li><span class="check">&#x2713;</span> <strong>Syscall:</strong> generic <code>syscall(num, args&hellip;)</code>, file-I/O syscalls (40&ndash;43)</li>
+  <li><span class="check">&#x2713;</span> <strong>Indirect call:</strong> <code>CallInd</code> with closure-object dispatch (env in r1)</li>
+  <li><span class="check">&#x2713;</span> <strong>Virtual/interface call:</strong> <code>VCall</code>, <code>ICall</code> with vtable/itable resolution</li>
+</ul>
+
+<h2>&#x2705; Done &mdash; Testing &amp; Tooling</h2>
+<ul>
+  <li><span class="check">&#x2713;</span> Smoke test harness &mdash; <code>tests/run_smoke.ps1</code> with 37 cases</li>
+  <li><span class="check">&#x2713;</span> CTest integration &mdash; <code>loxis_smoke</code> target</li>
+  <li><span class="check">&#x2713;</span> <strong>LSP</strong> (<code>D:\Development\Loxis-LSP</code>) &mdash; TypeScript port of v2 lexer/parser: diagnostics, completions, hover, document symbols, go-to-definition; VS Code extension with <code>.lx</code> syntax highlighting</li>
+</ul>
+
+</section>
+
+<hr>
+
+<section class="section-progress">
+<h2>&#x1f6a7; In Progress / Partial <span class="tag tag-progress">PARSE + TYPE OK &middot; EXECUTION PARTIAL</span></h2>
+
+<div class="card"><h3>Language Features</h3><ul>
+  <li><span class="uncheck">&#x25CB;</span> <strong>Objects (singletons)</strong> &mdash; parsed and scoped; no runtime construction</li>
+  <li><span class="uncheck">&#x25CB;</span> <strong>Enum classes &mdash; full coverage</strong> &mdash; struct-style variants, nested patterns, exhaustiveness checking not yet supported at runtime</li>
+  <li><span class="uncheck">&#x25CB;</span> <strong>Top-level mutable <code>var</code> and compile-time <code>const</code> semantics</strong> &mdash; immutable <code>val</code> getters execute; mutation and constant evaluation need full coverage</li>
+  <li><span class="uncheck">&#x25CB;</span> <strong>Data classes</strong> &mdash; modifier parsed; <code>equals</code>/<code>hashCode</code>/<code>toString</code>/<code>copy</code>/<code>componentN</code> not generated</li>
+  <li><span class="uncheck">&#x25CB;</span> <strong>Extension functions</strong> &mdash; parsed; not lowered</li>
+  <li><span class="uncheck">&#x25CB;</span> <strong>Companion objects</strong> &mdash; parsed; not scoped for execution</li>
+  <li><span class="uncheck">&#x25CB;</span> <strong>String templates</strong> &mdash; parsed and lowered (concat chain); edge cases not exhaustively tested</li>
+</ul></div>
+
+</section>
+
+<hr>
+
+<section class="section-planned">
+<h2>&#x1f4cb; Planned</h2>
+
+<div class="card"><h3>Compiler</h3><ul>
+  <li><span class="uncheck">&#x25CB;</span> Optimization passes (MIR level)</li>
+  <li><span class="uncheck">&#x25CB;</span> Debug info / source maps</li>
+  <li><span class="uncheck">&#x25CB;</span> WASM backend</li>
+  <li><span class="uncheck">&#x25CB;</span> Incremental compilation</li>
+  <li><span class="uncheck">&#x25CB;</span> Self-hosting (Loxis compiler in Loxis)</li>
+</ul></div>
+
+<div class="card"><h3>Language</h3><ul>
+  <li><span class="uncheck">&#x25CB;</span> Async/await</li>
+  <li><span class="uncheck">&#x25CB;</span> Coroutines</li>
+  <li><span class="uncheck">&#x25CB;</span> Macros / metaprogramming</li>
+  <li><span class="uncheck">&#x25CB;</span> Trait/typeclass system (replace <code>where</code> bounds with proper traits)</li>
+  <li><span class="uncheck">&#x25CB;</span> Full exhaustiveness checking for <code>when</code> expressions</li>
+  <li><span class="uncheck">&#x25CB;</span> Full enum pattern coverage (struct variants, nested patterns)</li>
+</ul></div>
+
+<div class="card"><h3>Standard Library</h3><ul>
+  <li><span class="uncheck">&#x25CB;</span> <code>HashMap&lt;K, V&gt;</code> / <code>HashSet&lt;T&gt;</code></li>
+  <li><span class="uncheck">&#x25CB;</span> <code>Iterator&lt;T&gt;</code> trait and collection adapters</li>
+  <li><span class="uncheck">&#x25CB;</span> JSON parsing/serialization</li>
+  <li><span class="uncheck">&#x25CB;</span> Networking / HTTP</li>
+</ul></div>
+
+<div class="card"><h3>Tooling</h3><ul>
+  <li><span class="uncheck">&#x25CB;</span> VS Code extension &mdash; publish to marketplace</li>
+  <li><span class="uncheck">&#x25CB;</span> Tree-sitter grammar</li>
+  <li><span class="uncheck">&#x25CB;</span> REPL</li>
+  <li><span class="uncheck">&#x25CB;</span> Package manager (<code>loxpm</code>)</li>
+  <li><span class="uncheck">&#x25CB;</span> Documentation generator</li>
+  <li><span class="uncheck">&#x25CB;</span> Test framework</li>
+  <li><span class="uncheck">&#x25CB;</span> Debugger (DAP)</li>
+  <li><span class="uncheck">&#x25CB;</span> Formatter (<code>loxfmt</code>)</li>
+</ul></div>
+
+<div class="card"><h3>LSP</h3><ul>
+  <li><span class="uncheck">&#x25CB;</span> Source positions on AST nodes for precise ranges</li>
+  <li><span class="uncheck">&#x25CB;</span> Cross-file go-to-definition</li>
+  <li><span class="uncheck">&#x25CB;</span> Find references</li>
+  <li><span class="uncheck">&#x25CB;</span> Rename</li>
+  <li><span class="uncheck">&#x25CB;</span> Signature help</li>
+  <li><span class="uncheck">&#x25CB;</span> Code actions</li>
+  <li><span class="uncheck">&#x25CB;</span> Formatting</li>
+</ul></div>
+</section>
+
+<div class="footer">Loxis Roadmap &middot; 2026-06-30 &middot; 60 done &middot; 8 in progress &middot; 24 planned</div>
 
 </body>
 </html>

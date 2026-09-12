@@ -23,7 +23,12 @@ inline TyPtr substituteType(TyPtr ty, const std::unordered_map<std::string, TyPt
         using T = std::decay_t<decltype(t)>;
         if constexpr (std::is_same_v<T, TyParam>) {
             auto it = subst.find(t.name);
-            if (it != subst.end()) return it->second;
+            if (it != subst.end()) {
+                if (!ty->nullable) return it->second;
+                auto copy = *it->second;
+                copy.nullable = true;
+                return std::make_shared<Ty>(std::move(copy));
+            }
             return ty;
         } else if constexpr (std::is_same_v<T, TyFn>) {
             std::vector<TyPtr> params;
@@ -82,6 +87,21 @@ inline std::unordered_map<std::string, TyPtr> classSubstMap(TyPtr classTy) {
     auto& cls = std::get<TyClass>(*classTy);
     if (cls.args.empty()) return {};
     return makeSubstMap(cls.def->params, cls.args);
+}
+
+inline std::unordered_map<std::string, TyPtr> typeArgSubstMap(TyPtr ty) {
+    if (!ty) return {};
+    if (ty->kind() == TyKind::Class_) {
+        auto& cls = std::get<TyClass>(*ty);
+        if (cls.args.empty()) return {};
+        return makeSubstMap(cls.def->params, cls.args);
+    }
+    if (ty->kind() == TyKind::Interface_) {
+        auto& iface = std::get<TyInterface>(*ty);
+        if (iface.args.empty()) return {};
+        return makeSubstMap(iface.def->params, iface.args);
+    }
+    return {};
 }
 
 } // namespace

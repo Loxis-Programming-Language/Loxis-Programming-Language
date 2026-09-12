@@ -1,0 +1,14 @@
+fun inc(x: int) -> int {
+    return x + 1
+}
+
+fun twice(f: fun(int) -> int, x: int) -> int {
+    return f(f(x))
+}
+
+fun main() -> int {
+    print(twice(inc, 40))
+    val g: fun(int) -> int = inc
+    print(g(9))
+    return 0
+}

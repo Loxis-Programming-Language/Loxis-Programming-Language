@@ -1,0 +1,33 @@
+package loxis.text
+
+fun len(value: str) -> int {
+    return strlen(value)
+}
+
+fun concat(a: str, b: str) -> str {
+    return a + b
+}
+
+fun parseInt(value: str) -> int {
+    return s2i(value)
+}
+
+fun toString(value: int) -> str {
+    return i2s(value)
+}
+
+fun charCodeAt(value: str, index: int) -> int {
+    return strchar(value, index)
+}
+
+fun slice(value: str, start: int, count: int) -> str {
+    return strslice(value, start, count)
+}
+
+fun indexOf(value: str, needle: str) -> int {
+    return strindexof(value, needle)
+}
+
+fun contains(value: str, needle: str) -> bool {
+    return indexOf(value, needle) >= 0
+}

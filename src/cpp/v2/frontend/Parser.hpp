@@ -18,6 +18,7 @@ private:
     std::vector<Token> toks;
     size_t pos = 0;
     bool m_quietErrors = false;     // suppress error output during speculative parse
+    bool m_parsingBlockHead = false;  // disambiguate control-flow heads from struct literals
 
     // token helpers
     Token& peek(size_t off = 0);
@@ -61,6 +62,7 @@ private:
     ItemPtr parseVal(Visibility vis);
     ItemPtr parseVar(Visibility vis);
     ItemPtr parseConst(Visibility vis);
+    ItemPtr parseTypeAlias(Visibility vis);
     ItemPtr parseImport();
     ItemPtr parseFromImport();
 
@@ -88,6 +90,8 @@ private:
     ExprPtr parsePostfix();
     bool tryAttachGenericArgs(ExprPtr& expr);
     ExprPtr parsePrimary();
+    ExprPtr parseBlockOrClosure();
+    ExprPtr parseBlockBody();
     ExprPtr parseBlock();
     ExprPtr parseIf();
     ExprPtr parseWhile(std::optional<std::string> label);
@@ -97,7 +101,6 @@ private:
     ExprPtr parseBreak();
     ExprPtr parseContinue();
     ExprPtr parseReturn();
-    ExprPtr parseClosure();
     ExprPtr parseStructExpr(Path path);
     ExprPtr parseLiteral();
     ExprPtr parseNull();

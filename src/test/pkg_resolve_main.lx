@@ -1,0 +1,8 @@
+import pkgdir.sub.leaf
+import pkgdir
+
+fun main() -> int {
+    print(deepVal())
+    print(idxVal())
+    return 0
+}

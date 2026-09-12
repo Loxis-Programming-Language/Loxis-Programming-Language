@@ -1,0 +1,59 @@
+// Phase-change probe: A trees (no cyclic garbage) -> B cycles -> C trees ->
+// D cycles. A policy that really reacts to runtime behaviour must walk its
+// threshold up during A, down during B, up during C, down during D.
+class Node(var left: Node?, var right: Node?, var next: Node?, var tag: int)
+
+fun leaf(tag: int) -> Node {
+    return Node(null, null, null, tag)
+}
+
+fun tree(depth: int, tag: int) -> Node {
+    if depth == 0 {
+        return leaf(tag)
+    }
+    return Node(tree(depth - 1, tag), tree(depth - 1, tag), null, tag)
+}
+
+fun main() -> int {
+    var sum = 0
+    var i = 0
+
+    // Phase A: trees only (depth 8 = 511 nodes each, so a scan really does
+    // have a large reachable set to chew through)
+    while i < 1000 {
+        val t = tree(8, i)
+        sum = sum + t.tag
+        i += 1
+    }
+
+    // Phase B: two-node cycles
+    i = 0
+    while i < 4000 {
+        val a = leaf(i)
+        val b = leaf(i)
+        a.next = b
+        b.next = a
+        i += 1
+    }
+
+    // Phase C: trees again
+    i = 0
+    while i < 1000 {
+        val t = tree(8, i)
+        sum = sum + t.tag
+        i += 1
+    }
+
+    // Phase D: cycles again
+    i = 0
+    while i < 4000 {
+        val a = leaf(i)
+        val b = leaf(i)
+        a.next = b
+        b.next = a
+        i += 1
+    }
+
+    print(sum)
+    return 0
+}

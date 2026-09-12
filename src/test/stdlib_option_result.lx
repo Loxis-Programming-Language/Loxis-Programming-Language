@@ -1,0 +1,43 @@
+import loxis.option
+import loxis.result
+
+fun inc(x: int) -> int {
+    return x + 1
+}
+
+fun keepEven(x: int) -> Optional<int> {
+    if x == 4 {
+        return optionalValue<int>(40)
+    }
+    return optionalEmpty<int>()
+}
+
+fun resultInc(x: int) -> Result<int, str> {
+    return resultSuccess<int, str>(x + 1)
+}
+
+fun main() -> int {
+    val optValue = optionalValue<int>(3)
+    val optEmpty = optionalEmpty<int>()
+    val mapped = optionalMap<int, int>(optValue, inc)
+    val flatMapped = optionalFlatMap<int, int>(mapped, keepEven)
+
+    print(optionalGetOrElse<int>(mapped, 0))
+    print(optionalGetOrElse<int>(optEmpty, 7))
+    print(optionalGetOrElse<int>(flatMapped, 0))
+    print(optionalHasValue<int>(optValue))
+    print(optionalIsEmpty<int>(optEmpty))
+
+    val successValue = resultSuccess<int, str>(10)
+    val failureValue = resultFailure<int, str>("bad")
+    val resultMapped = resultMap<int, str, int>(successValue, inc)
+    val resultFlatMapped = resultFlatMap<int, str, int>(resultMapped, resultInc)
+
+    print(resultGetOrElse<int, str>(resultMapped, 0))
+    print(resultGetOrElse<int, str>(failureValue, 5))
+    print(resultGetOrElse<int, str>(resultFlatMapped, 0))
+    print(resultIsSuccess<int, str>(successValue))
+    print(resultIsFailure<int, str>(failureValue))
+
+    return 0
+}

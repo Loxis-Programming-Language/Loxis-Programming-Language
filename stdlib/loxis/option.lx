@@ -1,0 +1,56 @@
+package loxis.option
+
+enum class Optional<T> {
+    Empty,
+    Value(T)
+}
+
+fun optionalValue<T>(value: T) -> Optional<T> {
+    return Optional::<T>::Value(value)
+}
+
+fun optionalEmpty<T>() -> Optional<T> {
+    return Optional::<T>::Empty()
+}
+
+fun optionalHasValue<T>(value: Optional<T>) -> bool {
+    return when (value) {
+        Optional::Value(_) -> true,
+        else -> false
+    }
+}
+
+fun optionalIsEmpty<T>(value: Optional<T>) -> bool {
+    return when (value) {
+        Optional::Empty() -> true,
+        else -> false
+    }
+}
+
+fun optionalMap<T, U>(value: Optional<T>, f: fun(T) -> U) -> Optional<U> {
+    return when (value) {
+        Optional::Value(inner) -> Optional::<U>::Value(f(inner)),
+        else -> Optional::<U>::Empty()
+    }
+}
+
+fun optionalFlatMap<T, U>(value: Optional<T>, f: fun(T) -> Optional<U>) -> Optional<U> {
+    return when (value) {
+        Optional::Value(inner) -> f(inner),
+        else -> Optional::<U>::Empty()
+    }
+}
+
+fun optionalGetOrElse<T>(value: Optional<T>, fallback: T) -> T {
+    return when (value) {
+        Optional::Value(inner) -> inner,
+        else -> fallback
+    }
+}
+
+fun optionalValueOrFail<T>(value: Optional<T>) -> T {
+    return when (value) {
+        Optional::Value(inner) -> inner,
+        else -> error("missing optional value")
+    }
+}

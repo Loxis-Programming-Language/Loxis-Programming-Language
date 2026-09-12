@@ -17,6 +17,7 @@ private:
     std::vector<PatchSite> m_patches;
     std::unordered_map<std::string, uint32_t> m_labelOffsets;
     std::vector<LoweredClass> m_classes;
+    const MirBody* m_currentBody = nullptr;
 
     void compileBody(const MirBody& body);
     void buildVTableMetadata();

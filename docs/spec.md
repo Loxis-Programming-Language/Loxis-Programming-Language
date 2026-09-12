@@ -1,4 +1,4 @@
-# Loxis Language Specification v2.1
+# Loxis Language Specification v2
 
 ## Overview
 Loxis is a statically-typed language with Kotlin-inspired syntax and systems-level performance.
@@ -293,14 +293,46 @@ The compiler resolves `loxis.*` imports against the stdlib directory.
 
 ## Implementation Roadmap
 
+The compiler now has an executable smoke baseline that runs end-to-end through
+parsing, typing, lowering, bytecode generation, and the VM. The roadmap below
+tracks what is already baseline-covered versus the larger v2 surface still in
+progress.
+
 | Phase | Component | Status | Notes |
 |-------|-----------|--------|-------|
-| 1 | AST / Token / Type | ✅ done | Class, Interface, Enum, Object, When, Nullable types |
-| 2 | Lexer + Parser | ✅ done | Full Kotlin-style syntax: class/interface/object/when/nullable |
-| 3 | Scope & Name Resolution | ✅ done | Class scope, this-binding, field offsets, vtable, inheritance, interface conformance |
-| 4 | TypeChecker | 🔶 stubbed | Basic types/expr work. Needs: class method dispatch, nullable/smart cast, interface resolution |
-| 5 | Lowering (AST→MIR) | 🔶 stubbed | Basic expr lower. Needs: constructor, virtual dispatch, interface dispatch, null checks |
-| 6 | Backend (MIR→Bytecode) | 🔶 partial | Cmp→boolean fix, Print support. Needs: VCall/ICall/NullChk opcodes, vtable init |
-| 7 | VM Runtime | 🔶 partial | Existing VM works. Needs: TAG_NULL, indirect call, vtable storage |
-| 8 | Module System | ⬜ todo | Multi-file compilation, prelude auto-import, ModuleLoader |
-| 9 | Standard Library | ⬜ todo | loxis.* .lx files: Any, collections, io, math, text |
+| 1 | AST / Token / Type surface | ✅ done | Core language surface is modeled, including classes, interfaces, enums, objects, `when`, and nullable types. |
+| 2 | Lexer + Parser | ✅ done | Kotlin-style syntax, imports, generics, class/interface/object/enum forms, and nullable syntax are parsed. |
+| 3 | Scope & Name Resolution | ✅ done | Declaration + resolution passes handle `this` binding, field offsets, vtables, inheritance, and interface conformance. |
+| 4 | TypeChecker | ✅ baseline | The executable subset type-checks end-to-end, including imports, generic smoke cases, and class `this` method access. Remaining work is broader nullable analysis, pattern exhaustiveness, and richer OO dispatch rules. |
+| 5 | Lowering (AST→MIR) | ✅ baseline | The current smoke subset lowers successfully through MIR. Remaining work includes fuller constructor/field behavior, closures/function values, and richer nullable/pattern lowering. |
+| 6 | Backend (MIR→Bytecode) | ✅ baseline | The current subset emits runnable bytecode for arithmetic, control flow, imports, generics, and stdlib-backed helpers. Remaining work includes indirect calls, fuller object dispatch, and missing runtime op coverage. |
+| 7 | VM Runtime | ✅ baseline | The VM runs the demo and smoke suite successfully. Remaining work includes full object runtime semantics, nullable edge cases, and remaining dispatch/storage support. |
+| 8 | Module System | 🔶 partial | Local multi-file imports work and are smoke-covered. Remaining work is package visibility, alias/re-export behavior, and more robust stdlib module resolution. |
+| 9 | Standard Library | 🔶 partial | `loxis` prelude, core wrappers, and `loxis.collections.List<T>` are present and smoke-covered. `io`, `mem`, `ptr`, `refl`, and broader collections/text/math coverage are still incomplete. |
+| 10 | Verification | 🔶 manual smoke | `tests/run_smoke.ps1` and the `loxis_smoke` CTest entry cover the executable subset, but there is still no full automated unit/integration test framework. |
+
+### Goal
+
+Expand the current executable subset into a broader, predictable v2 baseline: keep the existing smoke path stable while bringing object construction, function values, richer control-flow typing, and stdlib-backed multi-module programs online end-to-end.
+
+### Plan
+
+1. Complete class construction and field initialization.
+   - Restore `Point_new`-style constructor coverage end-to-end.
+   - Lower instance field initialization and method access consistently.
+   - Close remaining gaps between class parsing/type-checking support and runtime behavior.
+
+2. Add closure and function-value execution.
+   - Type-check closure literals and function-valued locals more broadly.
+   - Lower callable values and indirect calls through MIR and bytecode.
+   - Extend the VM/runtime path so non-direct calls execute correctly.
+
+3. Expand `when` and nullable semantics.
+   - Broaden `when` lowering and checking beyond the current smoke cases.
+   - Improve nullable flow analysis, unwrap/default behavior, and runtime null handling.
+   - Move more of the written spec into the executable baseline instead of parse-only support.
+
+4. Strengthen modules and the standard library.
+   - Harden package/import behavior beyond simple local imports.
+   - Grow stdlib coverage past the current prelude and `List<T>` smoke path.
+   - Add smoke scripts for each newly promoted module/runtime capability.

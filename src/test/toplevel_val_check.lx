@@ -1,0 +1,8 @@
+val greeting = 42
+val message: int = 7
+
+fun main() -> int {
+    print(greeting)
+    print(message)
+    return 0
+}

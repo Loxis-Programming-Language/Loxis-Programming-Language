@@ -1,0 +1,16 @@
+import loxis.collections.list
+
+fun main() -> int {
+    val xs = listNew<int>(1)
+    xs.push(4)
+    xs.push(5)
+    xs.push(6)
+
+    var sum = 0
+    for x in xs {
+        sum += x
+    }
+    print(sum)
+    listFree<int>(xs)
+    return 0
+}

@@ -147,7 +147,6 @@ std::vector<WhereBound> Parser::parseWhere() {
 TypePtr Parser::parseRet() {
     if (match(Tk::Arrow)) return parseType();
     if (match(Tk::Colon)) {
-        error("expected '->' before return type");
         return parseType();
     }
     return nullptr;
@@ -308,6 +307,7 @@ ItemPtr Parser::parseItem() {
     if (check(Tk::KwInterface)) return parseInterface(visibility);
     if (check(Tk::KwObject)) return parseObject(visibility);
     if (check(Tk::KwEnum)) return parseEnumClass(visibility);
+    if (check(Tk::KwType)) return parseTypeAlias(visibility);
 
     error("expected item");
     return nullptr;
@@ -316,7 +316,37 @@ ItemPtr Parser::parseItem() {
 // ---------- function ----------
 ItemFun Parser::parseFun(Visibility vis) {
     expect(Tk::KwFun);
-    std::string name = expectIdent();
+
+    // Check for extension function: fun Type.name(...) or just fun name(...)
+    TypePtr receiverType = nullptr;
+    std::string funcName;
+    std::string first = expectIdent();
+
+    if (match(Tk::Dot)) {
+        // Extension function — first identifier is the receiver type
+        Path recvPath;
+        recvPath.segs.push_back(first);
+        receiverType = std::make_shared<Type>(AstTyPath{recvPath});
+        funcName = expectIdent();
+    } else {
+        funcName = first;
+    }
+
+    if (funcName == "operator") {
+        if (match(Tk::Plus)) funcName = "operator+";
+        else if (match(Tk::Minus)) funcName = "operator-";
+        else if (match(Tk::Star)) funcName = "operator*";
+        else if (match(Tk::Slash)) funcName = "operator/";
+        else if (match(Tk::Percent)) funcName = "operator%";
+        else if (match(Tk::EqEq)) funcName = "operator==";
+        else if (match(Tk::Ne)) funcName = "operator!=";
+        else if (match(Tk::Le)) funcName = "operator<=";
+        else if (match(Tk::Lt)) funcName = "operator<";
+        else if (match(Tk::Ge)) funcName = "operator>=";
+        else if (match(Tk::Gt)) funcName = "operator>";
+        else if (match(Tk::Bang)) funcName = "operator!";
+        else error("expected operator token after 'operator'");
+    }
     auto generics = parseGenerics();
     auto params = parseFnParams();
     TypePtr ret = parseRet();
@@ -330,7 +360,8 @@ ItemFun Parser::parseFun(Visibility vis) {
         body = parseBlock();
     }
     // If none matched, it's an abstract method with no body
-    return ItemFun{name, vis, std::move(generics), std::move(params), ret, std::move(where_), body, false, false, false};
+    return ItemFun{funcName, vis, std::move(generics), std::move(params), ret, std::move(where_), body,
+                   false, false, false, "", receiverType, "this"};
 }
 
 // ---------- class ----------
@@ -412,6 +443,105 @@ ItemPtr Parser::parseClass(Visibility vis, ClassModifier mod) {
             }
         }
         expect(Tk::RBrace);
+    }
+
+    if (mod == ClassModifier::Data) {
+        auto makeType = [](const std::string& typeName) -> TypePtr {
+            return std::make_shared<Type>(AstTyPath{Path{{typeName}, {}}});
+        };
+        auto makePathExpr = [](const std::string& pathName) -> ExprPtr {
+            return std::make_shared<Expr>(ExprPath{Path{{pathName}, {}}});
+        };
+        auto makeCall = [&](const std::string& callee, std::vector<ExprPtr> args) -> ExprPtr {
+            return std::make_shared<Expr>(ExprCall{makePathExpr(callee), std::move(args)});
+        };
+        auto hasMethod = [&](const std::string& methodName) {
+            return std::any_of(methods.begin(), methods.end(), [&](const ItemFun& method) {
+                return method.name == methodName;
+            });
+        };
+        auto addMethod = [&](const std::string& methodName,
+                             std::vector<std::pair<std::string, TypePtr>> params,
+                             TypePtr ret, ExprPtr body) {
+            if (hasMethod(methodName)) return;
+            methods.push_back(ItemFun{methodName, Visibility::Public, {}, std::move(params),
+                std::move(ret), {}, std::move(body), false, false, false, "", nullptr, "this"});
+        };
+        auto fieldTypeName = [](const TypePtr& ty) -> std::string {
+            if (!ty) return {};
+            if (auto* pathTy = std::get_if<AstTyPath>(ty.get())) {
+                if (!pathTy->path.segs.empty()) return pathTy->path.segs.back();
+            }
+            return {};
+        };
+
+        std::vector<ParamDecl> properties;
+        for (const auto& param : primaryCtor) {
+            if (param.isVal || param.isVar) properties.push_back(param);
+        }
+        if (properties.empty()) error("data class requires at least one val/var constructor property");
+
+        for (size_t i = 0; i < properties.size(); ++i) {
+            addMethod("component" + std::to_string(i + 1), {}, properties[i].ty,
+                      makePathExpr(properties[i].name));
+        }
+
+        std::vector<std::pair<std::string, TypePtr>> copyParams;
+        std::vector<ExprPtr> copyArgs;
+        for (const auto& property : properties) {
+            copyParams.push_back({property.name, property.ty});
+            copyArgs.push_back(makePathExpr(property.name));
+        }
+        addMethod("copy", std::move(copyParams), makeType(name), makeCall(name, std::move(copyArgs)));
+
+        auto makeEqualsBody = [&]() -> ExprPtr {
+            ExprPtr result = std::make_shared<Expr>(ExprLit{true});
+            for (auto it = properties.rbegin(); it != properties.rend(); ++it) {
+                ExprPtr lhs = makePathExpr(it->name);
+                ExprPtr rhs = std::make_shared<Expr>(ExprField{makePathExpr("other"), it->name});
+                ExprPtr equal = std::make_shared<Expr>(ExprBinary{ExprBinary::Eq, lhs, rhs});
+                result = std::make_shared<Expr>(ExprIf{
+                    equal, result, std::make_shared<Expr>(ExprLit{false})
+                });
+            }
+            return result;
+        };
+        std::vector<std::pair<std::string, TypePtr>> equalsParams{{"other", makeType(name)}};
+        addMethod("equals", equalsParams, makeType("bool"), makeEqualsBody());
+        addMethod("operator==", std::move(equalsParams), makeType("bool"), makeEqualsBody());
+
+        ExprPtr hash = std::make_shared<Expr>(ExprLit{static_cast<int64_t>(1)});
+        for (const auto& property : properties) {
+            ExprPtr value = makePathExpr(property.name);
+            const std::string typeName = fieldTypeName(property.ty);
+            if (typeName == "str") value = makeCall("strlen", {value});
+            else if (typeName == "float" || typeName == "double") value = makeCall("ftoi", {value});
+            ExprPtr multiplied = std::make_shared<Expr>(ExprBinary{
+                ExprBinary::Mul, hash, std::make_shared<Expr>(ExprLit{static_cast<int64_t>(31)})
+            });
+            hash = std::make_shared<Expr>(ExprBinary{ExprBinary::Add, multiplied, value});
+        }
+        addMethod("hashCode", {}, makeType("int"), hash);
+
+        ExprPtr text = std::make_shared<Expr>(ExprLit{name + "("});
+        for (size_t i = 0; i < properties.size(); ++i) {
+            const auto& property = properties[i];
+            std::string prefix = (i == 0 ? "" : ", ") + property.name + "=";
+            text = std::make_shared<Expr>(ExprBinary{
+                ExprBinary::Add, text, std::make_shared<Expr>(ExprLit{prefix})
+            });
+            ExprPtr value = makePathExpr(property.name);
+            const std::string typeName = fieldTypeName(property.ty);
+            if (typeName != "str") {
+                if (typeName == "float" || typeName == "double") value = makeCall("ftoi", {value});
+                value = makeCall("i2s", {value});
+            }
+            text = std::make_shared<Expr>(ExprBinary{ExprBinary::Add, text, value});
+        }
+        text = std::make_shared<Expr>(ExprBinary{
+            ExprBinary::Add, text, std::make_shared<Expr>(ExprLit{std::string(")")})
+        });
+        addMethod("toString", {}, makeType("str"), text);
     }
 
     auto item = ItemClass{name, vis, mod, std::move(generics), std::move(primaryCtor),
@@ -636,6 +766,15 @@ ItemPtr Parser::parseConst(Visibility vis) {
     return std::make_shared<Item>(ItemConst{name, vis, ty, init});
 }
 
+// ---------- type alias ----------
+ItemPtr Parser::parseTypeAlias(Visibility vis) {
+    expect(Tk::KwType);
+    std::string name = expectIdent();
+    expect(Tk::Eq);
+    TypePtr underlying = parseType();
+    return std::make_shared<Item>(ItemTypeAlias{name, vis, underlying});
+}
+
 // ---------- imports ----------
 ItemPtr Parser::parseImport() {
     expect(Tk::KwImport);
@@ -796,7 +935,8 @@ ExprPtr Parser::parseCmp() {
         else if (match(Tk::Gt)) op = ExprBinary::Gt;
         else if (match(Tk::Le)) op = ExprBinary::Le;
         else if (match(Tk::Ge)) op = ExprBinary::Ge;
-        else if (match(Tk::KwIs)) {
+        else if (check(Tk::KwIs)) {
+            match(Tk::KwIs);
             if (match(Tk::Bang)) {
                 TypePtr ty = parseType();
                 lhs = std::make_shared<Expr>(ExprIsNot{lhs, ty});
@@ -804,6 +944,11 @@ ExprPtr Parser::parseCmp() {
                 TypePtr ty = parseType();
                 lhs = std::make_shared<Expr>(ExprIs{lhs, ty});
             }
+            continue;
+        } else if (match(Tk::Bang) && check(Tk::KwIs)) {
+            expect(Tk::KwIs);
+            TypePtr ty = parseType();
+            lhs = std::make_shared<Expr>(ExprIsNot{lhs, ty});
             continue;
         } else if (match(Tk::KwIn)) {
             ExprPtr rhs = parseBitOr();
@@ -888,7 +1033,11 @@ ExprPtr Parser::parseMul() {
 }
 
 ExprPtr Parser::parsePrefix() {
-    if (match(Tk::Bang)) {
+    if (check(Tk::Bang)) {
+        if (check(Tk::KwIs, 1)) {
+            return parsePostfix();
+        }
+        advance(); // consume !
         ExprPtr op = parsePrefix();
         return std::make_shared<Expr>(ExprUnary{ExprUnary::Not, op});
     }
@@ -988,6 +1137,10 @@ ExprPtr Parser::parsePostfix() {
                 return expr;
             }
         } else if (match(Tk::Bang)) {
+            if (check(Tk::KwIs)) {
+                --pos; // put back the ! so parseCmp can handle !is
+                return expr;
+            }
             // !! force unwrap — second ! follows
             if (match(Tk::Bang)) {
                 expr = std::make_shared<Expr>(ExprForceUnwrap{expr});
@@ -1016,7 +1169,7 @@ ExprPtr Parser::parsePrimary() {
 
     if (check(Tk::Ident)) {
         Path path = parsePath();
-        if (check(Tk::LBrace)) return parseStructExpr(path);
+        if (check(Tk::LBrace) && !m_parsingBlockHead) return parseStructExpr(path);
         return std::make_shared<Expr>(ExprPath{path});
     }
 
@@ -1048,7 +1201,7 @@ ExprPtr Parser::parsePrimary() {
         return std::make_shared<Expr>(ExprArray{std::move(elems)});
     }
 
-    if (check(Tk::LBrace)) return parseBlock();
+    if (check(Tk::LBrace)) return parseBlockOrClosure();
 
     if (check(Tk::KwWhile) || check(Tk::KwFor) || check(Tk::KwLoop)) {
         std::optional<std::string> label;
@@ -1066,8 +1219,6 @@ ExprPtr Parser::parsePrimary() {
     if (match(Tk::KwReturn)) return parseReturn();
     if (match(Tk::KwBreak)) return parseBreak();
     if (match(Tk::KwContinue)) return parseContinue();
-    if (check(Tk::Pipe)) return parseClosure();
-
     // string template: $"hello $name"
     if (match(Tk::Dollar)) {
         if (check(Tk::StringLit)) {
@@ -1126,8 +1277,8 @@ ExprPtr Parser::parsePrimary() {
     return std::make_shared<Expr>(ExprLit{0});
 }
 
-ExprPtr Parser::parseBlock() {
-    expect(Tk::LBrace);
+// Parse the content between { and } — returns ExprBlock or single expression.
+ExprPtr Parser::parseBlockBody() {
     std::vector<StmtPtr> stmts;
     ExprPtr tail = nullptr;
     while (!check(Tk::RBrace) && !atEnd()) {
@@ -1148,7 +1299,6 @@ ExprPtr Parser::parseBlock() {
             stmts.push_back(parseItemStmt());
         } else {
             ExprPtr e = parseExpr();
-            // Assignment or call without semicolon is still a statement
             bool isAssign = std::holds_alternative<ExprAssign>(*e);
             if (match(Tk::Semi) || isAssign) {
                 stmts.push_back(std::make_shared<Stmt>(StmtExpr{e, true}));
@@ -1156,17 +1306,91 @@ ExprPtr Parser::parseBlock() {
                 tail = e;
                 break;
             } else {
-                // No semicolon but more content on next line — treat as statement
                 stmts.push_back(std::make_shared<Stmt>(StmtExpr{e, true}));
             }
         }
     }
-    expect(Tk::RBrace);
+    if (stmts.empty() && tail) return tail;
     return std::make_shared<Expr>(ExprBlock{std::move(stmts), tail});
 }
 
+ExprPtr Parser::parseBlock() {
+    expect(Tk::LBrace);
+    ExprPtr body = parseBlockBody();
+    expect(Tk::RBrace);
+    return body; // always an ExprBlock (or single expr)
+}
+
+// Expression-level { ... } — Kotlin-style: always a closure.
+// { }             → no-param closure returning unit
+// { -> body }     → no-param closure (explicit)
+// { x, y -> body }→ closure with params
+// { stmts }       → no-param closure (implicit, like Kotlin)
+ExprPtr Parser::parseBlockOrClosure() {
+    expect(Tk::LBrace);
+
+    // Empty: {} — no-param closure, unit body
+    if (match(Tk::RBrace)) {
+        auto unitBody = std::make_shared<Expr>(ExprBlock{std::vector<StmtPtr>{}, nullptr});
+        return std::make_shared<Expr>(ExprClosure{
+            std::vector<std::pair<std::string,TypePtr>>{}, nullptr, unitBody});
+    }
+
+    // No-param closure (explicit arrow): { -> body }
+    if (check(Tk::Arrow)) {
+        advance();
+        ExprPtr body = parseBlockBody();
+        expect(Tk::RBrace);
+        return std::make_shared<Expr>(ExprClosure{
+            std::vector<std::pair<std::string,TypePtr>>{}, nullptr, body});
+    }
+
+    // Param-ful closure: { ident [: type] [, ident [: type]]* -> body }
+    if (check(Tk::Ident)) {
+        size_t save = pos;
+        m_quietErrors = true;
+
+        std::vector<std::pair<std::string,TypePtr>> params;
+        bool isClosure = true;
+
+        std::string name = expectIdent();
+        TypePtr ty = nullptr;
+        if (match(Tk::Colon)) ty = parseType();
+        params.emplace_back(name, ty);
+
+        while (match(Tk::Comma)) {
+            if (!check(Tk::Ident)) { isClosure = false; break; }
+            name = expectIdent();
+            ty = nullptr;
+            if (match(Tk::Colon)) ty = parseType();
+            params.emplace_back(name, ty);
+        }
+
+        m_quietErrors = false;
+
+        if (isClosure && check(Tk::Arrow)) {
+            advance();
+            ExprPtr body = parseBlockBody();
+            expect(Tk::RBrace);
+            return std::make_shared<Expr>(ExprClosure{std::move(params), nullptr, body});
+        }
+
+        // Not a closure — backtrack to start of body
+        pos = save;
+    }
+
+    // Implicit no-param closure: { stmts; tail }
+    ExprPtr body = parseBlockBody();
+    expect(Tk::RBrace);
+    return std::make_shared<Expr>(ExprClosure{
+        std::vector<std::pair<std::string,TypePtr>>{}, nullptr, body});
+}
+
 ExprPtr Parser::parseIf() {
+    bool savedBlockHead = m_parsingBlockHead;
+    m_parsingBlockHead = true;
     ExprPtr cond = parseExpr();
+    m_parsingBlockHead = savedBlockHead;
     ExprPtr then_ = parseBlock();
     ExprPtr else_ = nullptr;
     if (match(Tk::KwElse)) {
@@ -1177,7 +1401,10 @@ ExprPtr Parser::parseIf() {
 }
 
 ExprPtr Parser::parseWhile(std::optional<std::string> label) {
+    bool savedBlockHead = m_parsingBlockHead;
+    m_parsingBlockHead = true;
     ExprPtr cond = parseExpr();
+    m_parsingBlockHead = savedBlockHead;
     ExprPtr body = parseBlock();
     return std::make_shared<Expr>(ExprWhile{cond, body, label});
 }
@@ -1186,7 +1413,10 @@ ExprPtr Parser::parseFor(std::optional<std::string> label) {
     PatPtr pat = parsePat();
     if (check(Tk::KwIn)) advance();
     else error("expected 'in' in for loop");
+    bool savedBlockHead = m_parsingBlockHead;
+    m_parsingBlockHead = true;
     ExprPtr iter = parseExpr();
+    m_parsingBlockHead = savedBlockHead;
     ExprPtr body = parseBlock();
     return std::make_shared<Expr>(ExprFor{pat, iter, body, label});
 }
@@ -1211,20 +1441,20 @@ ExprPtr Parser::parseWhen() {
         if (match(Tk::KwElse)) {
             arm.isElse = true;
         } else {
-            // parse condition: expr, is Type, in expr
-            ExprPtr cond = parseExpr();
-            if (match(Tk::KwIs)) {
-                TypePtr ty = parseType();
-                arm.condition = std::make_shared<Expr>(ExprIs{cond, ty});
-            } else if (match(Tk::KwIn)) {
-                ExprPtr range = parseExpr();
-                arm.condition = std::make_shared<Expr>(ExprBinary{static_cast<ExprBinary::Op>(92), cond, range});
+            if (hasScrut) {
+                arm.condition = parsePat();
             } else {
-                arm.condition = cond;
+                ExprPtr cond = parseExpr();
+                if (match(Tk::KwIs)) {
+                    TypePtr ty = parseType();
+                    arm.condition = std::make_shared<Expr>(ExprIs{cond, ty});
+                } else if (match(Tk::KwIn)) {
+                    ExprPtr range = parseExpr();
+                    arm.condition = std::make_shared<Expr>(ExprBinary{static_cast<ExprBinary::Op>(92), cond, range});
+                } else {
+                    arm.condition = cond;
+                }
             }
-        }
-        if (hasScrut && !arm.isElse) {
-            // condition is a pattern-like expression for comparison
         }
         expect(Tk::Arrow);
         arm.body = parseExpr();
@@ -1255,22 +1485,6 @@ ExprPtr Parser::parseReturn() {
     if (!check(Tk::Semi) && !check(Tk::RBrace) && !check(Tk::RBracket) && !check(Tk::RParen) && !check(Tk::Comma) && !atEnd())
         e = parseExpr();
     return std::make_shared<Expr>(ExprReturn{e});
-}
-
-ExprPtr Parser::parseClosure() {
-    expect(Tk::Pipe);
-    std::vector<std::pair<std::string,bool>> params;
-    while (!check(Tk::Pipe) && !atEnd()) {
-        std::string name = expectIdent();
-        params.emplace_back(name, false);
-        if (match(Tk::Colon)) parseType();
-        if (!match(Tk::Comma)) break;
-    }
-    expect(Tk::Pipe);
-    TypePtr ret = nullptr;
-    if (match(Tk::Arrow)) ret = parseType();
-    ExprPtr body = parseExpr();
-    return std::make_shared<Expr>(ExprClosure{std::move(params), ret, body});
 }
 
 ExprPtr Parser::parseStructExpr(Path path) {

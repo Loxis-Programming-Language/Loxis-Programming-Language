@@ -1,0 +1,3 @@
+fun deepVal() -> int {
+    return 77
+}

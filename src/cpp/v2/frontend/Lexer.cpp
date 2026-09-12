@@ -128,6 +128,10 @@ std::vector<Token> Lexer::tokenize() {
                 if (!std::isdigit(static_cast<unsigned char>(peek()))) { pos = epos; col = l.col + static_cast<uint32_t>(epos - start); }
                 else while (!atEnd() && (std::isdigit(static_cast<unsigned char>(peek())) || peek() == '_')) advance();
             }
+            if (peek() == 'f' || peek() == 'F') {
+                isFloat = true;
+                advance();
+            }
             if (isFloat) {
 
                 out.emplace_back(Tk::FloatLit, src.substr(start, pos - start), l);

@@ -1,0 +1,24 @@
+import loxis.collections.list
+
+fun main() -> int {
+    val xs = listNew<int>(2)
+    xs.push(1)
+    xs.push(2)
+    xs.push(3)
+    xs.push(4)
+
+    val mapped = listMap<int, int>(xs, { x -> x * 10 })
+    print(mapped.size())
+    print(mapped.get(0) + mapped.get(3))
+
+    val filtered = listFilter<int>(mapped, { x -> x > 20 })
+    print(filtered.size())
+    print(filtered.get(0) + filtered.get(1))
+
+    listForEach<int>(filtered, { x -> print(x) })
+
+    listFree<int>(filtered)
+    listFree<int>(mapped)
+    listFree<int>(xs)
+    return 0
+}

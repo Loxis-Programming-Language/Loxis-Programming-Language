@@ -1,0 +1,19 @@
+object Counter {
+    var value: int = 10
+
+    init {
+        value = value + 1
+    }
+
+    fun increment() -> int {
+        value = value + 1
+        return value
+    }
+}
+
+fun main() -> int {
+    print(Counter.value)
+    print(Counter.increment())
+    print(Counter.value)
+    return 0
+}

@@ -1,0 +1,9 @@
+import loxis.functional
+
+fun main() -> int {
+    print(apply<int, int>({ x: int -> x + 1 }, 5))
+    print(twice<int>({ x -> x + 2 }, 10))
+    val f: fun(int) -> int = { x -> x * 3 }
+    print(f(7))
+    return 0
+}

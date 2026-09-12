@@ -1,0 +1,17 @@
+import loxis.collections.list
+import loxis.collections.stream
+
+fun main() -> int {
+    var xs = listNew<int>(4)
+    xs.push(10)
+    xs.push(20)
+    xs.push(30)
+
+    var stream = streamFromList<int>(xs)
+    print(stream.count())
+
+    var ys = streamFromList<int>(xs).toList()
+    print(ys.size())
+    print(ys.get(1))
+    return 0
+}

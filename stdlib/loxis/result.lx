@@ -1,0 +1,59 @@
+package loxis.result
+
+enum class Result<T, E> {
+    Success(T),
+    Failure(E)
+}
+
+fun resultSuccess<T, E>(value: T) -> Result<T, E> {
+    return Result::<T, E>::Success(value)
+}
+
+fun resultFailure<T, E>(error: E) -> Result<T, E> {
+    return Result::<T, E>::Failure(error)
+}
+
+fun resultIsSuccess<T, E>(value: Result<T, E>) -> bool {
+    return when (value) {
+        Result::Success(_) -> true,
+        else -> false
+    }
+}
+
+fun resultIsFailure<T, E>(value: Result<T, E>) -> bool {
+    return when (value) {
+        Result::Failure(_) -> true,
+        else -> false
+    }
+}
+
+fun resultMap<T, E, U>(value: Result<T, E>, f: fun(T) -> U) -> Result<U, E> {
+    return when (value) {
+        Result::Success(inner) -> Result::<U, E>::Success(f(inner)),
+        Result::Failure(error) -> Result::<U, E>::Failure(error),
+        else -> Result::<U, E>::Failure(error("unreachable resultMap arm"))
+    }
+}
+
+fun resultFlatMap<T, E, U>(value: Result<T, E>, f: fun(T) -> Result<U, E>) -> Result<U, E> {
+    return when (value) {
+        Result::Success(inner) -> f(inner),
+        Result::Failure(error) -> Result::<U, E>::Failure(error),
+        else -> Result::<U, E>::Failure(error("unreachable resultFlatMap arm"))
+    }
+}
+
+fun resultMapError<T, E, F>(value: Result<T, E>, f: fun(E) -> F) -> Result<T, F> {
+    return when (value) {
+        Result::Success(inner) -> Result::<T, F>::Success(inner),
+        Result::Failure(error) -> Result::<T, F>::Failure(f(error)),
+        else -> Result::<T, F>::Failure(error("unreachable resultMapError arm"))
+    }
+}
+
+fun resultGetOrElse<T, E>(value: Result<T, E>, fallback: T) -> T {
+    return when (value) {
+        Result::Success(inner) -> inner,
+        else -> fallback
+    }
+}

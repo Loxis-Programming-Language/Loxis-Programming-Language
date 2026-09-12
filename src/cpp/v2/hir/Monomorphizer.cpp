@@ -4,6 +4,22 @@
 
 namespace loxis::v2 {
 
+namespace {
+
+CoreTyPtr hirExprTy(const HirExprPtr& expr) {
+    if (!expr) return nullptr;
+    return std::visit([](const auto& e) -> CoreTyPtr {
+        using T = std::decay_t<decltype(e)>;
+        if constexpr (requires { e.ty; }) {
+            return e.ty;
+        } else {
+            return nullptr;
+        }
+    }, *expr);
+}
+
+} // namespace
+
 // ============================================================
 // Name mangling
 // ============================================================
@@ -246,6 +262,13 @@ void Monomorphizer::substClass(HirClass& cls, const SubstMap& subst) {
     for (auto& cp : cls.ctorParams) {
         cp.ty = substTy(cp.ty, subst);
     }
+    for (auto& field : cls.fields) {
+        field.ty = substTy(field.ty, subst);
+        if (field.initializer) substExpr(field.initializer, subst);
+    }
+    for (auto& initBlock : cls.initBlocks) {
+        if (initBlock) substExpr(initBlock, subst);
+    }
     for (auto& m : cls.methods) {
         substFn(m, subst);
     }
@@ -318,6 +341,20 @@ void Monomorphizer::scanExpr(HirExprPtr expr) {
         }
         else if constexpr (std::is_same_v<T, HirMethodCall>) {
             scanExpr(e.recv);
+            if (CoreTyPtr recvTy = hirExprTy(e.recv)) {
+                if (recvTy->kind() == TyKind::Class_) {
+                    auto& cls = std::get<TyClass>(*recvTy);
+                    if (!cls.args.empty()) {
+                        auto cit = m_classByName.find(cls.def->name);
+                        if (cit != m_classByName.end() && hasGenerics(*cit->second)) {
+                            std::string mangled = monoClass(*cit->second, cls.args);
+                            e.qualifiedName = mangled + "." + e.method;
+                            e.vtableIndex = ~0u;
+                            e.isInterfaceDispatch = false;
+                        }
+                    }
+                }
+            }
             for (auto& a : e.args) scanExpr(a);
         }
         else if constexpr (std::is_same_v<T, HirTuple>) {
@@ -453,6 +490,12 @@ std::string Monomorphizer::monoClass(const HirClass& genericCls,
     specialized.generics.clear();
     specialized.typeId = m_nextTypeId++;
     substClass(specialized, subst);
+    for (auto& methodName : specialized.vtableMethodNames) {
+        std::string prefix = genericCls.name + ".";
+        if (methodName.rfind(prefix, 0) == 0) {
+            methodName = mangled + methodName.substr(genericCls.name.size());
+        }
+    }
 
     // Also monomorphize the constructor
     if (!specialized.ctorParams.empty()) {

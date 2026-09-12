@@ -1,0 +1,18 @@
+interface Greeter {
+    fun greet(name: str) -> str {
+        return "Hello, " + name
+    }
+}
+
+class Person : Greeter {
+}
+
+fun useGreeter(g: Greeter, name: str) -> str {
+    return g.greet(name)
+}
+
+fun main() -> int {
+    val p = Person()
+    print(useGreeter(p, "World"))
+    return 0
+}

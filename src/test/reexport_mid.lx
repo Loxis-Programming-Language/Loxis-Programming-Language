@@ -1,0 +1,5 @@
+from reexport_low import { lowFunc }
+
+fun midFunc() -> int {
+    return 200
+}

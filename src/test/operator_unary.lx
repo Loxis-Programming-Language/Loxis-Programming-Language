@@ -1,0 +1,12 @@
+class Box(var value: int) {
+    fun operator-() -> Box {
+        return Box(-this.value)
+    }
+}
+
+fun main() -> int {
+    val b = Box(7)
+    val c = -b
+    print(c.value)
+    return 0
+}

@@ -56,6 +56,31 @@ MirUnaryOp HirBuilder::toMirUnaryOp(ExprUnary::Op op) {
     return MirUnaryOp::Neg;
 }
 
+std::string HirBuilder::binaryOperatorName(ExprBinary::Op op) {
+    switch (op) {
+        case ExprBinary::Add: return "operator+";
+        case ExprBinary::Sub: return "operator-";
+        case ExprBinary::Mul: return "operator*";
+        case ExprBinary::Div: return "operator/";
+        case ExprBinary::Rem: return "operator%";
+        case ExprBinary::Eq:  return "operator==";
+        case ExprBinary::Ne:  return "operator!=";
+        case ExprBinary::Lt:  return "operator<";
+        case ExprBinary::Le:  return "operator<=";
+        case ExprBinary::Gt:  return "operator>";
+        case ExprBinary::Ge:  return "operator>=";
+        default: return "";
+    }
+}
+
+std::string HirBuilder::unaryOperatorName(ExprUnary::Op op) {
+    switch (op) {
+        case ExprUnary::Neg: return "operator-";
+        case ExprUnary::Not: return "operator!";
+        default: return "";
+    }
+}
+
 MirAssignOp HirBuilder::toMirAssignOp(ExprAssign::Op op) {
     switch (op) {
         case ExprAssign::Set: return MirAssignOp::Set;
@@ -166,6 +191,10 @@ HirPatPtr HirBuilder::buildPat(const PatPtr& pat) {
         using T = std::decay_t<decltype(p)>;
         if constexpr (std::is_same_v<T, PatBind>) {
             return std::make_shared<HirPat>(HirPatBind{p.name, p.mut, buildPat(p.sub)});
+        } else if constexpr (std::is_same_v<T, PatEnum>) {
+            std::vector<HirPatPtr> elems;
+            for (const auto& elem : p.elems) elems.push_back(buildPat(elem));
+            return std::make_shared<HirPat>(HirPatEnum{std::move(elems), p.variantIndex});
         } else {
             return std::make_shared<HirPat>(HirPatWild{});
         }
@@ -178,7 +207,7 @@ HirStmtPtr HirBuilder::buildStmt(const StmtPtr& stmt) {
         using T = std::decay_t<decltype(s)>;
         if constexpr (std::is_same_v<T, StmtLet>) {
             return std::make_shared<HirStmt>(HirStmtLet{
-                buildPat(s.pat), astType(s.ty), buildExpr(s.init)
+                buildPat(s.pat), s.resolvedTy ? s.resolvedTy : astType(s.ty), buildExpr(s.init)
             });
         } else if constexpr (std::is_same_v<T, StmtExpr>) {
             return std::make_shared<HirStmt>(HirStmtExpr{buildExpr(s.expr)});
@@ -199,11 +228,21 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
             std::vector<CoreTyPtr> typeArgs;
             for (const auto& arg : e.path.args) typeArgs.push_back(astType(arg));
             CoreTyPtr ty = e.resolvedTy ? e.resolvedTy : mkInt();
+            if (e.isTopLevelVal && !e.topLevelGetter.empty()) {
+                std::vector<HirExprPtr> args;
+                return std::make_shared<HirExpr>(HirCall{
+                    nullptr, std::string{e.topLevelGetter}, std::string{}, std::move(args),
+                    std::vector<CoreTyPtr>{}, ty
+                });
+            }
             if (e.isField) {
-                auto selfExpr = std::make_shared<HirExpr>(HirPath{"self", {}, mkInt()});
+                auto selfExpr = std::make_shared<HirExpr>(HirPath{"self", {}, mkInt(), false});
                 return std::make_shared<HirExpr>(HirField{selfExpr, name, e.fieldOffset, ty});
             }
-            return std::make_shared<HirExpr>(HirPath{name, std::move(typeArgs), ty});
+            HirPath path{name, std::move(typeArgs), ty, e.isStaticFunction};
+            path.captureOffset = e.captureOffset;
+            path.globalSlot = e.globalSlot;
+            return std::make_shared<HirExpr>(path);
         } else if constexpr (std::is_same_v<T, ExprTuple>) {
             std::vector<HirExprPtr> elems;
             for (const auto& elem : e.elems) elems.push_back(buildExpr(elem));
@@ -230,7 +269,48 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
             std::vector<CoreTyPtr> typeArgs;
             if (e.func && std::holds_alternative<ExprPath>(*e.func)) {
                 const auto& path = std::get<ExprPath>(*e.func);
-                if (!path.path.segs.empty()) staticName = path.path.segs.back();
+                if ((path.isEnumVariant || path.variantIndex != ~0u) && e.resolvedTy && e.resolvedTy->kind() == TyKind::Class_) {
+                    auto& cls = std::get<TyClass>(*e.resolvedTy);
+                    std::vector<HirExprPtr> args;
+                    std::vector<uint32_t> fieldOffsets;
+                    if (path.variantIndex < cls.def->variants.size()) {
+                        const auto& variant = cls.def->variants[path.variantIndex];
+                        for (const auto& field : variant.fields) {
+                            fieldOffsets.push_back(field.offset);
+                        }
+                    }
+                    for (const auto& a : e.args) args.push_back(buildExpr(a));
+                    return std::make_shared<HirExpr>(HirEnumCtor{
+                        cls.def->name,
+                        cls.def->typeId,
+                        path.variantIndex,
+                        cls.def->totalFieldSize,
+                        std::move(fieldOffsets),
+                        std::move(args),
+                        e.resolvedTy
+                    });
+                }
+                std::string calleeName = path.path.segs.empty() ? "" : path.path.segs.back();
+                bool isBuiltin = calleeName == "print" || calleeName == "println" ||
+                    calleeName == "write" || calleeName == "error" ||
+                    calleeName == "syscall" || calleeName == "alloc" ||
+                    calleeName == "halloc" || calleeName == "hread" ||
+                    calleeName == "hload" || calleeName == "hset" ||
+                    calleeName == "hstore" || calleeName == "hfree" ||
+                    calleeName == "strlen" || calleeName == "s2i" ||
+                    calleeName == "i2s" || calleeName == "chr" ||
+                    calleeName == "strchar" ||
+                    calleeName == "strslice" || calleeName == "strindexof" ||
+                    calleeName == "nativeFileReadText" ||
+                    calleeName == "nativeFileWriteText" ||
+                    calleeName == "nativeFileAppendText" ||
+                    calleeName == "nativeFileRemove" ||
+                    calleeName == "itof" ||
+                    calleeName == "ftoi" || calleeName == "fadd" ||
+                    calleeName == "fsub" || calleeName == "fmul" ||
+                    calleeName == "fdiv" || calleeName == "fneg";
+                if (!e.mangledName.empty()) staticName = e.mangledName;
+                else if ((path.isStaticFunction || isBuiltin) && !calleeName.empty()) staticName = calleeName;
                 for (const auto& arg : path.path.args) {
                     typeArgs.push_back(astType(arg));
                 }
@@ -240,14 +320,26 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
             for (const auto& a : e.args) args.push_back(buildExpr(a));
             return std::make_shared<HirExpr>(HirCall{
                 buildExpr(e.func), staticName, e.ctorLabel, std::move(args),
-                std::move(typeArgs), mkInt()
+                std::move(typeArgs), e.resolvedTy ? e.resolvedTy : mkInt()
             });
         } else if constexpr (std::is_same_v<T, ExprMethodCall>) {
+            // Extension function call: no vtable, no interface → desugar to static call
+            if (e.vtableIndex == ~0u && !e.isInterfaceDispatch &&
+                !e.qualifiedName.empty() && e.qualifiedName.find('.') == std::string::npos) {
+                std::vector<HirExprPtr> args;
+                args.push_back(buildExpr(e.recv)); // receiver as first arg
+                for (const auto& a : e.args) args.push_back(buildExpr(a));
+                return std::make_shared<HirExpr>(HirCall{
+                    nullptr, std::string{e.qualifiedName}, std::string{}, std::move(args),
+                    std::vector<CoreTyPtr>{}, e.resolvedTy ? e.resolvedTy : mkInt()
+                });
+            }
             std::vector<HirExprPtr> args;
             for (const auto& a : e.args) args.push_back(buildExpr(a));
             return std::make_shared<HirExpr>(HirMethodCall{
                 buildExpr(e.recv), e.method, e.qualifiedName, std::move(args),
-                e.vtableIndex, e.isInterfaceDispatch, e.ifaceTypeId, e.ifaceMethodIndex, mkInt()
+                e.vtableIndex, e.isInterfaceDispatch, e.ifaceTypeId, e.ifaceMethodIndex,
+                e.resolvedTy ? e.resolvedTy : mkInt()
             });
         } else if constexpr (std::is_same_v<T, ExprField>) {
             return std::make_shared<HirExpr>(HirField{
@@ -258,12 +350,28 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
                 buildExpr(e.obj), buildExpr(e.idx), mkInt()
             });
         } else if constexpr (std::is_same_v<T, ExprUnary>) {
+            if (e.isOverloaded) {
+                return std::make_shared<HirExpr>(HirMethodCall{
+                    buildExpr(e.operand), unaryOperatorName(e.op), e.qualifiedName, {},
+                    e.vtableIndex, e.isInterfaceDispatch, e.ifaceTypeId, e.ifaceMethodIndex,
+                    e.resolvedTy ? e.resolvedTy : mkInt()
+                });
+            }
             return std::make_shared<HirExpr>(HirUnary{
-                toMirUnaryOp(e.op), buildExpr(e.operand), mkInt()
+                toMirUnaryOp(e.op), buildExpr(e.operand), e.resolvedTy ? e.resolvedTy : mkInt()
             });
         } else if constexpr (std::is_same_v<T, ExprBinary>) {
+            if (e.isOverloaded) {
+                std::vector<HirExprPtr> args;
+                args.push_back(buildExpr(e.r));
+                return std::make_shared<HirExpr>(HirMethodCall{
+                    buildExpr(e.l), binaryOperatorName(e.op), e.qualifiedName, std::move(args),
+                    e.vtableIndex, e.isInterfaceDispatch, e.ifaceTypeId, e.ifaceMethodIndex,
+                    e.resolvedTy ? e.resolvedTy : mkInt()
+                });
+            }
             return std::make_shared<HirExpr>(HirBinary{
-                toMirBinOp(e.op), buildExpr(e.l), buildExpr(e.r), mkInt()
+                toMirBinOp(e.op), buildExpr(e.l), buildExpr(e.r), e.resolvedTy ? e.resolvedTy : mkInt()
             });
         } else if constexpr (std::is_same_v<T, ExprAssign>) {
             return std::make_shared<HirExpr>(HirAssign{
@@ -293,10 +401,18 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
             });
         } else if constexpr (std::is_same_v<T, ExprWhen>) {
             std::vector<HirWhenArm> arms;
+            CoreTyPtr resultTy = nullptr;
             for (const auto& arm : e.arms) {
                 HirWhenArm ha;
                 ha.body = buildExpr(arm.body);
                 ha.isElse = arm.isElse;
+                if (!resultTy && arm.body) {
+                    if (auto bodyExpr = buildExpr(arm.body)) {
+                        std::visit([&](const auto& bodyNode) {
+                            resultTy = bodyNode.ty;
+                        }, *bodyExpr);
+                    }
+                }
                 if (arm.isElse) {
                     ha.condition = std::monostate{};
                 } else if (std::holds_alternative<PatPtr>(arm.condition) && std::get<PatPtr>(arm.condition)) {
@@ -309,7 +425,7 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
                 arms.push_back(std::move(ha));
             }
             return std::make_shared<HirExpr>(HirWhen{
-                buildExpr(e.scrut), std::move(arms), mkInt()
+                buildExpr(e.scrut), std::move(arms), resultTy ? resultTy : mkUnit()
             });
         } else if constexpr (std::is_same_v<T, ExprBreak>) {
             return std::make_shared<HirExpr>(HirBreak{e.label, buildExpr(e.expr), mkUnit()});
@@ -317,6 +433,32 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
             return std::make_shared<HirExpr>(HirContinue{e.label, mkUnit()});
         } else if constexpr (std::is_same_v<T, ExprReturn>) {
             return std::make_shared<HirExpr>(HirReturn{buildExpr(e.expr), mkUnit()});
+        } else if constexpr (std::is_same_v<T, ExprClosure>) {
+            std::string name = e.loweredName.empty()
+                ? "__lambda_untyped"
+                : e.loweredName;
+            std::vector<std::pair<std::string, CoreTyPtr>> params;
+            std::vector<TyPtr> fnParamTys;
+            for (size_t i = 0; i < e.params.size(); ++i) {
+                CoreTyPtr ty = i < e.resolvedParamTys.size()
+                    ? e.resolvedParamTys[i]
+                    : astType(e.params[i].second);
+                if (!ty) ty = mkInt();
+                params.push_back({e.params[i].first, ty});
+                fnParamTys.push_back(ty);
+            }
+            CoreTyPtr retTy = e.resolvedRetTy ? e.resolvedRetTy : (e.ret ? astType(e.ret) : mkInt());
+            HirFn generated{name, {}, std::move(params), retTy, buildExpr(e.body), e.envTypeId};
+            m_generatedFns.push_back(std::move(generated));
+            auto fnTy = std::make_shared<Ty>(TyFn{std::move(fnParamTys), retTy});
+            if (e.captures.empty()) {
+                return std::make_shared<HirExpr>(HirPath{name, {}, fnTy, true});
+            }
+            std::vector<HirClosureCapture> captures;
+            for (const auto& capture : e.captures) {
+                captures.push_back({capture.name, capture.ty, capture.offset});
+            }
+            return std::make_shared<HirExpr>(HirClosure{name, std::move(captures), e.envTypeId, fnTy});
         } else if constexpr (std::is_same_v<T, ExprRef>) {
             return std::make_shared<HirExpr>(HirRef{e.mut, buildExpr(e.expr), mkInt()});
         } else if constexpr (std::is_same_v<T, ExprDeref>) {
@@ -330,24 +472,26 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
             std::vector<HirExprPtr> args;
             for (const auto& a : e.args) args.push_back(buildExpr(a));
             return std::make_shared<HirExpr>(HirSafeCall{
-                buildExpr(e.recv), e.method, std::move(args), mkInt()
+                buildExpr(e.recv), e.method, std::move(args), e.resolvedTy ? e.resolvedTy : makeNullable(mkUnit())
             });
         } else if constexpr (std::is_same_v<T, ExprSafeField>) {
             return std::make_shared<HirExpr>(HirSafeField{
-                buildExpr(e.recv), e.field, 0, mkInt()
+                buildExpr(e.recv), e.field, e.fieldOffset, e.resolvedTy ? e.resolvedTy : makeNullable(mkUnit())
             });
         } else if constexpr (std::is_same_v<T, ExprElvis>) {
             return std::make_shared<HirExpr>(HirElvis{
-                buildExpr(e.lhs), buildExpr(e.rhs), mkInt()
+                buildExpr(e.lhs), buildExpr(e.rhs), e.resolvedTy ? e.resolvedTy : mkUnit()
             });
         } else if constexpr (std::is_same_v<T, ExprForceUnwrap>) {
-            return std::make_shared<HirExpr>(HirForceUnwrap{buildExpr(e.expr), mkInt()});
+            return std::make_shared<HirExpr>(HirForceUnwrap{
+                buildExpr(e.expr), e.resolvedTy ? e.resolvedTy : mkUnit()
+            });
         } else if constexpr (std::is_same_v<T, ExprIs>) {
-            return std::make_shared<HirExpr>(HirIs{buildExpr(e.expr), ~0u, mkBool()});
+            return std::make_shared<HirExpr>(HirIs{buildExpr(e.expr), e.targetTypeId, mkBool()});
         } else if constexpr (std::is_same_v<T, ExprIsNot>) {
-            return std::make_shared<HirExpr>(HirIsNot{buildExpr(e.expr), ~0u, mkBool()});
+            return std::make_shared<HirExpr>(HirIsNot{buildExpr(e.expr), e.targetTypeId, mkBool()});
         } else if constexpr (std::is_same_v<T, ExprNull>) {
-            return std::make_shared<HirExpr>(HirNull{mkInt()});
+            return std::make_shared<HirExpr>(HirNull{mkNull()});
         } else if constexpr (std::is_same_v<T, ExprStringTemplate>) {
             if (e.parts.empty()) {
                 return std::make_shared<HirExpr>(HirLit{mkStr(), std::string{}});
@@ -397,9 +541,9 @@ HirExprPtr HirBuilder::makeAssign(HirExprPtr lhs, HirExprPtr rhs) {
     });
 }
 
-HirExprPtr HirBuilder::makeLet(const std::string& name, HirExprPtr init, HirExprPtr body) {
+HirExprPtr HirBuilder::makeLet(const std::string& name, HirExprPtr init, HirExprPtr body, CoreTyPtr ty) {
     auto pat = std::make_shared<HirPat>(HirPatBind{name, false, nullptr});
-    auto stmt = std::make_shared<HirStmt>(HirStmtLet{pat, mkInt(), std::move(init)});
+    auto stmt = std::make_shared<HirStmt>(HirStmtLet{pat, ty ? ty : mkInt(), std::move(init)});
     std::vector<HirStmtPtr> stmts = {stmt};
     return std::make_shared<HirExpr>(HirBlock{std::move(stmts), std::move(body), mkUnit()});
 }
@@ -447,6 +591,7 @@ HirExprPtr HirBuilder::desugarFor(const ExprFor& e) {
     HirExprPtr iterExpr = buildExpr(e.iter);
     HirExprPtr body = buildExpr(e.body);
     HirExprPtr idxPath = std::make_shared<HirExpr>(HirPath{"__for_i", {}, mkInt()});
+    CoreTyPtr iterTy = e.iterResolvedTy ? e.iterResolvedTy : mkInt();
 
     auto incIdx = [&]() {
         return makeAssign(idxPath, makeBin(MirBinOp::Add, idxPath, one));
@@ -475,14 +620,14 @@ HirExprPtr HirBuilder::desugarFor(const ExprFor& e) {
     }
 
     if (e.iterKind == ExprFor::IterKind::Iterable) {
-        HirExprPtr itPath = std::make_shared<HirExpr>(HirPath{"__for_it", {}, mkInt()});
+        HirExprPtr itPath = std::make_shared<HirExpr>(HirPath{"__for_it", {}, iterTy});
         std::string qn = e.iterClassName.empty() ? "size" : e.iterClassName + ".size";
         HirExprPtr sizeCall = makeMethodCall(itPath, qn, {});
         HirExprPtr elem = makeMethodCall(itPath, e.iterClassName + ".get", {idxPath});
         HirExprPtr cond = makeBin(MirBinOp::Lt, idxPath, sizeCall);
         HirExprPtr loopBody = wrapWithPat(e.pat, elem, makeBlockWithTail(body, incIdx()));
         HirExprPtr withIdx = makeLet("__for_i", makeIntLit(0), makeWhile(cond, loopBody, e.label));
-        return makeLet("__for_it", iterExpr, withIdx);
+        return makeLet("__for_it", iterExpr, withIdx, iterTy);
     }
 
     return body;
@@ -490,16 +635,36 @@ HirExprPtr HirBuilder::desugarFor(const ExprFor& e) {
 
 HirFn HirBuilder::buildFn(const ItemFun& fn) {
     HirFn out;
-    out.name = fn.name;
+    out.name = fn.backendName.empty() ? fn.name : fn.backendName;
     for (const auto& g : fn.generics) {
         out.generics.push_back(g.name);
     }
     pushGenerics(fn.generics);
     out.ret = astType(fn.ret);
+    // Extension functions: receiver is the first parameter
+    if (fn.receiverType) {
+        CoreTyPtr recvTy = astType(fn.receiverType);
+        out.params.push_back({fn.receiverName.empty() ? "this" : fn.receiverName, recvTy});
+    }
     for (const auto& p : fn.params) {
         out.params.push_back({p.first, astType(p.second)});
     }
     out.body = buildExpr(fn.body);
+    popGenerics();
+    return out;
+}
+
+HirFn HirBuilder::buildInterfaceMethod(const std::string& ifaceName, const InterfaceMethodDecl& method, const std::vector<GenericParam>& generics) {
+    HirFn out;
+    out.name = ifaceName + "." + method.name;
+    pushGenerics(generics);
+    // self is NOT in AST params — add it explicitly (mirrors resolveInterface)
+    out.params.push_back({"self", mkInt()});
+    for (const auto& p : method.params) {
+        out.params.push_back({p.first, astType(p.second)});
+    }
+    out.ret = method.ret ? astType(method.ret) : mkUnit();
+    out.body = buildExpr(method.defaultBody);
     popGenerics();
     return out;
 }
@@ -521,6 +686,32 @@ HirClass HirBuilder::buildClass(const ItemClass& cls) {
             pd.name, astType(pd.ty), pd.isVal, pd.isVar
         });
     }
+    for (const auto& fd : cls.fields) {
+        HirClassField field;
+        field.name = fd.name;
+        field.ty = astType(fd.ty);
+        field.isVal = fd.isVal;
+        if (m_scope) {
+            if (Scope* classScope = m_scope->childMod(cls.name)) {
+                if (auto classDef = classScope->classDef()) {
+                    for (const auto& info : classDef->fields) {
+                        if (info.name == fd.name) {
+                            field.offset = info.offset;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        field.initializer = buildExpr(fd.initializer);
+        out.fields.push_back(std::move(field));
+    }
+    for (const auto& initBlock : cls.initBlocks) {
+        if (!initBlock) continue;
+        if (auto* exprStmt = std::get_if<StmtExpr>(initBlock.get())) {
+            out.initBlocks.push_back(buildExpr(exprStmt->expr));
+        }
+    }
     for (const auto& m : cls.methods) {
         out.methods.push_back(buildFn(m));
     }
@@ -528,8 +719,51 @@ HirClass HirBuilder::buildClass(const ItemClass& cls) {
     return out;
 }
 
+HirClass HirBuilder::buildObject(const ItemObject& obj) {
+    HirClass out;
+    out.name = obj.name;
+    out.typeId = obj.typeId;
+    out.totalFieldSize = obj.totalFieldSize;
+    out.vtableEntryCount = obj.vtableEntryCount;
+    out.vtableMethodNames = obj.vtableMethodNames;
+    out.itables = obj.itables;
+    out.isSingleton = true;
+    out.globalSlot = obj.globalSlot;
+    for (const auto& fd : obj.fields) {
+        HirClassField field;
+        field.name = fd.name;
+        field.ty = astType(fd.ty);
+        field.isVal = fd.isVal;
+        if (m_scope) {
+            if (Scope* objectScope = m_scope->childMod(obj.name)) {
+                if (auto objectDef = objectScope->classDef()) {
+                    for (const auto& info : objectDef->fields) {
+                        if (info.name == fd.name) {
+                            field.offset = info.offset;
+                            if (info.type) field.ty = info.type;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        field.initializer = buildExpr(fd.initializer);
+        out.fields.push_back(std::move(field));
+    }
+    for (const auto& initBlock : obj.initBlocks) {
+        if (!initBlock) continue;
+        if (auto* exprStmt = std::get_if<StmtExpr>(initBlock.get())) {
+            out.initBlocks.push_back(buildExpr(exprStmt->expr));
+        }
+    }
+    for (const auto& method : obj.methods) out.methods.push_back(buildFn(method));
+    return out;
+}
+
 HirModule HirBuilder::build(const Module& mod) {
     HirModule hir;
+    m_generatedFns.clear();
+
     for (const auto& item : mod.items) {
         if (!item) continue;
         std::visit([&](const auto& i) {
@@ -538,8 +772,43 @@ HirModule HirBuilder::build(const Module& mod) {
                 hir.items.push_back(buildFn(i));
             } else if constexpr (std::is_same_v<T, ItemClass>) {
                 hir.items.push_back(buildClass(i));
+            } else if constexpr (std::is_same_v<T, ItemObject>) {
+                hir.items.push_back(buildObject(i));
+            } else if constexpr (std::is_same_v<T, ItemVal>) {
+                if (i.init) {
+                    HirFn getter;
+                    getter.name = "__val_" + i.name;
+                    getter.ret = i.ty ? astType(i.ty) : mkInt();
+                    getter.body = buildExpr(i.init);
+                    m_generatedFns.push_back(std::move(getter));
+                }
+            } else if constexpr (std::is_same_v<T, ItemVar>) {
+                if (i.init) {
+                    HirFn getter;
+                    getter.name = "__var_" + i.name;
+                    getter.ret = i.ty ? astType(i.ty) : mkInt();
+                    getter.body = buildExpr(i.init);
+                    m_generatedFns.push_back(std::move(getter));
+                }
+            } else if constexpr (std::is_same_v<T, ItemConst>) {
+                if (i.init) {
+                    HirFn getter;
+                    getter.name = "__const_" + i.name;
+                    getter.ret = i.ty ? astType(i.ty) : mkInt();
+                    getter.body = buildExpr(i.init);
+                    m_generatedFns.push_back(std::move(getter));
+                }
+            } else if constexpr (std::is_same_v<T, ItemInterface>) {
+                for (const auto& m : i.methods) {
+                    if (m.defaultBody) {
+                        m_generatedFns.push_back(buildInterfaceMethod(i.name, m, i.generics));
+                    }
+                }
             }
         }, *item);
+    }
+    for (auto& fn : m_generatedFns) {
+        hir.items.push_back(std::move(fn));
     }
     return hir;
 }

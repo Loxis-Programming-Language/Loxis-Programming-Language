@@ -1,0 +1,18 @@
+class Pair(var a: int, var b: int) {
+    fun operator==(other: Pair) -> bool {
+        if this.a != other.a {
+            return false
+        }
+        if this.b != other.b {
+            return false
+        }
+        return true
+    }
+}
+
+fun main() -> int {
+    val x = Pair(1, 2)
+    val y = Pair(1, 2)
+    print(x == y)
+    return 0
+}

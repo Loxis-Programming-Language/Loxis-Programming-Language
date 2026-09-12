@@ -38,6 +38,8 @@ enum class OpCode : uint8_t {
 	ItoF = 0x18,  // int→f64: src_reg, dst_reg
 	FtoI = 0x19,  // f64→int: src_reg, dst_reg
 	FNeg = 0x1A,  // f64 neg: src, dst
+	GLoad = 0x1B, // persistent global load: slot_imm, dst_reg
+	GStore = 0x1C,// persistent global store: slot_imm, src_reg
 
 	// Comparison
 	Cmp = 0x20,

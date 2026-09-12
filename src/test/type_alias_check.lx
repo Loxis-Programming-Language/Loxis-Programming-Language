@@ -1,0 +1,14 @@
+type MyInt = int
+type IntToInt = fun(int) -> int
+
+fun addOne(x: MyInt) -> MyInt {
+    return x + 1
+}
+
+fun main() -> int {
+    val y: MyInt = 10
+    print(addOne(y))
+    val f: IntToInt = { x -> x * 2 }
+    print(f(5))
+    return 0
+}

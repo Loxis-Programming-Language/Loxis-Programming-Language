@@ -10,6 +10,19 @@ namespace loxis::v2 {
 Scope::Scope(Scope* parent) : parent_(parent) {}
 
 void Scope::declare(const std::string& name, SymbolKind kind, void* node, TyPtr ty) {
+    auto it = symbols_.find(name);
+    if (it != symbols_.end() && it->second.kind == SymbolKind::Value && kind == SymbolKind::Value &&
+        it->second.node != nullptr && node != nullptr) {
+        // Both old and new are function-like declarations: push as overload
+        if (it->second.overloads.empty()) {
+            it->second.overloads.push_back({it->second.node, it->second.ty});
+        }
+        it->second.overloads.push_back({node, ty});
+        // Update primary to the latest
+        it->second.node = node;
+        it->second.ty = ty;
+        return;
+    }
     symbols_[name] = Symbol{name, kind, node, std::move(ty)};
 }
 
@@ -83,6 +96,8 @@ void ScopeBuilder::declareItem(ItemPtr item, Scope* scope) {
         } else if constexpr (std::is_same_v<T, ItemEnumClass>) {
             auto def = std::make_shared<ClassDef>();
             def->name = n.name;
+            def->typeId = m_nextClassTypeId++;
+            def->isEnum = true;
             for (const auto& g : n.generics) def->params.push_back(g.name);
             TyPtr ty = std::make_shared<Ty>(TyClass{def, {}});
             scope->declare(n.name, SymbolKind::Type,
@@ -110,14 +125,23 @@ void ScopeBuilder::declareItem(ItemPtr item, Scope* scope) {
             TyPtr ty = std::make_shared<Ty>(TyClass{def, {}});
             scope->declare(n.name, SymbolKind::Value,
                 const_cast<void*>(static_cast<const void*>(&n)), ty);
+            if (auto* objectSymbol = scope->lookupLocal(n.name)) {
+                objectSymbol->globalSlot = m_nextGlobalSlot++;
+            }
         } else if constexpr (std::is_same_v<T, ItemVal>) {
             scope->declare(n.name, SymbolKind::Value,
                 const_cast<void*>(static_cast<const void*>(&n)), nullptr);
+            if (auto* sym = scope->lookupLocal(n.name)) sym->isTopLevelProperty = true;
         } else if constexpr (std::is_same_v<T, ItemVar>) {
             scope->declare(n.name, SymbolKind::Value,
                 const_cast<void*>(static_cast<const void*>(&n)), nullptr);
+            if (auto* sym = scope->lookupLocal(n.name)) sym->isTopLevelProperty = true;
         } else if constexpr (std::is_same_v<T, ItemConst>) {
             scope->declare(n.name, SymbolKind::Value,
+                const_cast<void*>(static_cast<const void*>(&n)), nullptr);
+            if (auto* sym = scope->lookupLocal(n.name)) sym->isTopLevelProperty = true;
+        } else if constexpr (std::is_same_v<T, ItemTypeAlias>) {
+            scope->declare(n.name, SymbolKind::Type,
                 const_cast<void*>(static_cast<const void*>(&n)), nullptr);
         }
         // ItemImport handled by ModuleLoader
@@ -160,6 +184,7 @@ void ScopeBuilder::resolveClass(ItemClass& cls, Scope* scope) {
     TyPtr selfTy = sym->ty;
     cs->setSelfTy(selfTy);
     cs->setClassDef(def);
+    cs->declare("this", SymbolKind::Value, nullptr, selfTy);
     scope->addChildMod(cls.name, std::move(classScope));
 
     // Register type parameters
@@ -207,6 +232,7 @@ void ScopeBuilder::resolveClass(ItemClass& cls, Scope* scope) {
         MethodInfo mi;
         mi.name = m.name;
         mi.funcType = nullptr; // resolved during type checking
+        mi.arity = static_cast<uint32_t>(m.params.size());
         mi.isOpen = m.isOpen;
         mi.isAbstract = m.isAbstract;
         mi.isOverride = m.isOverride;
@@ -214,7 +240,7 @@ void ScopeBuilder::resolveClass(ItemClass& cls, Scope* scope) {
         // Check for override: if method exists in super, reuse vtable index
         if (mi.isOverride) {
             for (auto& existing : def->methods) {
-                if (existing.name == mi.name) {
+                if (existing.name == mi.name && existing.arity == mi.arity) {
                     mi.vtableIndex = existing.vtableIndex;
                     // Replace inherited method with overridden one
                     existing = mi;
@@ -359,8 +385,22 @@ bool ScopeBuilder::checkInterfaceConformance(ClassDef& def, Scope* scope) {
             }
 
             if (!found) {
-                // Class does not implement this interface method
-                return false;
+                if (!im.isAbstract) {
+                    // Interface provides a default — inject into class vtable
+                    MethodInfo defaultMi;
+                    defaultMi.name = im.name;
+                    defaultMi.funcType = im.funcType;
+                    defaultMi.isInterfaceDefault = true;
+                    defaultMi.defaultIfaceName = iname;
+                    defaultMi.isOpen = true;
+                    defaultMi.vtableIndex = static_cast<uint32_t>(def.vtable.size());
+                    def.vtable.push_back(static_cast<uint32_t>(def.methods.size()));
+                    def.methods.push_back(std::move(defaultMi));
+                    itable.slotMap[imIdx] = defaultMi.vtableIndex;
+                    found = true;
+                } else {
+                    return false;
+                }
             }
         }
 
@@ -439,6 +479,7 @@ void ScopeBuilder::resolveInterface(ItemInterface& iface, Scope* scope) {
     for (const auto& m : iface.methods) {
         MethodInfo mi;
         mi.name = m.name;
+        mi.arity = static_cast<uint32_t>(m.params.size());
         mi.isAbstract = !m.defaultBody; // abstract if no default body
 
         // Build funcType: (self: Interface, params...) -> ret
@@ -466,11 +507,13 @@ void ScopeBuilder::resolveObject(ItemObject& obj, Scope* scope) {
     if (!sym || !sym->ty || sym->ty->kind() != TyKind::Class_) return;
     auto& classTy = std::get<TyClass>(*sym->ty);
     auto def = classTy.def;
+    obj.globalSlot = sym->globalSlot;
 
     auto objScope = std::make_unique<Scope>(scope);
     Scope* os = objScope.get();
     os->setSelfTy(sym->ty);
     os->setClassDef(def);
+    os->declare("this", SymbolKind::Value, nullptr, sym->ty);
     scope->addChildMod(obj.name, std::move(objScope));
 
     // Inherit from superclass if any
@@ -497,11 +540,16 @@ void ScopeBuilder::resolveObject(ItemObject& obj, Scope* scope) {
         MethodInfo mi;
         mi.name = m.name;
         mi.funcType = nullptr;
+        mi.arity = static_cast<uint32_t>(m.params.size());
+        mi.isOpen = m.isOpen;
+        mi.isAbstract = m.isAbstract;
+        mi.isOverride = m.isOverride;
         def->methods.push_back(mi);
         os->declare(m.name, SymbolKind::Value, nullptr, nullptr);
     }
 
     buildVTable(*def);
+    if (!def->interfaceNames.empty()) checkInterfaceConformance(*def, scope);
 }
 
 // ============================================================
@@ -524,17 +572,55 @@ void ScopeBuilder::resolveEnumClass(ItemEnumClass& ec, Scope* scope) {
         es->declare(ec.generics[i].name, SymbolKind::Type, nullptr, paramTy);
     }
 
-    // Register variant names
+    // Register variant metadata
+    uint32_t maxPayloadSize = 0;
     uint32_t disc = 0;
     for (const auto& v : ec.variants) {
-        FieldInfo fi;
-        fi.name = v.name;
-        fi.type = nullptr;
-        fi.offset = disc++; // discriminant stored in offset field for variants
-        fi.isVal = true;
-        def->fields.push_back(fi);
-        es->declare(v.name, SymbolKind::Value, nullptr, nullptr);
+        EnumVariantInfo info;
+        info.name = v.name;
+        info.isTuple = v.isTuple;
+        info.discriminant = disc;
+
+        uint32_t nextOffset = 9;
+        for (const auto& field : v.fields) {
+            FieldInfo fi;
+            fi.name = field.first;
+            fi.type = nullptr;
+            if (field.second) {
+                if (auto* pathTy = std::get_if<AstTyPath>(field.second.get())) {
+                    const auto& tyName = pathTy->path.segs.back();
+                    if (tyName == "int") fi.type = mkInt();
+                    else if (tyName == "long") fi.type = mkLong();
+                    else if (tyName == "bool") fi.type = mkBool();
+                    else if (tyName == "char") fi.type = mkChar();
+                    else if (tyName == "str") fi.type = mkStr();
+                    else if (tyName == "float") fi.type = mkFloat();
+                    else if (tyName == "double") fi.type = mkDouble();
+                    else if (Symbol* local = es->lookupLocal(tyName)) fi.type = local->ty;
+                    else if (Symbol* resolved = scope->lookup(tyName)) fi.type = resolved->ty;
+                }
+            }
+            fi.offset = nextOffset;
+            fi.isVal = true;
+            info.fields.push_back(fi);
+            nextOffset += 9;
+        }
+        info.payloadSize = nextOffset;
+        if (info.payloadSize > maxPayloadSize) {
+            maxPayloadSize = info.payloadSize;
+        }
+
+        FieldInfo marker;
+        marker.name = v.name;
+        marker.type = nullptr;
+        marker.offset = disc;
+        marker.isVal = true;
+        def->fields.push_back(marker);
+        def->variants.push_back(std::move(info));
+        es->declare(v.name, SymbolKind::Value, nullptr, sym->ty);
+        disc += 1;
     }
+    def->totalFieldSize = maxPayloadSize == 0 ? 9 : maxPayloadSize;
 
     // Register methods
     for (const auto& m : ec.methods) {
@@ -595,10 +681,20 @@ std::unique_ptr<Scope> ScopeBuilder::build(Module& mod) {
         std::make_shared<Ty>(TyFn{{mkStr()}, mkInt()}));
     root->declare("i2s",     SymbolKind::Value, nullptr,
         std::make_shared<Ty>(TyFn{{mkInt()}, mkStr()}));
+    root->declare("chr",     SymbolKind::Value, nullptr,
+        std::make_shared<Ty>(TyFn{{mkInt()}, mkStr()}));
     root->declare("s2i",     SymbolKind::Value, nullptr,
         std::make_shared<Ty>(TyFn{{mkStr()}, mkInt()}));
     // sys: generic system call (unchecked — caller handles type)
     root->declare("syscall", SymbolKind::Value, nullptr, nullptr);
+    // float primitives
+    root->declare("itof",    SymbolKind::Value, nullptr, nullptr);
+    root->declare("ftoi",    SymbolKind::Value, nullptr, nullptr);
+    root->declare("fadd",    SymbolKind::Value, nullptr, nullptr);
+    root->declare("fsub",    SymbolKind::Value, nullptr, nullptr);
+    root->declare("fmul",    SymbolKind::Value, nullptr, nullptr);
+    root->declare("fdiv",    SymbolKind::Value, nullptr, nullptr);
+    root->declare("fneg",    SymbolKind::Value, nullptr, nullptr);
 
     // Pass 1: Declare all top-level names
     for (const auto& item : mod.items) {

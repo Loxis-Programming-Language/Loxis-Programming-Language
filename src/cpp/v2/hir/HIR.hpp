@@ -19,8 +19,12 @@ using HirPatPtr  = std::shared_ptr<struct HirPat>;
 // ============================================================
 struct HirPatWild {};
 struct HirPatBind { std::string name; bool mut = false; HirPatPtr sub; };
+struct HirPatEnum {
+    std::vector<HirPatPtr> elems;
+    uint32_t variantIndex = ~0u;
+};
 
-struct HirPat : std::variant<HirPatWild, HirPatBind> {
+struct HirPat : std::variant<HirPatWild, HirPatBind, HirPatEnum> {
     using variant::variant;
 };
 
@@ -31,7 +35,14 @@ struct HirLit {
     CoreTyPtr ty;
     std::variant<int64_t,uint64_t,double,bool,char,std::string> val;
 };
-struct HirPath { std::string name; std::vector<CoreTyPtr> typeArgs; CoreTyPtr ty; };
+struct HirPath {
+    std::string name;
+    std::vector<CoreTyPtr> typeArgs;
+    CoreTyPtr ty;
+    bool isStaticFunction = false;
+    uint32_t captureOffset = ~0u;
+    uint32_t globalSlot = ~0u;
+};
 struct HirTuple { std::vector<HirExprPtr> elems; CoreTyPtr ty; };
 struct HirArray { std::vector<HirExprPtr> elems; CoreTyPtr ty; };
 struct HirFieldInit { std::string name; HirExprPtr expr; };
@@ -92,6 +103,26 @@ struct HirForceUnwrap { HirExprPtr expr; CoreTyPtr ty; };
 struct HirIs { HirExprPtr expr; uint32_t targetTypeId = ~0u; CoreTyPtr ty; };
 struct HirIsNot { HirExprPtr expr; uint32_t targetTypeId = ~0u; CoreTyPtr ty; };
 struct HirNull { CoreTyPtr ty; };
+struct HirClosureCapture {
+    std::string name;
+    CoreTyPtr ty;
+    uint32_t offset = 0;
+};
+struct HirClosure {
+    std::string functionName;
+    std::vector<HirClosureCapture> captures;
+    uint32_t envTypeId = ~0u;
+    CoreTyPtr ty;
+};
+struct HirEnumCtor {
+    std::string enumName;
+    uint32_t typeId = ~0u;
+    uint32_t variantIndex = ~0u;
+    uint32_t totalFieldSize = 0;
+    std::vector<uint32_t> fieldOffsets;
+    std::vector<HirExprPtr> args;
+    CoreTyPtr ty;
+};
 
 struct HirExpr : std::variant<
     HirLit, HirPath, HirTuple, HirArray, HirStruct, HirCall, HirMethodCall,
@@ -99,7 +130,7 @@ struct HirExpr : std::variant<
     HirWhile, HirFor, HirLoop, HirWhen, HirBreak, HirContinue, HirReturn,
     HirRef, HirDeref, HirTry, HirCast,
     HirSafeCall, HirSafeField, HirElvis, HirForceUnwrap,
-    HirIs, HirIsNot, HirNull
+    HirIs, HirIsNot, HirNull, HirClosure, HirEnumCtor
 > {
     using variant::variant;
 };
@@ -123,6 +154,7 @@ struct HirFn {
     std::vector<std::pair<std::string, CoreTyPtr>> params;
     CoreTyPtr ret;
     HirExprPtr body;
+    uint32_t closureEnvTypeId = ~0u;
 };
 
 struct HirCtorParam {
@@ -130,6 +162,14 @@ struct HirCtorParam {
     CoreTyPtr ty;
     bool isVal = false;
     bool isVar = false;
+};
+
+struct HirClassField {
+    std::string name;
+    CoreTyPtr ty;
+    uint32_t offset = 0;
+    bool isVal = true;
+    HirExprPtr initializer;
 };
 
 struct HirClass {
@@ -141,7 +181,11 @@ struct HirClass {
     std::vector<std::string> vtableMethodNames;
     std::vector<ItableEntry> itables;
     std::vector<HirCtorParam> ctorParams;
+    std::vector<HirClassField> fields;
+    std::vector<HirExprPtr> initBlocks;
     std::vector<HirFn> methods;
+    bool isSingleton = false;
+    uint32_t globalSlot = ~0u;
 };
 
 struct HirItem : std::variant<HirFn, HirClass> {

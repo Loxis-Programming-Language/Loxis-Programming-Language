@@ -1,0 +1,17 @@
+class Box(var value: int)
+
+fun maybe(flag: int) -> Box? {
+    if flag == 0 {
+        return null
+    }
+    return Box(42)
+}
+
+fun main() -> int {
+    val a = maybe(0)
+    val b = maybe(1)
+    print((a ?: Box(7)).value)
+    print((b ?: Box(7)).value)
+    print(b!!.value)
+    return 0
+}

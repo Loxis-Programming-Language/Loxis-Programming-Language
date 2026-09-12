@@ -1,0 +1,186 @@
+package loxis.collections
+
+class List<T>(var buffer: int, var len: int, var cap: int) {
+    fun size() -> int {
+        return this.len
+    }
+
+    fun capacity() -> int {
+        return this.cap
+    }
+
+    fun get(index: int) -> T {
+        return arrayGet(this.buffer, index)
+    }
+
+    fun set(index: int, value: T) -> unit {
+        arraySet(this.buffer, index, value)
+    }
+
+    fun push(value: T) -> unit {
+        if this.len >= this.cap {
+            var nextCap = this.cap * 2
+            if nextCap <= 0 {
+                nextCap = 1
+            }
+
+            val next = arrayNew(nextCap)
+            var i = 0
+            while i < this.len {
+                arraySet(next, i, arrayGet(this.buffer, i))
+                i += 1
+            }
+
+            arrayFree(this.buffer)
+            this.buffer = next
+            this.cap = nextCap
+        }
+
+        arraySet(this.buffer, this.len, value)
+        this.len += 1
+    }
+}
+
+fun listNew<T>(capacity: int) -> List<T> {
+    return List<T>(arrayNew(capacity), 0, capacity)
+}
+
+fun listFree<T>(list: List<T>) -> unit {
+    arrayFree(list.buffer)
+}
+
+fun listForEach<T>(list: List<T>, f: fun(T) -> unit) -> unit {
+    var i = 0
+    while i < list.size() {
+        f(list.get(i))
+        i += 1
+    }
+}
+
+fun listMap<T, U>(list: List<T>, f: fun(T) -> U) -> List<U> {
+    val out = listNew<U>(list.size())
+    var i = 0
+    while i < list.size() {
+        out.push(f(list.get(i)))
+        i += 1
+    }
+    return out
+}
+
+fun listFilter<T>(list: List<T>, pred: fun(T) -> bool) -> List<T> {
+    val out = listNew<T>(list.size())
+    var i = 0
+    while i < list.size() {
+        val value = list.get(i)
+        if pred(value) {
+            out.push(value)
+        }
+        i += 1
+    }
+    return out
+}
+
+fun listFold<T, U>(list: List<T>, initial: U, f: fun(U, T) -> U) -> U {
+    var acc = initial
+    var i = 0
+    while i < list.size() {
+        acc = f(acc, list.get(i))
+        i += 1
+    }
+    return acc
+}
+
+fun listCount<T>(list: List<T>, pred: fun(T) -> bool) -> int {
+    var count = 0
+    var i = 0
+    while i < list.size() {
+        if pred(list.get(i)) {
+            count += 1
+        }
+        i += 1
+    }
+    return count
+}
+
+fun listAny<T>(list: List<T>, pred: fun(T) -> bool) -> bool {
+    var i = 0
+    while i < list.size() {
+        if pred(list.get(i)) {
+            return true
+        }
+        i += 1
+    }
+    return false
+}
+
+fun listAll<T>(list: List<T>, pred: fun(T) -> bool) -> bool {
+    var i = 0
+    while i < list.size() {
+        if !pred(list.get(i)) {
+            return false
+        }
+        i += 1
+    }
+    return true
+}
+
+fun listAppend<T>(left: List<T>, right: List<T>) -> List<T> {
+    val out = listNew<T>(left.size() + right.size())
+    var i = 0
+    while i < left.size() {
+        out.push(left.get(i))
+        i += 1
+    }
+
+    var j = 0
+    while j < right.size() {
+        out.push(right.get(j))
+        j += 1
+    }
+    return out
+}
+
+fun listReverse<T>(list: List<T>) -> unit {
+    var left = 0
+    var right = list.size() - 1
+    while left < right {
+        val a = list.get(left)
+        val b = list.get(right)
+        list.set(left, b)
+        list.set(right, a)
+        left += 1
+        right -= 1
+    }
+}
+
+fun listReversed<T>(list: List<T>) -> List<T> {
+    val out = listNew<T>(list.size())
+    var i = list.size() - 1
+    while i >= 0 {
+        out.push(list.get(i))
+        i -= 1
+    }
+    return out
+}
+
+fun listSortBy<T>(list: List<T>, before: fun(T, T) -> bool) -> unit {
+    var i = 0
+    while i < list.size() {
+        var best = i
+        var j = i + 1
+        while j < list.size() {
+            if before(list.get(j), list.get(best)) {
+                best = j
+            }
+            j += 1
+        }
+
+        if best != i {
+            val a = list.get(i)
+            val b = list.get(best)
+            list.set(i, b)
+            list.set(best, a)
+        }
+        i += 1
+    }
+}

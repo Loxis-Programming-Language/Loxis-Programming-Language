@@ -15,6 +15,9 @@ struct Symbol {
     SymbolKind kind;
     void* node;
     TyPtr ty;
+    bool isTopLevelProperty = false;
+    uint32_t globalSlot = ~0u;
+    std::vector<std::pair<void*, TyPtr>> overloads;
 };
 
 class Scope {
@@ -57,6 +60,7 @@ public:
     std::unique_ptr<Scope> build(Module& mod);
 
 private:
+    uint32_t m_nextGlobalSlot = 0;
     // Pass 1: declare names in scope
     void declareItem(ItemPtr item, Scope* scope);
     // Pass 2: resolve internals (class fields/methods, interface methods, inheritance)

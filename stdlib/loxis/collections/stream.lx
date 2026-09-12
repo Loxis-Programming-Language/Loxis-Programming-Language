@@ -1,0 +1,53 @@
+﻿package loxis.collections.stream
+
+import loxis.collections.list
+import loxis.collections.iterator
+
+// ============================================================
+//  Stream<T> - fluent wrapper around Iterator<T>
+// ============================================================
+
+class Stream<T>(var iter: Iterator<T>) {
+
+    fun forEach(f: fun(T) -> unit) -> unit {
+        iterForEach<T>(this.iter, f)
+    }
+
+    fun count() -> int {
+        return iterCount<T>(this.iter)
+    }
+
+    fun toList() -> List<T> {
+        var result = listNew<T>(8)
+        var item = this.iter.next()
+        while item != null {
+            result.push(item!!)
+            item = this.iter.next()
+        }
+        return result
+    }
+
+    fun any(pred: fun(T) -> bool) -> bool {
+        return iterAny<T>(this.iter, pred)
+    }
+
+    fun all(pred: fun(T) -> bool) -> bool {
+        return iterAll<T>(this.iter, pred)
+    }
+
+    fun find(pred: fun(T) -> bool) -> T? {
+        return iterFind<T>(this.iter, pred)
+    }
+}
+
+// ============================================================
+//  Constructors
+// ============================================================
+
+fun streamOf<T>(iter: Iterator<T>) -> Stream<T> {
+    return Stream<T>(iter)
+}
+
+fun streamFromList<T>(list: List<T>) -> Stream<T> {
+    return Stream<T>(listIter<T>(list))
+}

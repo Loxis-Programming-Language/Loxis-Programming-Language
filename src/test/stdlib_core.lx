@@ -1,0 +1,15 @@
+import loxis.ptr
+
+fun main() -> int {
+    val arr = arrayNew(2)
+    arraySet(arr, 0, 11)
+    arraySet(arr, 1, 22)
+    print(arrayLen(arr))
+    print(arrayGet(arr, 0) + arrayGet(arr, 1))
+    arrayFree(arr)
+
+    print(strlen(strcat("ab", "cd")))
+    print(s2i("123") + 7)
+    print(ftoi(3.0 + 4.0))
+    return 0
+}

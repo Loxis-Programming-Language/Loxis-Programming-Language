@@ -1,0 +1,15 @@
+class Animal(var kind: int)
+
+fun main() -> int {
+    val x: Animal? = Animal(1)
+    if x != null {
+        print(x.kind)
+    }
+    if x is Animal {
+        print(99)
+    }
+    if x !is Animal {
+        print(0)
+    }
+    return 0
+}

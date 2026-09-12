@@ -1,0 +1,23 @@
+// GC tree probe: build a full binary tree per iteration, drop the root, next.
+// Purely acyclic — both collectors must reclaim it; the point is that AARC does
+// it through its graph bookkeeping rather than a refcount cascade shortcut.
+class Node(var left: Node?, var right: Node?, var tag: int)
+
+fun build(depth: int, tag: int) -> Node {
+    if depth == 0 {
+        return Node(null, null, tag)
+    }
+    return Node(build(depth - 1, tag), build(depth - 1, tag), tag)
+}
+
+fun main() -> int {
+    var i = 0
+    var sum = 0
+    while i < 100 {
+        val t = build(10, i)
+        sum = sum + t.tag
+        i += 1
+    }
+    print(sum)
+    return 0
+}

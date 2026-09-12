@@ -1,7 +1,17 @@
 package loxis.fileio
 
-// --- File I/O (stub — syscall 10 reserved) ---
+fun readText(path: str) -> str {
+    return nativeFileReadText(path)
+}
 
-fun openFile(path: str) -> int {
-    return syscall(10, path)
+fun writeText(path: str, content: str) -> int {
+    return nativeFileWriteText(path, content)
+}
+
+fun appendText(path: str, content: str) -> int {
+    return nativeFileAppendText(path, content)
+}
+
+fun removeFile(path: str) -> int {
+    return nativeFileRemove(path)
 }

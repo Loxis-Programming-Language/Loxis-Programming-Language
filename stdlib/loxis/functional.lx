@@ -1,0 +1,9 @@
+package loxis.functional
+
+fun apply<T, U>(f: fun(T) -> U, value: T) -> U {
+    return f(value)
+}
+
+fun twice<T>(f: fun(T) -> T, value: T) -> T {
+    return f(f(value))
+}

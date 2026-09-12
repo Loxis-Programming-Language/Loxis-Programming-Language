@@ -1,22 +1,32 @@
 package demo
 
-// --- OOP Definitions (parse + type-check pass) ---
-open class Animal(val name: str) {
-    open fun speak(): str = "..."
-}
-class Dog(name: str, val breed: str) : Animal(name) {
-    override fun speak(): str = "Woof"
-}
-interface Pet { fun play(): str }
-class Cat(name: str) : Animal(name), Pet {
-    override fun speak(): str = "Meow"
-    override fun play(): str = "chasing toy"
-}
-data class Point(val x: int, val y: int)
-object Config { val version: str = "1.0" }
-enum class Color { RED, GREEN, BLUE }
+// ============================================================
+//  Loxis v2 — Interface & chr builtin demo
+// ============================================================
 
-// --- Functions ---
+// --- Interface with default method ---
+
+interface Greeter {
+    fun greet(name: str) -> str {
+        return "Hello, " + name
+    }
+}
+
+class Person : Greeter {
+    // Inherits default greet from Greeter
+}
+
+class LoudPerson : Greeter {
+    override fun greet(name: str) -> str {
+        return "HELLO, " + name + "!!!"
+    }
+}
+
+fun useGreeter(g: Greeter, name: str) -> str {
+    return g.greet(name)
+}
+
+// --- Arithmetic ---
 
 fun add(a: int, b: int) -> int { return a + b }
 fun mul(a: int, b: int) -> int { return a * b }
@@ -37,15 +47,33 @@ fun factorial(n: int) -> int {
     return n * factorial(n - 1)
 }
 
-// --- Main ---
+// ============================================================
+//  Main
+// ============================================================
 
 fun main() {
-    print("Loxis v2.1 Demo")
+    print("=== Loxis v2 ===")
 
+    // --- Interface defaults ---
+    print("--- Interface ---")
+    val p = Person()
+    print(useGreeter(p, "Alvia"))
+
+    val lp = LoudPerson()
+    print(useGreeter(lp, "East"))
+
+    // --- chr builtin ---
+    print("--- chr builtin ---")
+    print(chr(76))     // L
+    print(chr(111))    // o
+    print(chr(120))    // x
+
+    // --- Arithmetic ---
     print("--- Arithmetic ---")
     print(add(10, 32))
     print(mul(10, 32))
 
+    // --- Fibonacci ---
     print("--- Fibonacci ---")
     var i = 0
     while i < 10 {
@@ -53,10 +81,12 @@ fun main() {
         i = i + 1
     }
 
+    // --- Factorial ---
     print("--- Factorial ---")
     print(factorial(5))
     print(factorial(6))
 
+    // --- Countdown ---
     print("--- Countdown ---")
     countdown(3)
 

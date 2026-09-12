@@ -21,6 +21,14 @@ private:
     uint32_t inferCounter = 0;
     std::vector<std::string> errors;
     TyPtr currentRetTy = nullptr;
+    uint32_t closureCounter = 0;
+    uint32_t closureEnvTypeCounter = 0;
+
+    struct ClosureContext {
+        Scope* scope = nullptr;
+        ExprClosure* expr = nullptr;
+    };
+    std::vector<ClosureContext> closureScopes;
 
     struct LoopCtx {
         TyPtr expected;
@@ -32,6 +40,7 @@ private:
     void error(const std::string& msg);
 
     TyPtr checkExpr(ExprPtr e, Scope* sc);
+    TyPtr checkClosure(ExprClosure& n, Scope* sc, TyPtr expectedFn = nullptr);
     void checkStmt(StmtPtr s, Scope* sc);
     void checkItem(ItemPtr i, Scope* sc);
 
@@ -49,7 +58,7 @@ private:
     bool isMutablePlace(ExprPtr e, Scope* sc);
 
     // Class/interface helpers
-    const MethodInfo* lookupMethod(TyPtr recv, const std::string& name);
+    const MethodInfo* lookupMethod(TyPtr recv, const std::string& name, size_t arity);
     const FieldInfo*  lookupField(TyPtr recv, const std::string& name);
     TyPtr unwrapNullable(TyPtr t);
 

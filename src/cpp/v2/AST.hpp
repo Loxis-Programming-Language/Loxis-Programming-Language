@@ -54,8 +54,17 @@ struct PatBind { std::string name; bool mut = false; PatPtr sub; };
 struct PatLit { ExprPtr expr; };
 struct PatTuple { std::vector<PatPtr> elems; };
 struct PatField { std::string name; PatPtr pat; };
-struct PatStruct { Path path; std::vector<PatField> fields; bool rest = false; };
-struct PatEnum { Path path; std::vector<PatPtr> elems; };
+struct PatStruct {
+    Path path;
+    std::vector<PatField> fields;
+    bool rest = false;
+    uint32_t variantIndex = ~0u;
+};
+struct PatEnum {
+    Path path;
+    std::vector<PatPtr> elems;
+    uint32_t variantIndex = ~0u;
+};
 struct PatRef { bool mut = false; PatPtr pat; };
 struct PatRest {};
 
@@ -71,8 +80,15 @@ struct ExprLit {
 };
 struct ExprPath { Path path;
     bool isField = false;       // Set by TypeChecker: this.field access via bare name
+    bool isEnumVariant = false; // TypeChecker: enum variant constructor/value reference
+    bool isTopLevelVal = false; // TypeChecker: top-level val/var/const reference
+    std::string topLevelGetter; // Synthetic getter function name for top-level val
     uint32_t fieldOffset = 0;   // Byte offset in object
+    uint32_t variantIndex = ~0u; // Enum discriminant / variant index
+    uint32_t captureOffset = ~0u; // Byte offset in closure environment payload
     TyPtr resolvedTy = nullptr; // TypeChecker: fully resolved type (including generic substitution)
+    bool isStaticFunction = false; // Top-level function symbol, usable as function pointer
+    uint32_t globalSlot = ~0u;     // Persistent VM global slot
 };
 struct ExprTuple { std::vector<ExprPtr> elems; };
 struct ExprArray { std::vector<ExprPtr> elems; };
@@ -89,6 +105,7 @@ struct ExprCall {
     ExprPtr func;
     std::vector<ExprPtr> args;
     std::string ctorLabel; // "ClassName.init" when calling a constructor
+    std::string mangledName; // Overloaded function target label
     std::vector<TyPtr> resolvedTypeArgs; // TypeChecker: concrete generic args
     TyPtr resolvedTy = nullptr; // TypeChecker: return type of the call
 };
@@ -98,6 +115,7 @@ struct ExprMethodCall { ExprPtr recv; std::string method; std::vector<ExprPtr> a
     bool isInterfaceDispatch = false;
     uint32_t ifaceTypeId = ~0u;
     uint32_t ifaceMethodIndex = 0;
+    TyPtr resolvedTy = nullptr;
 };
 struct ExprField { ExprPtr obj; std::string field;
     uint32_t fieldOffset = 0;         // Filled by TypeChecker: byte offset in object
@@ -106,10 +124,24 @@ struct ExprIndex { ExprPtr obj; ExprPtr idx; };
 struct ExprUnary {
     enum Op { Neg, Not, Deref, Ref, RefMut } op;
     ExprPtr operand;
+    TyPtr resolvedTy = nullptr;
+    std::string qualifiedName;
+    uint32_t vtableIndex = ~0u;
+    bool isInterfaceDispatch = false;
+    uint32_t ifaceTypeId = ~0u;
+    uint32_t ifaceMethodIndex = 0;
+    bool isOverloaded = false;
 };
 struct ExprBinary {
     enum Op { Add,Sub,Mul,Div,Rem,Shl,Shr,BitAnd,BitOr,BitXor,And,Or,Eq,Ne,Lt,Le,Gt,Ge } op;
     ExprPtr l, r;
+    TyPtr resolvedTy = nullptr;
+    std::string qualifiedName;
+    uint32_t vtableIndex = ~0u;
+    bool isInterfaceDispatch = false;
+    uint32_t ifaceTypeId = ~0u;
+    uint32_t ifaceMethodIndex = 0;
+    bool isOverloaded = false;
 };
 struct ExprAssign {
     enum Op { Set,AddEq,SubEq,MulEq,DivEq,RemEq,AmpEq,PipeEq,CaretEq,ShlEq,ShrEq } op;
@@ -128,6 +160,7 @@ struct ExprFor {
     IterKind iterKind = IterKind::None;
     uint64_t arrayLen = 0;
     std::string iterClassName;
+    TyPtr iterResolvedTy = nullptr;
 };
 struct ExprLoop { ExprPtr body; std::optional<std::string> label; };
 
@@ -142,19 +175,49 @@ struct ExprWhen { ExprPtr scrut; std::vector<WhenArm> arms; };
 struct ExprBreak { std::optional<std::string> label; ExprPtr expr; };
 struct ExprContinue { std::optional<std::string> label; };
 struct ExprReturn { ExprPtr expr; };
-struct ExprClosure { std::vector<std::pair<std::string,bool>> params; TypePtr ret; ExprPtr body; };
+struct ClosureCapture {
+    std::string name;
+    TyPtr ty = nullptr;
+    uint32_t offset = 0;
+};
+
+struct ExprClosure {
+    std::vector<std::pair<std::string,TypePtr>> params;
+    TypePtr ret;
+    ExprPtr body;
+    std::vector<TyPtr> resolvedParamTys;
+    TyPtr resolvedRetTy = nullptr;
+    std::vector<ClosureCapture> captures;
+    uint32_t envTypeId = ~0u;
+    std::string loweredName;
+};
 struct ExprRef { bool mut = false; ExprPtr expr; };
 struct ExprDeref { ExprPtr expr; };
 struct ExprTry { ExprPtr expr; };
 struct ExprCast { ExprPtr expr; TypePtr ty; };
 
 // Nullable & type test expressions
-struct ExprSafeCall { ExprPtr recv; std::string method; std::vector<ExprPtr> args; };
-struct ExprSafeField { ExprPtr recv; std::string field; };
-struct ExprElvis { ExprPtr lhs; ExprPtr rhs; };
-struct ExprForceUnwrap { ExprPtr expr; };
-struct ExprIs { ExprPtr expr; TypePtr ty; };
-struct ExprIsNot { ExprPtr expr; TypePtr ty; };
+struct ExprSafeCall {
+    ExprPtr recv;
+    std::string method;
+    std::vector<ExprPtr> args;
+    std::string qualifiedName;
+    uint32_t vtableIndex = ~0u;
+    bool isInterfaceDispatch = false;
+    uint32_t ifaceTypeId = ~0u;
+    uint32_t ifaceMethodIndex = 0;
+    TyPtr resolvedTy = nullptr;
+};
+struct ExprSafeField {
+    ExprPtr recv;
+    std::string field;
+    uint32_t fieldOffset = 0;
+    TyPtr resolvedTy = nullptr;
+};
+struct ExprElvis { ExprPtr lhs; ExprPtr rhs; TyPtr resolvedTy = nullptr; };
+struct ExprForceUnwrap { ExprPtr expr; TyPtr resolvedTy = nullptr; };
+struct ExprIs { ExprPtr expr; TypePtr ty; uint32_t targetTypeId = ~0u; };
+struct ExprIsNot { ExprPtr expr; TypePtr ty; uint32_t targetTypeId = ~0u; };
 struct ExprNull {};
 struct ExprStringTemplate { std::vector<std::variant<std::string, ExprPtr>> parts; };
 
@@ -172,7 +235,7 @@ struct Expr : std::variant<
 // ============================================================
 // Statements
 // ============================================================
-struct StmtLet { PatPtr pat; TypePtr ty; ExprPtr init; };
+struct StmtLet { PatPtr pat; TypePtr ty; ExprPtr init; TyPtr resolvedTy = nullptr; };
 struct StmtExpr { ExprPtr expr; bool semi; };
 struct StmtItem { ItemPtr item; };
 
@@ -225,6 +288,10 @@ struct ItemFun {
     bool isOpen = false;
     bool isOverride = false;
     bool isAbstract = false;
+    std::string backendName; // TypeChecker: overloaded function label
+    // Extension function support
+    TypePtr receiverType;     // non-null for extension functions: the type being extended
+    std::string receiverName = "this"; // name bound to the receiver value
 };
 
 // Class
@@ -292,6 +359,12 @@ struct ItemObject {
     std::vector<FieldDecl> fields;
     std::vector<ItemFun> methods;
     std::vector<StmtPtr> initBlocks;
+    uint32_t totalFieldSize = 0;
+    uint32_t typeId = ~0u;
+    uint32_t globalSlot = ~0u;
+    uint32_t vtableEntryCount = 0;
+    std::vector<std::string> vtableMethodNames;
+    std::vector<ItableEntry> itables;
 };
 
 // Top-level properties
@@ -316,9 +389,15 @@ struct ItemConst {
     ExprPtr init;
 };
 
+struct ItemTypeAlias {
+    std::string name;
+    Visibility visibility = Visibility::Public;
+    TypePtr underlying;
+};
+
 struct Item : std::variant<
     ItemFun, ItemClass, ItemEnumClass, ItemInterface, ItemObject,
-    ItemImport, ItemVal, ItemVar, ItemConst
+    ItemImport, ItemVal, ItemVar, ItemConst, ItemTypeAlias
 > {
     using variant::variant;
 };

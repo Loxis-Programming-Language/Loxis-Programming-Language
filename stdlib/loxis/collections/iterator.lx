@@ -1,0 +1,92 @@
+package loxis.collections.iterator
+
+import loxis.collections.list
+
+// ============================================================
+//  Iterator<T> interface
+// ============================================================
+
+interface Iterator<T> {
+    fun next() -> T?
+}
+
+// ============================================================
+//  Simple iterator that always returns null
+// ============================================================
+
+class EmptyIterator<T>() : Iterator<T> {
+    override fun next() -> T? {
+        return null
+    }
+}
+
+fun emptyIter<T>() -> EmptyIterator<T> {
+    return EmptyIterator<T>()
+}
+
+class ListIterator<T>(var list: List<T>, var index: int) : Iterator<T> {
+    override fun next() -> T? {
+        if this.index >= this.list.len {
+            return null
+        }
+        val value = arrayGet(this.list.buffer, this.index)
+        this.index += 1
+        return value
+    }
+}
+
+fun listIter<T>(list: List<T>) -> ListIterator<T> {
+    return ListIterator<T>(list, 0)
+}
+
+fun iterForEach<T>(iter: Iterator<T>, f: fun(T) -> unit) -> unit {
+    var item = iter.next()
+    while item != null {
+        f(item!!)
+        item = iter.next()
+    }
+}
+
+fun iterCount<T>(iter: Iterator<T>) -> int {
+    var count = 0
+    var item = iter.next()
+    while item != null {
+        count += 1
+        item = iter.next()
+    }
+    return count
+}
+
+fun iterAny<T>(iter: Iterator<T>, pred: fun(T) -> bool) -> bool {
+    var item = iter.next()
+    while item != null {
+        if pred(item!!) {
+            return true
+        }
+        item = iter.next()
+    }
+    return false
+}
+
+fun iterAll<T>(iter: Iterator<T>, pred: fun(T) -> bool) -> bool {
+    var item = iter.next()
+    while item != null {
+        if !pred(item!!) {
+            return false
+        }
+        item = iter.next()
+    }
+    return true
+}
+
+fun iterFind<T>(iter: Iterator<T>, pred: fun(T) -> bool) -> T? {
+    var item = iter.next()
+    while item != null {
+        val value = item!!
+        if pred(value) {
+            return value
+        }
+        item = iter.next()
+    }
+    return null
+}

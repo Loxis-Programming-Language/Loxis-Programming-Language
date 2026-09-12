@@ -1,11 +1,178 @@
 package loxis.io
 
-// --- Console I/O ---
+import loxis.collections.list
 
-fun writechar(c: int) -> unit {
+// ============================================================
+//  Loxis Standard I/O
+// ============================================================
+//
+//  Console: stdin / stdout
+//  File:    read / write / append / remove / exists / lines
+//
+//  VM syscalls used:
+//    0  READCHAR    — read one char from stdin
+//    3  CHR         — int code → single-char string
+//    10 WRITE       — write int or str to stdout (no newline)
+//    40 FILEREAD    — read entire file → str
+//    41 FILEWRITE   — write str to file (truncate)
+//    42 FILEAPPEND  — append str to file
+//    43 FILEREMOVE  — delete file
+
+// --- low-level console ---
+
+fun readChar() -> int {
+    return syscall(0)
+}
+
+fun writeChar(c: int) -> unit {
     write(c)
 }
 
-fun readchar() -> int {
-    return syscall(0)
+// --- stdin ---
+
+fun readLine() -> str {
+    var c = readChar()
+    // skip leading \r, handle EOF / empty
+    while c == 13 {
+        c = readChar()
+    }
+    if c < 0 || c == 10 {
+        return ""
+    }
+    var result = chr(c)
+    c = readChar()
+    while c >= 0 {
+        if c == 10 {
+            return result
+        }
+        if c != 13 {
+            result = result + chr(c)
+        }
+        c = readChar()
+    }
+    return result
+}
+
+fun readAll() -> str {
+    var c = readChar()
+    while c == 13 {
+        c = readChar()
+    }
+    if c < 0 {
+        return ""
+    }
+    var result = chr(c)
+    c = readChar()
+    while c >= 0 {
+        if c != 13 {
+            result = result + chr(c)
+        }
+        c = readChar()
+    }
+    return result
+}
+
+fun readLines() -> List<str> {
+    var lines = listNew<str>(8)
+    var c = readChar()
+    var inLine = false
+    var line = ""
+    while c >= 0 {
+        if c == 10 {
+            lines.push(line)
+            line = ""
+            inLine = false
+        } else if c != 13 {
+            if inLine {
+                line = line + chr(c)
+            } else {
+                line = chr(c)
+                inLine = true
+            }
+        }
+        c = readChar()
+    }
+    if inLine {
+        lines.push(line)
+    }
+    return lines
+}
+
+// --- stdout ---
+
+fun writeLine(s: str) -> unit {
+    write(s)
+    write(chr(10))
+}
+
+// ============================================================
+//  File I/O
+// ============================================================
+
+fun readText(path: str) -> str {
+    return nativeFileReadText(path)
+}
+
+fun writeText(path: str, content: str) -> int {
+    return nativeFileWriteText(path, content)
+}
+
+fun appendText(path: str, content: str) -> int {
+    return nativeFileAppendText(path, content)
+}
+
+fun remove(path: str) -> int {
+    return nativeFileRemove(path)
+}
+
+fun exists(path: str) -> bool {
+    val content = nativeFileReadText(path)
+    return strlen(content) > 0
+}
+
+fun readLines(path: str) -> List<str> {
+    val content = nativeFileReadText(path)
+    var lines = listNew<str>(8)
+    val len = strlen(content)
+    if len == 0 {
+        return lines
+    }
+    var i = 0
+    var inLine = false
+    var line = ""
+    while i < len {
+        val ch = strchar(content, i)
+        if ch == 10 {
+            lines.push(line)
+            line = ""
+            inLine = false
+        } else if ch != 13 {
+            if inLine {
+                line = line + chr(ch)
+            } else {
+                line = chr(ch)
+                inLine = true
+            }
+        }
+        i += 1
+    }
+    if inLine {
+        lines.push(line)
+    }
+    return lines
+}
+
+fun writeLines(path: str, lines: List<str>) -> int {
+    val n = lines.size()
+    if n == 0 {
+        return nativeFileWriteText(path, "")
+    }
+    var joined = lines.get(0)
+    var i = 1
+    while i < n {
+        joined = joined + chr(10)
+        joined = joined + lines.get(i)
+        i += 1
+    }
+    return nativeFileWriteText(path, joined)
 }

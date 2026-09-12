@@ -17,9 +17,15 @@ struct LoweredClass {
     std::vector<ItableEntry> itables;
 };
 
+struct LoweredGlobalInit {
+    uint32_t slot = ~0u;
+    std::string initLabel;
+};
+
 struct LoweringOutput {
     std::vector<MirBody> bodies;
     std::vector<LoweredClass> classes;
+    std::vector<LoweredGlobalInit> globalInitializers;
 };
 
 class Lowering {
@@ -39,6 +45,7 @@ private:
     BlockId m_exitBlock = 0;
     bool m_blockTerminated = false;
     std::unordered_map<std::string, LocalId> m_scope;
+    std::optional<LocalId> m_closureEnvLocal;
     std::string m_currentClassName;
 
     LocalId newLocal(CoreTyPtr ty, const std::string& name = "", bool mut = false);

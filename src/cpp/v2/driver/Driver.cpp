@@ -10,7 +10,7 @@
 
 namespace loxis::v2 {
 
-int Driver::compileAndRun(const std::string& file, int maxInstr, bool verbose) {
+int Driver::compileToChunk(const std::string& file, bool verbose, Chunk& out) {
     try {
         if (verbose) {
             std::cout << "Loading modules...\n";
@@ -58,14 +58,30 @@ int Driver::compileAndRun(const std::string& file, int maxInstr, bool verbose) {
         }
 
         MIRCompiler compiler;
-        Chunk chunk = compiler.compile(output);
+        out = compiler.compile(output);
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << "\n";
+        return 1;
+    }
+}
 
-        if (verbose) {
-            std::cout << "Running VM (max instructions: " << maxInstr << ")...\n";
+int Driver::compileAndRun(const RunOptions& opts) {
+    Chunk chunk;
+    if (compileToChunk(opts.file, opts.verbose, chunk) != 0) return 1;
+
+    try {
+        if (opts.verbose) {
+            std::cout << "Running VM (max instructions: " << opts.maxInstr << ")...\n";
         }
 
-        VM vm(std::move(chunk), verbose);
-        vm.run(maxInstr);
+        VM vm(std::move(chunk), opts.verbose, opts.gc, opts.heapSlots);
+        vm.run(opts.maxInstr);
+
+        if (opts.gcStats) {
+            vm.finishGC();
+            vm.dumpGCStats(std::cerr);
+        }
 
         return 0;
     } catch (const std::exception& e) {

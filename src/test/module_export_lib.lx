@@ -1,0 +1,7 @@
+fun visible() -> int {
+    return 42
+}
+
+fun alsoVisible() -> int {
+    return 7
+}

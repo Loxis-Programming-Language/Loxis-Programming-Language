@@ -1,0 +1,11 @@
+import loxis.functional
+
+fun inc(x: int) -> int {
+    return x + 1
+}
+
+fun main() -> int {
+    print(apply<int, int>(inc, 5))
+    print(twice<int>(inc, 20))
+    return 0
+}

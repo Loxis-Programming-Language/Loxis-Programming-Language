@@ -1,0 +1,28 @@
+import loxis.collections.list
+
+fun main() -> int {
+    val xs = listNew<int>(4)
+    xs.push(3)
+    xs.push(1)
+    xs.push(4)
+    xs.push(2)
+
+    listSortBy<int>(xs, { a, b -> a < b })
+    print(xs.get(0))
+    print(xs.get(3))
+
+    listReverse<int>(xs)
+    print(xs.get(0) * 10 + xs.get(3))
+
+    val ys = listReversed<int>(xs)
+    print(ys.get(0) * 10 + ys.get(3))
+
+    val zs = listAppend<int>(xs, ys)
+    print(zs.size())
+    print(zs.get(0) + zs.get(7))
+
+    listFree<int>(zs)
+    listFree<int>(ys)
+    listFree<int>(xs)
+    return 0
+}

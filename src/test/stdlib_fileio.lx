@@ -1,0 +1,16 @@
+import loxis.fileio
+import loxis.text
+
+fun main() -> int {
+    val path = "loxis_fileio_smoke.tmp"
+    print(writeText(path, "hello"))
+    print(appendText(path, "-std"))
+    print(appendText(path, "lib"))
+
+    val content = readText(path)
+    print(len(content))
+    print(indexOf(content, "std"))
+    print(content)
+    print(removeFile(path))
+    return 0
+}

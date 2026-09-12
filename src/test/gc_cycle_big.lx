@@ -1,0 +1,15 @@
+// Same shape as gc_cycle.lx but large enough that "never scan during the run"
+// is not a free option: 200000 two-node cycles = 400000 objects.
+class Node(var next: Node?, var tag: int)
+
+fun main() -> int {
+    var i = 0
+    while i < 200000 {
+        val a = Node(null, i)
+        val b = Node(a, i)
+        a.next = b
+        i += 1
+    }
+    print(999)
+    return 0
+}

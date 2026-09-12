@@ -31,8 +31,9 @@ enum class MirAssignOp {
 struct OpCopy { LocalId local; };
 struct OpMove { LocalId local; };
 struct OpConst { std::variant<int64_t,uint64_t,double,bool,char,std::string> val; };
+struct OpLabel { std::string label; };
 
-struct Operand : std::variant<OpCopy, OpMove, OpConst> {
+struct Operand : std::variant<OpCopy, OpMove, OpConst, OpLabel> {
     using variant::variant;
 };
 
@@ -52,14 +53,18 @@ struct RvIndex { LocalId local; Operand idx; };
 struct RvLen { LocalId local; };
 struct RvDiscriminant { LocalId local; };
 struct RvAlloc { uint32_t size; uint32_t typeId; };
+struct RvClosure { std::string functionName; uint32_t envTypeId; std::vector<Operand> captures; };
+struct RvClosureGet { LocalId env; uint32_t offset; };
 struct RvVTableSlot { LocalId obj; uint32_t slot; };
 struct RvTypeId { LocalId obj; };
 struct RvIsCheck { LocalId obj; uint32_t targetTypeId; };
+struct RvGlobalLoad { uint32_t slot; };
 
 struct Rvalue : std::variant<
     RvUse, RvRef, RvPtr, RvBinary, RvUnary, RvCast,
     RvAggregate, RvField, RvHStore, RvIndex, RvLen, RvDiscriminant,
-    RvAlloc, RvVTableSlot, RvTypeId, RvIsCheck
+    RvAlloc, RvClosure, RvClosureGet, RvVTableSlot, RvTypeId, RvIsCheck,
+    RvGlobalLoad
 > {
     using variant::variant;
 };
@@ -73,13 +78,14 @@ struct TmSwitchDiscr { LocalId local; std::vector<BlockId> targets; BlockId othe
 struct TmReturn {};
 struct TmCall { Operand func; std::vector<Operand> args; LocalId dest; BlockId return_; };
 struct TmCallIndirect { Operand funcPtr; std::vector<Operand> args; LocalId dest; BlockId return_; };
+struct TmClosureCall { Operand closure; std::vector<Operand> args; LocalId dest; BlockId return_; };
 struct TmCheckNull { Operand value; BlockId nullTarget; BlockId okTarget; };
 struct TmUnreachable {};
 struct TmVirtualCall { LocalId recv; uint32_t vtableSlot; std::vector<Operand> args; LocalId dest; BlockId return_; };
 struct TmInterfaceCall { LocalId recv; uint32_t ifaceTypeId; uint32_t methodIdx; std::vector<Operand> args; LocalId dest; BlockId return_; };
 
 struct Terminator : std::variant<
-    TmGoto, TmSwitchInt, TmSwitchDiscr, TmReturn, TmCall, TmCallIndirect, TmCheckNull, TmUnreachable,
+    TmGoto, TmSwitchInt, TmSwitchDiscr, TmReturn, TmCall, TmCallIndirect, TmClosureCall, TmCheckNull, TmUnreachable,
     TmVirtualCall, TmInterfaceCall
 > {
     using variant::variant;
@@ -95,10 +101,11 @@ struct StSetDiscriminant { LocalId place; uint32_t variant; };
 struct StDrop { LocalId local; };
 struct StPush { LocalId local; };
 struct StPop  { LocalId local; };
+struct StGlobalStore { uint32_t slot; Operand value; };
 
 struct Statement : std::variant<
     StAssign, StStorageLive, StStorageDead, StSetDiscriminant, StDrop,
-    StPush, StPop
+    StPush, StPop, StGlobalStore
 > {
     using variant::variant;
 };

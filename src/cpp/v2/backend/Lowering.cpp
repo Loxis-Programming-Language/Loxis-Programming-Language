@@ -12,6 +12,9 @@ LoweringOutput Lowering::lower(const HirModule& hir) {
                 output.bodies.push_back(lowerFn(i));
             } else if constexpr (std::is_same_v<T, HirClass>) {
                 output.bodies.push_back(lowerClassCtor(i));
+                if (i.isSingleton && i.globalSlot != ~0u) {
+                    output.globalInitializers.push_back({i.globalSlot, i.name + ".init"});
+                }
                 for (const auto& m : i.methods) {
                     output.bodies.push_back(lowerMethod(i, m));
                 }
@@ -36,6 +39,7 @@ MirBody Lowering::lowerClassCtor(const HirClass& cls) {
     body.locals.push_back({body.ret_ty, "_return", false});
 
     m_scope.clear();
+    m_closureEnvLocal.reset();
     for (const auto& pd : cls.ctorParams) {
         LocalId lid = static_cast<LocalId>(body.locals.size());
         body.locals.push_back({pd.ty, pd.name, false});
@@ -53,16 +57,30 @@ MirBody Lowering::lowerClassCtor(const HirClass& cls) {
 
     uint32_t allocSize = cls.totalFieldSize > 0 ? cls.totalFieldSize : 9;
     LocalId obj = newLocal(mkInt(), "self");
+    m_scope["self"] = obj;
+    m_scope["this"] = obj;
     emit(StAssign{obj, RvAlloc{allocSize, cls.typeId}});
 
-    uint32_t fieldIdx = 0;
+    uint32_t nextCtorFieldOffset = 0;
     for (const auto& pd : cls.ctorParams) {
         if (pd.isVal || pd.isVar) {
             auto it = m_scope.find(pd.name);
             if (it != m_scope.end()) {
-                emit(StAssign{obj, RvHStore{fieldIdx * 9, OpCopy{it->second}}});
+                emit(StAssign{obj, RvHStore{nextCtorFieldOffset, OpCopy{it->second}}});
             }
-            fieldIdx++;
+            nextCtorFieldOffset += 9;
+        }
+    }
+
+    for (const auto& field : cls.fields) {
+        if (!field.initializer) continue;
+        LocalId initVal = lowerExpr(*field.initializer);
+        emit(StAssign{obj, RvHStore{field.offset, OpCopy{initVal}}});
+    }
+
+    for (const auto& initBlock : cls.initBlocks) {
+        if (initBlock) {
+            lowerExpr(*initBlock);
         }
     }
 
@@ -89,9 +107,11 @@ MirBody Lowering::lowerMethod(const HirClass& cls, const HirFn& method) {
     body.locals.push_back({body.ret_ty, "_return", false});
 
     m_scope.clear();
+    m_closureEnvLocal.reset();
     LocalId selfLid = static_cast<LocalId>(body.locals.size());
     body.locals.push_back({mkInt(), "self", false});
     m_scope["self"] = selfLid;
+    m_scope["this"] = selfLid;
 
     for (const auto& p : method.params) {
         LocalId lid = static_cast<LocalId>(body.locals.size());
@@ -130,6 +150,13 @@ MirBody Lowering::lowerFn(const HirFn& fn) {
     body.locals.push_back({body.ret_ty, "_return", false});
 
     m_scope.clear();
+    m_closureEnvLocal.reset();
+    if (fn.closureEnvTypeId != ~0u) {
+        LocalId envLid = static_cast<LocalId>(body.locals.size());
+        body.locals.push_back({mkInt(), "__closure_env", false});
+        m_scope["__closure_env"] = envLid;
+        m_closureEnvLocal = envLid;
+    }
     for (const auto& p : fn.params) {
         LocalId lid = static_cast<LocalId>(body.locals.size());
         body.locals.push_back({p.second, p.first, false});
@@ -216,8 +243,23 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
             emit(StAssign{tmp, RvUse{OpConst{e.val}}});
             return tmp;
         } else if constexpr (std::is_same_v<T, HirPath>) {
+            if (e.globalSlot != ~0u) {
+                LocalId tmp = newLocal(e.ty, "global");
+                emit(StAssign{tmp, RvGlobalLoad{e.globalSlot}});
+                return tmp;
+            }
             auto it = m_scope.find(e.name);
             if (it != m_scope.end()) return it->second;
+            if (e.captureOffset != ~0u && m_closureEnvLocal.has_value()) {
+                LocalId tmp = newLocal(e.ty, "capture");
+                emit(StAssign{tmp, RvClosureGet{*m_closureEnvLocal, e.captureOffset}});
+                return tmp;
+            }
+            if (e.isStaticFunction) {
+                LocalId tmp = newLocal(e.ty, "fnptr");
+                emit(StAssign{tmp, RvUse{OpLabel{e.name}}});
+                return tmp;
+            }
             return unitLocal();
         } else if constexpr (std::is_same_v<T, HirTuple>) {
             std::vector<Operand> ops;
@@ -248,10 +290,43 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
                 fieldIdx++;
             }
             return obj;
+        } else if constexpr (std::is_same_v<T, HirClosure>) {
+            std::vector<Operand> captures;
+            for (const auto& capture : e.captures) {
+                auto it = m_scope.find(capture.name);
+                if (it != m_scope.end()) {
+                    captures.push_back(OpCopy{it->second});
+                }
+            }
+            LocalId tmp = newLocal(e.ty, "closure");
+            emit(StAssign{tmp, RvClosure{e.functionName, e.envTypeId, std::move(captures)}});
+            return tmp;
+        } else if constexpr (std::is_same_v<T, HirEnumCtor>) {
+            uint32_t sz = e.totalFieldSize > 0 ? e.totalFieldSize : 9;
+            LocalId obj = newLocal(e.ty, "enum");
+            emit(StAssign{obj, RvAlloc{sz, e.typeId}});
+            emit(StAssign{obj, RvHStore{0, OpConst{static_cast<int64_t>(e.variantIndex)}}});
+            for (size_t i = 0; i < e.args.size() && i < e.fieldOffsets.size(); ++i) {
+                LocalId value = lowerExpr(*e.args[i]);
+                emit(StAssign{obj, RvHStore{e.fieldOffsets[i], OpCopy{value}}});
+            }
+            return obj;
         } else if constexpr (std::is_same_v<T, HirCall>) {
-            Operand funcOp = OpCopy{lowerExpr(*e.func)};
+            Operand funcOp = OpConst{std::string{}};
+            bool directCall = !e.ctorLabel.empty() || e.staticName.has_value();
+            bool closureCall = false;
             if (!e.ctorLabel.empty()) funcOp = OpConst{e.ctorLabel};
             else if (e.staticName) funcOp = OpConst{*e.staticName};
+            else {
+                LocalId funcLocal = lowerExpr(*e.func);
+                funcOp = OpCopy{funcLocal};
+                if (e.func && std::holds_alternative<HirClosure>(*e.func)) {
+                    closureCall = true;
+                } else if (e.func && std::holds_alternative<HirPath>(*e.func)) {
+                    const auto& path = std::get<HirPath>(*e.func);
+                    closureCall = path.captureOffset != ~0u;
+                }
+            }
 
             std::vector<Operand> args;
             for (const auto& a : e.args) {
@@ -268,7 +343,9 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
             }
 
             BlockId resume = newBlock();
-            term(TmCall{funcOp, std::move(args), dest, resume});
+            if (directCall) term(TmCall{funcOp, std::move(args), dest, resume});
+            else if (closureCall) term(TmClosureCall{funcOp, std::move(args), dest, resume});
+            else term(TmCallIndirect{funcOp, std::move(args), dest, resume});
             m_currentBlock = resume;
             m_blockTerminated = false;
 
@@ -536,19 +613,43 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
                     if (std::holds_alternative<HirExprPtr>(arm.condition)) {
                         auto condExpr = std::get<HirExprPtr>(arm.condition);
                         LocalId cv = lowerExpr(*condExpr);
-                        // Compare scrut == cv
                         LocalId eqTmp = newLocal(e.ty);
                         emit(StAssign{eqTmp, RvBinary{MirBinOp::Eq, OpCopy{scrut}, OpCopy{cv}}});
                         term(TmSwitchInt{OpCopy{eqTmp}, {{1, bodyBBs[ci]}}, nextBB});
+                    } else if (std::holds_alternative<HirPatPtr>(arm.condition)) {
+                        auto pat = std::get<HirPatPtr>(arm.condition);
+                        if (pat && std::holds_alternative<HirPatEnum>(*pat)) {
+                            const auto& enumPat = std::get<HirPatEnum>(*pat);
+                            LocalId discr = newLocal(mkInt(), "when_discr");
+                            emit(StAssign{discr, RvField{scrut, 0}});
+                            LocalId eqTmp = newLocal(mkBool(), "when_match");
+                            emit(StAssign{eqTmp, RvBinary{MirBinOp::Eq, OpCopy{discr}, OpConst{static_cast<int64_t>(enumPat.variantIndex)}}});
+                            term(TmSwitchInt{OpCopy{eqTmp}, {{1, bodyBBs[ci]}}, nextBB});
+                        } else {
+                            term(TmGoto{bodyBBs[ci]});
+                        }
                     } else {
-                        // Pattern or wildcard — always match for now
-                        (void)scrut;
                         term(TmGoto{bodyBBs[ci]});
                     }
 
                     // Body block
                     m_currentBlock = bodyBBs[ci];
                     m_blockTerminated = false;
+                    if (std::holds_alternative<HirPatPtr>(arm.condition)) {
+                        auto pat = std::get<HirPatPtr>(arm.condition);
+                        if (pat && std::holds_alternative<HirPatEnum>(*pat)) {
+                            const auto& enumPat = std::get<HirPatEnum>(*pat);
+                            for (size_t pi = 0; pi < enumPat.elems.size(); ++pi) {
+                                if (!enumPat.elems[pi]) continue;
+                                if (std::holds_alternative<HirPatBind>(*enumPat.elems[pi])) {
+                                    const auto& bind = std::get<HirPatBind>(*enumPat.elems[pi]);
+                                    LocalId payload = newLocal(mkInt(), bind.name, bind.mut);
+                                    emit(StAssign{payload, RvField{scrut, static_cast<uint32_t>((pi + 1) * 9)}});
+                                    m_scope[bind.name] = payload;
+                                }
+                            }
+                        }
+                    }
                     LocalId armVal = lowerExpr(*arm.body);
                     if (!m_blockTerminated) {
                         emit(StAssign{result, RvUse{OpCopy{armVal}}});
