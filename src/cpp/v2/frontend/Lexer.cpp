@@ -1,5 +1,6 @@
 #include "Lexer.hpp"
 #include <cctype>
+#include <stdexcept>
 #include <unordered_map>
 
 namespace loxis::v2 {
@@ -34,12 +35,14 @@ Tk Lexer::keyword(const std::string& s) const {
     static const std::unordered_map<std::string, Tk> kw = {
         {"package", Tk::KwPackage}, {"import", Tk::KwImport}, {"from", Tk::KwFrom},
         {"fun", Tk::KwFun}, {"let", Tk::KwLet}, {"var", Tk::KwVar}, {"val", Tk::KwVal},
+        {"vararg", Tk::KwVararg},
         {"class", Tk::KwClass}, {"interface", Tk::KwInterface}, {"object", Tk::KwObject}, {"enum", Tk::KwEnum},
         {"open", Tk::KwOpen}, {"abstract", Tk::KwAbstract}, {"data", Tk::KwData}, {"override", Tk::KwOverride},
         {"init", Tk::KwInit}, {"companion", Tk::KwCompanion},
         {"for", Tk::KwFor}, {"while", Tk::KwWhile}, {"if", Tk::KwIf},
         {"else", Tk::KwElse}, {"when", Tk::KwWhen}, {"return", Tk::KwReturn},
         {"break", Tk::KwBreak}, {"continue", Tk::KwContinue}, {"loop", Tk::KwLoop},
+        {"throw", Tk::KwThrow}, {"try", Tk::KwTry}, {"catch", Tk::KwCatch}, {"finally", Tk::KwFinally},
         {"true", Tk::KwTrue}, {"false", Tk::KwFalse}, {"null", Tk::KwNull},
         {"is", Tk::KwIs}, {"in", Tk::KwIn}, {"as", Tk::KwAs},
         {"where", Tk::KwWhere}, {"type", Tk::KwType}, {"const", Tk::KwConst},
@@ -52,26 +55,43 @@ Tk Lexer::keyword(const std::string& s) const {
 
 std::string Lexer::literalStr() {
     size_t start = pos;
+    SourceLoc startLoc = loc();
     advance(); // opening "
     while (!atEnd() && peek() != '"') {
         if (peek() == '\\') { advance(); if (!atEnd()) advance(); }
         else advance();
     }
-    if (!atEnd()) advance(); // closing "
+    if (atEnd()) {
+        throw FrontendError(Diagnostic{DiagnosticSeverity::Error, DiagnosticKind::Syntax,
+            "unterminated string literal", {{startLoc, loc()}, "string starts here"}});
+    }
+    advance(); // closing "
     return src.substr(start, pos - start);
 }
 
 std::string Lexer::literalChar() {
     size_t start = pos;
+    SourceLoc startLoc = loc();
     advance(); // opening '
     if (!atEnd() && peek() == '\\') { advance(); if (!atEnd()) advance(); }
     else if (!atEnd() && peek() != '\'' && peek() != '\n' && peek() != '\r') advance();
-    if (!atEnd() && peek() == '\'') advance();
+    if (atEnd() || peek() != '\'') {
+        throw FrontendError(Diagnostic{DiagnosticSeverity::Error, DiagnosticKind::Syntax,
+            "unterminated character literal", {{startLoc, loc()}, "character literal starts here"}});
+    }
+    advance();
     return src.substr(start, pos - start);
 }
 
 std::vector<Token> Lexer::tokenize() {
     std::vector<Token> out;
+    // UTF-8 BOM is transport metadata, not source text.
+    if (pos == 0 && src.size() >= 3 &&
+        static_cast<unsigned char>(src[0]) == 0xEF &&
+        static_cast<unsigned char>(src[1]) == 0xBB &&
+        static_cast<unsigned char>(src[2]) == 0xBF) {
+        advance(); advance(); advance();
+    }
     while (!atEnd()) {
         skipSpace();
         if (atEnd()) break;
@@ -94,7 +114,11 @@ std::vector<Token> Lexer::tokenize() {
         if (c == '/' && peek(1) == '*') {
             advance(); advance();
             while (!atEnd() && !(peek() == '*' && peek(1) == '/')) advance();
-            if (!atEnd()) { advance(); advance(); }
+            if (atEnd()) {
+                throw FrontendError(Diagnostic{DiagnosticSeverity::Error, DiagnosticKind::Syntax,
+                    "unterminated block comment", {{l, loc()}, "comment starts here"}});
+            }
+            advance(); advance();
             continue;
         }
         // identifier / keyword / underscore
@@ -210,7 +234,11 @@ std::vector<Token> Lexer::tokenize() {
             case '$': emit1(Tk::Dollar); break;
             case '@': emit1(Tk::At); break;
             case '?': emit1(Tk::Question); break;
-            default: advance(); break; // skip unknown
+            default:
+                SourceLoc end = l;
+                ++end.col;
+                throw FrontendError(Diagnostic{DiagnosticSeverity::Error, DiagnosticKind::Syntax,
+                    "unexpected character `" + std::string(1, c) + "`", {{l, end}, "unexpected token"}});
         }
     }
     out.emplace_back(Tk::Eof, "", SourceLoc{file, line, col});

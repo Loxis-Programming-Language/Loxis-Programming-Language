@@ -1,0 +1,18 @@
+import loxis.net
+
+fun main() -> int {
+    val listener = Tcp.listen("127.0.0.1", 0)
+    require(listener.localPort() > 0, "listener did not receive a port")
+    listener.close()
+    listener.close()
+    var closedFailed = false
+    try { listener.accept(); }
+    catch (failure: SocketException) { closedFailed = true }
+    require(closedFailed, "closed listener accepted a connection")
+    var portFailed = false
+    try { Tcp.connect("127.0.0.1", -1); }
+    catch (failure: SocketException) { portFailed = true }
+    require(portFailed, "invalid port connected")
+    print("net api ok")
+    return 0
+}

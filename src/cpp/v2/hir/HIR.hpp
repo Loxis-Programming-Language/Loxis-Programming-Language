@@ -72,6 +72,7 @@ struct HirMethodCall {
     uint32_t ifaceTypeId = ~0u;
     uint32_t ifaceMethodIndex = 0;
     CoreTyPtr ty;
+    std::vector<CoreTyPtr> typeArgs;
 };
 struct HirField { HirExprPtr obj; std::string field; uint32_t fieldOffset = 0; CoreTyPtr ty; };
 struct HirIndex { HirExprPtr obj; HirExprPtr idx; CoreTyPtr ty; };
@@ -92,6 +93,19 @@ struct HirWhen { HirExprPtr scrut; std::vector<HirWhenArm> arms; CoreTyPtr ty; }
 struct HirBreak { std::optional<std::string> label; HirExprPtr expr; CoreTyPtr ty; };
 struct HirContinue { std::optional<std::string> label; CoreTyPtr ty; };
 struct HirReturn { HirExprPtr expr; CoreTyPtr ty; };
+struct HirThrow { HirExprPtr expr; CoreTyPtr ty; };
+struct HirCatchClause {
+    std::string name;
+    CoreTyPtr exceptionTy;
+    uint32_t typeId = ~0u;
+    HirExprPtr body;
+};
+struct HirTryCatch {
+    HirExprPtr body;
+    std::vector<HirCatchClause> catches;
+    HirExprPtr finallyBody;
+    CoreTyPtr ty;
+};
 struct HirRef { bool mut = false; HirExprPtr expr; CoreTyPtr ty; };
 struct HirDeref { HirExprPtr expr; CoreTyPtr ty; };
 struct HirTry { HirExprPtr expr; CoreTyPtr ty; };
@@ -128,11 +142,13 @@ struct HirExpr : std::variant<
     HirLit, HirPath, HirTuple, HirArray, HirStruct, HirCall, HirMethodCall,
     HirField, HirIndex, HirUnary, HirBinary, HirAssign, HirBlock, HirIf,
     HirWhile, HirFor, HirLoop, HirWhen, HirBreak, HirContinue, HirReturn,
+    HirThrow, HirTryCatch,
     HirRef, HirDeref, HirTry, HirCast,
     HirSafeCall, HirSafeField, HirElvis, HirForceUnwrap,
     HirIs, HirIsNot, HirNull, HirClosure, HirEnumCtor
 > {
     using variant::variant;
+    SourceLoc loc;
 };
 
 // ============================================================
@@ -162,6 +178,7 @@ struct HirCtorParam {
     CoreTyPtr ty;
     bool isVal = false;
     bool isVar = false;
+    uint32_t fieldOffset = 0;
 };
 
 struct HirClassField {
@@ -176,6 +193,9 @@ struct HirClass {
     std::string name;
     std::vector<std::string> generics;
     uint32_t typeId = ~0u;
+    uint32_t parentTypeId = ~0u;
+    std::vector<HirExprPtr> superClassArgs;
+    std::vector<uint32_t> superFieldOffsets;
     uint32_t totalFieldSize = 0;
     uint32_t vtableEntryCount = 0;
     std::vector<std::string> vtableMethodNames;

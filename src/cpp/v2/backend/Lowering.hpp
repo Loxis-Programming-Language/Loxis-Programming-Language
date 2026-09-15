@@ -12,6 +12,7 @@ namespace loxis::v2 {
 struct LoweredClass {
     std::string name;
     uint32_t typeId = ~0u;
+    uint32_t parentTypeId = ~0u;
     uint32_t vtableEntryCount = 0;
     std::vector<std::string> vtableMethodNames;
     std::vector<ItableEntry> itables;
@@ -37,16 +38,20 @@ private:
         BlockId breakTarget;
         BlockId continueTarget;
         std::optional<std::string> label;
+        size_t finallyDepth = 0;
     };
 
     MirBody* m_body = nullptr;
     std::vector<LoopContext> m_loopStack;
+    std::vector<HirExprPtr> m_finallyStack;
+    std::vector<bool> m_finallyHandlerActive;
     BlockId m_currentBlock = 0;
     BlockId m_exitBlock = 0;
     bool m_blockTerminated = false;
     std::unordered_map<std::string, LocalId> m_scope;
     std::optional<LocalId> m_closureEnvLocal;
     std::string m_currentClassName;
+    SourceLoc m_currentLoc;
 
     LocalId newLocal(CoreTyPtr ty, const std::string& name = "", bool mut = false);
     BlockId newBlock();
@@ -61,6 +66,7 @@ private:
 
     LocalId lowerPlace(const HirExpr& expr);
     LocalId unitLocal();
+    bool lowerFinalizersTo(size_t depth);
 };
 
 } // namespace loxis::v2

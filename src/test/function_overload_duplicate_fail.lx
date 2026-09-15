@@ -1,0 +1,4 @@
+fun parse(value: str) -> int { return 1 }
+fun parse(value: str) -> str { return value }
+
+fun main() -> int { return 0 }

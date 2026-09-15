@@ -4,6 +4,11 @@ package loxis
 //  Loxis Standard Prelude — auto-loaded for every program
 // ============================================================
 
+open class Exception(val message: str)
+class RuntimeException(message: str) : Exception(message)
+
+fun error(message: str) -> noreturn { throw RuntimeException(message) }
+
 // --- Assertion ---
 fun require(condition: bool, message: str) -> unit {
     if (!condition) { error(message) }
@@ -13,11 +18,12 @@ fun TODO() -> noreturn { error("TODO") }
 // --- Numeric ---
 fun max(x: int, y: int) -> int { if (x > y) { return x } return y }
 fun min(x: int, y: int) -> int { if (x < y) { return x } return y }
-fun abs(v: int) -> int { if (v < 0) { return -v } return v }
+fun abs(v: int) -> int { require(v != -9223372036854775807 - 1, "absolute value overflow"); if (v < 0) { return -v } return v }
 
 // --- Array (backed by halloc/hread/hset/hfree) ---
 // Layout: [len:9B] [elem0:9B] [elem1:9B] ...
 fun arrayNew(n: int) -> int {
+    require(n >= 0 && n <= 477218586, "array capacity out of range")
     val arr = halloc(9 + n * 9)
     hset(arr, 0, n)
     return arr

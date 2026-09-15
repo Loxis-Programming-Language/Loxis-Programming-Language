@@ -1,0 +1,42 @@
+import loxis.fs
+import loxis.path
+import loxis.system
+import loxis.time
+import loxis.random
+import loxis.text
+
+fun main() -> int {
+    require(File.writeText("empty.txt", "").isSuccess(), "write empty")
+    require(File.exists("empty.txt"), "empty file exists")
+    require(File.readText("empty.txt").isSuccess(), "read empty")
+    require(File.readText("missing.txt").isFailure(), "missing file")
+    require(Files.createDirectories("nested/sub").isSuccess(), "mkdir")
+    require(Files.isDirectory("nested/sub"), "directory")
+    require(Path.join("a", "b") == "a/b", "path join")
+    require(Path.normalize("a/../b") == "b", "path normalize")
+    require(Path.name("a/b.txt") == "b.txt" && Path.extension("a/b.txt") == ".txt", "path parts")
+    val bytes = listWithCapacity<int>(4)
+    bytes.push(0); bytes.push(13); bytes.push(128); bytes.push(255)
+    require(File.writeBytes("bytes.bin", bytes).isSuccess(), "write bytes")
+    val read = File.readBytes("bytes.bin").getOrElse(list<int>())
+    require(read.size() == 4 && read.get(0) == 0 && read.get(3) == 255, "binary roundtrip")
+    val entries = Files.entries(".").getOrElse(list<str>())
+    require(entries.size() == 3, "directory entries")
+    require(File.readText("nested").isFailure(), "directory is not text file")
+    require(File.writeText("absent/file", "x").isFailure(), "write error")
+    val unicodePath = fromCodePoint(20013) + ".txt"
+    require(File.writeText(unicodePath, "content").isSuccess(), "unicode path write")
+    require(File.readText(unicodePath).getOrElse("") == "content", "unicode path read")
+    require(File.remove(unicodePath) && !File.exists(unicodePath), "unicode path remove")
+    require(System.arguments().size() == 2 && System.arguments().get(1) == "two words", "arguments")
+    require(System.environment("LOXIS_STDLIB_TEST").getOrElse("") == "present", "environment")
+    require(Clock.unixMillis() > 0 && Clock.monotonicNanos() <= Clock.monotonicNanos(), "clocks")
+    val a = Random.seeded(-12)
+    val b = Random.seeded(-12)
+    var i = 0
+    while i < 20 { require(a.nextInt() == b.nextInt(), "seed reproducibility"); i += 1 }
+    require(a.nextBounded(1) == 0, "random bound")
+    require(Files.removeDirectory("nested/sub").isSuccess(), "remove directory")
+    print("system ok")
+    return 0
+}

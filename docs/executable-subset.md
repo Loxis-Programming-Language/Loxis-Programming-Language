@@ -16,12 +16,12 @@ full v2 spec.
 - Prelude functions written in Loxis can wrap VM primitives such as heap,
   string, syscall, and float conversion helpers.
 - Generic classes and methods are baseline-covered for simple standard-library
-  containers such as `loxis.collections.List<T>`.
+  containers such as `loxis.collections.list<T>`.
 - `for .. in` works over iterable classes that provide `size()` and `get(index)`,
   including generic standard-library containers.
-- Standard-library `List<T>` supports higher-order helpers including
-  `listMap`, `listFilter`, `listForEach`, `listFold`, `listCount`,
-  `listAny`, and `listAll`. These now accept **capturing** lambdas that
+- Standard-library `list<T>` supports fluent higher-order methods including
+  `map`, `filter`, `forEach`, `fold`, `count`, `any`, and `all`.
+  These accept **capturing** lambdas that
   reference outer local variables through heap-allocated closure
   environments. Non-capturing lambdas continue to work as before.
   Standard-library helpers also include algorithm helpers such as
@@ -60,6 +60,12 @@ full v2 spec.
 - Smart casts — `if x != null { … }` refines `x` to non-nullable in the
   then-branch; `if x is T { … }` / `if x !is T { … }` refine based on
   runtime type-id checks.
+- Typed exceptions execute end-to-end. `throw` accepts `Exception` subclasses;
+  ordered `catch` clauses use subtype matching; `finally` runs through normal
+  completion and abrupt control flow; VM unwind restores caller registers and
+  GC roots. Uncaught exceptions include a Python-style traceback with source
+  file, line, function, original statement, caret marker, dynamic type, and
+  message.
 - Parsing and type-checking class/interface/object/enum declarations used by
   `demo.lx`, even where later execution support is still partial.
 
@@ -70,6 +76,24 @@ The regression entry point is:
 ```
 
 CTest also exposes the same baseline as `loxis_smoke`.
+
+## Standard-library regression coverage
+
+`tests/run_stdlib.py --exe build-stdlib/Loxis.exe` (also CTest's `loxis_stdlib`)
+checks list bounds and reference cleanup, Optional/Result helpers, strict numeric
+parsing, Unicode code points, double math, hash maps/sets, queues, lazy iterators,
+filesystem and binary I/O, stdin, arguments/environment, clocks, seeded random,
+and JSON parsing/serialization. It includes a complete JSON file-processing example
+and runs each case with NoGC, ARC and AARC. Successful ARC/AARC unit programs
+also check zero live heap objects and zero invalid handle operations at shutdown.
+
+Iterator-driven `for` accepts `next() -> Optional<T>` and supports nullable
+payloads, `break`, and `continue`. Generic callback fields and interface dispatch
+are exercised by these tests. The VM supports 4096 tagged registers using wide
+register operands; programs exceeding the compiler's local limit fail explicitly.
+
+See [the API contracts and compatibility notes](stdlib.md). This coverage does
+not imply support for all untested combinations of language features below.
 
 ## Not Yet Baseline
 
@@ -82,3 +106,21 @@ CTest also exposes the same baseline as `loxis_smoke`.
 - Complete operator-overloading coverage beyond the currently tested binary
   `+`, unary, and equality operators; async/await, coroutines, macros, and the
   trait/typeclass system.
+
+## Generic argument inference
+
+Calls can omit all generic arguments when argument types determine them:
+`identity(42)`, `Box(42)`, and `xs.map({ x -> x * 2 })`.
+Inference matches nested generic types and function signatures, checks lambda
+inputs using the other arguments, and infers lambda result types. Each call and
+overload candidate has independent bindings; inferred arguments are retained for
+monomorphization.
+
+A declared result type supplies missing information, for example
+`val xs: list<int> = list()` and `val value: Optional<int> = optionalEmpty()`.
+Return expressions, branch results and concrete function parameter types also
+provide this context. A call without enough information, such as `list()`
+without a result annotation, needs explicit type arguments. Conflicting bindings
+are rejected; inference does not choose a common supertype for unrelated inputs.
+Bare `null` alone cannot determine a type parameter. Partial explicit argument
+lists and whole-program inference from later assignments are not supported.

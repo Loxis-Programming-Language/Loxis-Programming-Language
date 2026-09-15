@@ -1,0 +1,10 @@
+fun main() -> int {
+    try {
+        throw RuntimeException("typed")
+    } catch (failure: RuntimeException) {
+        print("specific: " + failure.message)
+    } catch (failure: Exception) {
+        print("base")
+    }
+    return 0
+}

@@ -1,0 +1,95 @@
+package loxis.collections.set
+
+import loxis.collections.map
+
+// Open-addressed set. States: 0 empty, 1 occupied, 2 deleted.
+class HashSet<T>(val hash: fun(T) -> int, val equal: fun(T, T) -> bool) {
+    var states: list<int> = listWithCapacity<int>(8)
+    var slots: list<Optional<T>> = listWithCapacity<Optional<T>>(8)
+    var count: int = 0
+
+    fun ensureStorage() -> unit {
+        if !this.states.isEmpty() { return }
+        var i = 0
+        while i < 8 { this.states.push(0); this.slots.push(optionalEmpty<T>()); i += 1 }
+    }
+
+    fun locate(value: T) -> int {
+        this.ensureStorage()
+        val capacity = this.states.size()
+        var index = this.hash(value) % capacity
+        if index < 0 { index += capacity }
+        var visited = 0
+        while visited < capacity {
+            val state = this.states.get(index)
+            if state == 0 { return -1 }
+            if state == 1 && this.equal(optionalValueOrFail<T>(this.slots.get(index)), value) { return index }
+            index = (index + 1) % capacity
+            visited += 1
+        }
+        return -1
+    }
+
+    fun size() -> int { return this.count }
+    fun isEmpty() -> bool { return this.count == 0 }
+    fun contains(value: T) -> bool { return this.locate(value) >= 0 }
+
+    fun add(value: T) -> bool {
+        if this.locate(value) >= 0 { return false }
+        if (this.count + 1) * 4 >= this.states.size() * 3 { this.grow() }
+        val capacity = this.states.size()
+        var index = this.hash(value) % capacity
+        if index < 0 { index += capacity }
+        while this.states.get(index) == 1 { index = (index + 1) % capacity }
+        this.states.set(index, 1)
+        this.slots.set(index, optionalValue<T>(value))
+        this.count += 1
+        return true
+    }
+
+    fun remove(value: T) -> bool {
+        val index = this.locate(value)
+        if index < 0 { return false }
+        this.states.set(index, 2)
+        this.slots.set(index, optionalEmpty<T>())
+        this.count -= 1
+        return true
+    }
+
+    fun grow() -> unit {
+        val oldStates = this.states
+        val oldSlots = this.slots
+        require(oldStates.size() <= 238609293, "set capacity overflow")
+        val capacity = oldStates.size() * 2
+        this.states = listWithCapacity<int>(capacity)
+        this.slots = listWithCapacity<Optional<T>>(capacity)
+        this.count = 0
+        var i = 0
+        while i < capacity { this.states.push(0); this.slots.push(optionalEmpty<T>()); i += 1 }
+        i = 0
+        while i < oldStates.size() {
+            if oldStates.get(i) == 1 { this.add(optionalValueOrFail<T>(oldSlots.get(i))) }
+            i += 1
+        }
+    }
+
+    fun values() -> list<T> {
+        val out = listWithCapacity<T>(this.count)
+        var i = 0
+        while i < this.states.size() {
+            if this.states.get(i) == 1 { out.push(optionalValueOrFail<T>(this.slots.get(i))) }
+            i += 1
+        }
+        return out
+    }
+
+    fun clear() -> unit {
+        var i = 0
+        while i < this.states.size() {
+            this.states.set(i, 0)
+            this.slots.set(i, optionalEmpty<T>())
+            i += 1
+        }
+        this.count = 0
+    }
+}

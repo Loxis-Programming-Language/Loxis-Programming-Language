@@ -7,6 +7,7 @@
 #include <vector>
 #include <stack>
 #include <unordered_map>
+#include <unordered_set>
 #include "../backend/Chunk.hpp"
 #include "Heap.hpp"
 #include "GC.hpp"
@@ -17,7 +18,9 @@ public:
 	// whose collector scratch is sized once); 0 means "pick a default".
 	explicit VM(Chunk chunk, bool trace = false, GCMode gcMode = GCMode::NoGC,
 	            uint32_t heapSlots = 0);
+	~VM();
 
+	void setArguments(std::vector<std::string> args) { m_arguments = std::move(args); }
 	int run();
 
 	int run(int maxExecuteCount);
@@ -41,15 +44,29 @@ public:
 	void setCyclePolicy(const std::string& spec) { m_gc->setCyclePolicy(spec); }
 
 private:
+	std::vector<std::string> m_arguments;
+	std::vector<std::string> m_directoryEntries;
+	std::string m_ioError;
+	std::string m_netError;
+	std::unordered_set<int64_t> m_openSockets;
 	bool m_trace;
 	Chunk m_chunk;
-	int64_t m_regs[256] = {};
-	uint8_t m_rtag[256] = {};   // TAG_INT / TAG_STR / TAG_HEAP / TAG_FLOAT / TAG_NULL
+	int64_t m_regs[4096] = {};
+	uint8_t m_rtag[4096] = {};   // TAG_INT / TAG_STR / TAG_HEAP / TAG_FLOAT / TAG_NULL
 	int64_t m_globals[256] = {};
 	uint8_t m_globalTags[256] = {};
 	uint8_t m_flags = 0;        // FLAG_ZERO=0x01, FLAG_NEG=0x02
-	std::stack <size_t> m_callStack;
-	std::stack <std::pair<int64_t, uint8_t>> m_dataStack;  // value + rtag
+	struct SavedRegister { uint16_t reg; int64_t value; uint8_t tag; };
+	struct CallFrame { size_t returnIp; size_t callIp; std::vector<SavedRegister> locals; };
+	std::stack<CallFrame> m_callStack;
+	std::stack<SavedRegister> m_dataStack;
+	struct ExceptionHandler {
+		size_t targetIp = 0;
+		uint16_t exceptionReg = 0;
+		size_t callDepth = 0;
+		size_t dataDepth = 0;
+	};
+	std::vector<ExceptionHandler> m_exceptionHandlers;
 	Heap m_heap;
 	std::unique_ptr<GCBackend> m_gcOwned;
 	GCBackend* m_gc = nullptr;
@@ -64,7 +81,7 @@ private:
 	// exact point a reference is dropped or taken. Self-assignment is skipped:
 	// remove-then-add would momentarily drop the count to zero and reclaim a
 	// still-live object.
-	void setReg(uint8_t reg, int64_t value, uint8_t tag);
+	void setReg(uint16_t reg, int64_t value, uint8_t tag);
 	void setGlobal(uint8_t slot, int64_t value, uint8_t tag);
 
 public:
@@ -105,6 +122,11 @@ private:
 
 	std::string readStringOperand(const JitOperand &operand) const;
 	uint32_t internRuntimeString(const std::string& s);
+	void throwValue(int64_t value, uint8_t tag);
+	void raiseRuntime(const std::string& message);
+	void pushCallFrame(size_t returnIp, size_t callIp);
+	void restoreCallFrame();
+	[[noreturn]] void panic(const std::string& message) const;
 	// Unified syscall entry — all native VM functions go through here
 	// Args passed in registers: r1..r4, result in r0
 	void invokeSyscall(uint8_t op);

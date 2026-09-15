@@ -16,6 +16,7 @@ private:
     std::vector<std::string> m_genericParams;       // stack of active generic param names
     std::vector<size_t> m_genericDepthStack;         // counts per nesting level
     std::vector<HirFn> m_generatedFns;
+    uint32_t m_literalCounter = 0;
 
     void pushGenerics(const std::vector<GenericParam>& params);
     void popGenerics();
@@ -35,6 +36,7 @@ private:
 
     HirFn buildFn(const ItemFun& fn);
     HirClass buildClass(const ItemClass& cls);
+    HirClass buildEnumClass(const ItemEnumClass& cls);
     HirClass buildObject(const ItemObject& obj);
     HirFn buildInterfaceMethod(const std::string& ifaceName, const InterfaceMethodDecl& method, const std::vector<GenericParam>& generics);
 

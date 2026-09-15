@@ -1,0 +1,17 @@
+package loxis.path
+
+fun pathJoin(base: str, child: str) -> str { return nativePathJoin(base, child) }
+fun pathNormalize(path: str) -> str { return nativePathNormalize(path) }
+fun pathParent(path: str) -> str { return nativePathParent(path) }
+fun pathName(path: str) -> str { return nativePathName(path) }
+fun pathExtension(path: str) -> str { return nativePathExtension(path) }
+fun currentDirectory() -> str { return nativeCurrentDirectory() }
+
+object Path {
+    fun join(base: str, child: str) -> str { return nativePathJoin(base, child) }
+    fun normalize(path: str) -> str { return nativePathNormalize(path) }
+    fun parent(path: str) -> str { return nativePathParent(path) }
+    fun name(path: str) -> str { return nativePathName(path) }
+    fun extension(path: str) -> str { return nativePathExtension(path) }
+    fun currentDirectory() -> str { return nativeCurrentDirectory() }
+}

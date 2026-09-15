@@ -1,0 +1,17 @@
+fun returnThenThrow() -> int {
+    try {
+        return 1
+    } finally {
+        throw RuntimeException("finally-wins")
+    }
+}
+
+fun main() -> int {
+    try {
+        returnThenThrow()
+    } catch (failure: Exception) {
+        print(failure.message)
+        0
+    }
+    return 0
+}

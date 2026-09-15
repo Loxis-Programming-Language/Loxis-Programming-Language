@@ -5,7 +5,7 @@ fun main() -> int {
     val s: int? = 42
     print(s ?: 0)
 
-    val items = listNew<int>(4)
+    val items = listWithCapacity<int>(4)
     items.push(10)
     items.push(20)
     items.push(30)

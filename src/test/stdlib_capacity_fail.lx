@@ -1,0 +1,5 @@
+import loxis.collections.list
+fun main() -> int {
+    val xs = listWithCapacity<int>(-1)
+    return 0
+}

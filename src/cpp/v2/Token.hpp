@@ -1,6 +1,9 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <stdexcept>
+#include <optional>
+#include <vector>
 
 namespace loxis::v2 {
 
@@ -10,18 +13,48 @@ struct SourceLoc {
     std::string fmt() const { return file + ":" + std::to_string(line) + ":" + std::to_string(col); }
 };
 
+enum class DiagnosticSeverity { Error, Warning };
+enum class DiagnosticKind { Syntax, Type, Compiler };
+
+struct SourceSpan {
+    SourceLoc start;
+    SourceLoc end;
+};
+
+struct LabeledSpan {
+    SourceSpan span;
+    std::string label;
+};
+
+struct Diagnostic {
+    DiagnosticSeverity severity = DiagnosticSeverity::Error;
+    DiagnosticKind kind = DiagnosticKind::Compiler;
+    std::string message;
+    LabeledSpan primary;
+    std::vector<LabeledSpan> secondary;
+    std::vector<std::string> notes;
+    std::optional<std::string> help;
+};
+
+struct FrontendError : std::runtime_error {
+    Diagnostic diagnostic;
+    explicit FrontendError(Diagnostic value)
+        : std::runtime_error(value.message), diagnostic(std::move(value)) {}
+};
+
 enum class Tk : uint16_t {
     Eof,
     // literals
     Ident, IntLit, FloatLit, StringLit, CharLit,
     // keywords
     KwPackage, KwImport, KwFrom,
-    KwFun, KwLet, KwVar, KwVal,
+    KwFun, KwLet, KwVar, KwVal, KwVararg,
     KwClass, KwInterface, KwObject, KwEnum,
     KwOpen, KwAbstract, KwData, KwOverride,
     KwInit, KwCompanion,
     KwFor, KwWhile, KwIf, KwElse, KwWhen,
     KwReturn, KwBreak, KwContinue, KwLoop,
+    KwThrow, KwTry, KwCatch, KwFinally,
     KwTrue, KwFalse, KwNull,
     KwIs, KwIn, KwAs,
     KwWhere, KwType, KwConst,
@@ -64,6 +97,7 @@ inline const char* tkName(Tk k) {
     case Tk::KwLet: return "'let'";
     case Tk::KwVar: return "'var'";
     case Tk::KwVal: return "'val'";
+    case Tk::KwVararg: return "'vararg'";
     case Tk::KwClass: return "'class'";
     case Tk::KwInterface: return "'interface'";
     case Tk::KwObject: return "'object'";
@@ -83,6 +117,10 @@ inline const char* tkName(Tk k) {
     case Tk::KwBreak: return "'break'";
     case Tk::KwContinue: return "'continue'";
     case Tk::KwLoop: return "'loop'";
+    case Tk::KwThrow: return "'throw'";
+    case Tk::KwTry: return "'try'";
+    case Tk::KwCatch: return "'catch'";
+    case Tk::KwFinally: return "'finally'";
     case Tk::KwTrue: return "'true'";
     case Tk::KwFalse: return "'false'";
     case Tk::KwNull: return "'null'";

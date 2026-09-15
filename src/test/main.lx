@@ -1,4 +1,0 @@
-class List<T> {
-    fun size() -> T 
-    }
-}

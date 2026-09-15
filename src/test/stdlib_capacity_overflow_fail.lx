@@ -1,0 +1,4 @@
+fun main() -> int {
+    val storage = arrayNew(477218587)
+    return 0
+}

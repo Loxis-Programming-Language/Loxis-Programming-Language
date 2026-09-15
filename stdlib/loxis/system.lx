@@ -1,0 +1,33 @@
+package loxis.system
+
+import loxis.collections.list
+import loxis.option
+
+fun arguments() -> list<str> {
+    val n = nativeArgumentCount()
+    val out = listWithCapacity<str>(n)
+    var i = 0
+    while i < n { out.push(nativeArgument(i)); i += 1 }
+    return out
+}
+fun environment(name: str) -> Optional<str> {
+    val value = nativeEnvironment(name)
+    if value == null { return optionalEmpty<str>() }
+    return optionalValue<str>(value!!)
+}
+
+object System {
+    fun arguments() -> list<str> {
+        val count = nativeArgumentCount()
+        val out = listWithCapacity<str>(count)
+        var i = 0
+        while i < count { out.push(nativeArgument(i)); i += 1 }
+        return out
+    }
+
+    fun environment(name: str) -> Optional<str> {
+        val value = nativeEnvironment(name)
+        if value == null { return optionalEmpty<str>() }
+        return optionalValue<str>(value!!)
+    }
+}

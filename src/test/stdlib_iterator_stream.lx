@@ -6,7 +6,7 @@ fun main() -> int {
     print(2)
     val item = iter.next()
     print(3)
-    print(item == null)
+    print(item.isEmpty())
     print(4)
     return 0
 }

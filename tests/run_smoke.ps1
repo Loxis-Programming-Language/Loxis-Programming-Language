@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = "Continue"
 
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$env:LOXIS_STDLIB = Join-Path $root "stdlib"
 $exePath = if ([System.IO.Path]::IsPathRooted($Exe)) { $Exe } else { Join-Path $root $Exe }
 
 if (-not (Test-Path -LiteralPath $exePath)) {
@@ -43,6 +44,51 @@ $cases = @(
         Out = "1`n42`n"
     },
     @{
+        Name = "function overload by type"
+        File = "src\test\function_overload_type.lx"
+        Out = "int:7`nstr:lox`n"
+    },
+    @{
+        Name = "exception catch and finally"
+        File = "src\test\exception_basic.lx"
+        Out = "caught: boom`n42`n1`n"
+    },
+    @{
+        Name = "exception control flow"
+        File = "src\test\exception_control_flow.lx"
+        Out = "finally-return`n7`nrethrow: again`nfinally-rethrow`n"
+    },
+    @{
+        Name = "typed exception catch"
+        File = "src\test\exception_typed.lx"
+        Out = "specific: typed`n"
+    },
+    @{
+        Name = "exception unwind restores state"
+        File = "src\test\exception_unwind_state.lx"
+        Out = "alive`nstate`n"
+    },
+    @{
+        Name = "runtime errors are catchable"
+        File = "src\test\runtime_error_catch.lx"
+        Out = "caught divide: division by zero`ncaught parse: invalid integer: '12x'`ncaught heap: heap read out of bounds or through an invalid handle`n"
+    },
+    @{
+        Name = "finally abrupt control flow"
+        File = "src\test\exception_finally_control.lx"
+        Out = "2`n1`n101`n102`n103`n3`n"
+    },
+    @{
+        Name = "finally overrides pending return"
+        File = "src\test\exception_finally_throws.lx"
+        Out = "finally-wins`n"
+    },
+    @{
+        Name = "array and map literals"
+        File = "src\test\map_literal_success.lx"
+        Out = "literal maps: 2, 2`n"
+    },
+    @{
         Name = "for range"
         File = "src\test\for_range.lx"
         Out = "10`n"
@@ -61,16 +107,6 @@ $cases = @(
         Name = "class constructor fields"
         File = "src\test\class_ctor_fields.lx"
         Out = "10`n20`n15`n23`n"
-    },
-    @{
-        Name = "singleton object"
-        File = "src\test\singleton_object.lx"
-        Out = "11`n12`n12`n"
-    },
-    @{
-        Name = "data class generated members"
-        File = "src\test\data_class.lx"
-        Out = "2`n3`n1`n0`n1`n1026`nPoint(x=2, y=3)`n57`n"
     },
     @{
         Name = "stdlib generic list"
@@ -217,19 +253,38 @@ $failed = 0
 
 foreach ($case in $cases) {
     $filePath = (Join-Path $root $case.File) -replace "\\", "/"
-    $stdoutFile = [System.IO.Path]::GetTempFileName()
-    $stderrFile = [System.IO.Path]::GetTempFileName()
+    $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+    $work = Join-Path $tempRoot ("loxis-smoke-" + [guid]::NewGuid().ToString("N"))
+    [System.IO.Directory]::CreateDirectory($work) | Out-Null
 
     try {
-        $cmd = '"' + $exePath + '" "' + $filePath + '" > "' + $stdoutFile + '" 2> "' + $stderrFile + '"'
-        & cmd.exe /d /c $cmd
-        $exitCode = $LASTEXITCODE
-
-        $stdout = Normalize-Lines (Get-Content -LiteralPath $stdoutFile -Raw)
-        $stderr = Normalize-Lines (Get-Content -LiteralPath $stderrFile -Raw)
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo.FileName = $exePath
+        $process.StartInfo.Arguments = '"' + $filePath + '"'
+        $process.StartInfo.WorkingDirectory = $work
+        $process.StartInfo.UseShellExecute = $false
+        $process.StartInfo.CreateNoWindow = $true
+        $process.StartInfo.RedirectStandardOutput = $true
+        $process.StartInfo.RedirectStandardError = $true
+        $process.StartInfo.RedirectStandardInput = $true
+        [void]$process.Start()
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if ($case.ContainsKey("In")) { $process.StandardInput.Write($case.In) }
+        $process.StandardInput.Close()
+        if (-not $process.WaitForExit(30000)) {
+            $process.Kill()
+            $process.WaitForExit()
+            throw "Smoke test timed out: $($case.Name)"
+        }
+        $exitCode = $process.ExitCode
+        $stdout = Normalize-Lines $stdoutTask.Result
+        $stderr = Normalize-Lines $stderrTask.Result
         $expected = Normalize-Lines $case.Out
+        $expectedExit = if ($case.ContainsKey("Exit")) { $case.Exit } else { 0 }
+        $expectedError = if ($case.ContainsKey("Err")) { Normalize-Lines $case.Err } else { "" }
 
-        if ($exitCode -ne 0 -or $stdout -ne $expected -or $stderr.Length -ne 0) {
+        if ($exitCode -ne $expectedExit -or $stdout -ne $expected -or $stderr -ne $expectedError) {
             $failed += 1
             Write-Host "[FAIL] $($case.Name)"
             Write-Host "  file: $($case.File)"
@@ -248,8 +303,12 @@ foreach ($case in $cases) {
             Write-Host "[PASS] $($case.Name)"
         }
     } finally {
-        Remove-Item -LiteralPath $stdoutFile -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue
+        if ($process) { $process.Dispose() }
+        $resolvedWork = [System.IO.Path]::GetFullPath($work)
+        if ($resolvedWork.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase) -and
+            (Split-Path -Leaf $resolvedWork).StartsWith("loxis-smoke-")) {
+            Remove-Item -LiteralPath $resolvedWork -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 

@@ -1,178 +1,101 @@
 package loxis.io
 
-import loxis.collections.list
+import loxis.fileio
+import loxis.option
 
-// ============================================================
-//  Loxis Standard I/O
-// ============================================================
-//
-//  Console: stdin / stdout
-//  File:    read / write / append / remove / exists / lines
-//
-//  VM syscalls used:
-//    0  READCHAR    — read one char from stdin
-//    3  CHR         — int code → single-char string
-//    10 WRITE       — write int or str to stdout (no newline)
-//    40 FILEREAD    — read entire file → str
-//    41 FILEWRITE   — write str to file (truncate)
-//    42 FILEAPPEND  — append str to file
-//    43 FILEREMOVE  — delete file
-
-// --- low-level console ---
-
-fun readChar() -> int {
-    return syscall(0)
-}
-
+fun readChar() -> int { return syscall(0) }
 fun writeChar(c: int) -> unit {
-    write(c)
+    require(c >= 0 && c <= 255, "byte out of range")
+    write(chr(c))
 }
 
-// --- stdin ---
-
-fun readLine() -> str {
+// LF terminates a line; an immediately preceding CR is removed.
+// EOF is Empty, while a blank line is Value("").
+fun readLineOptional() -> Optional<str> {
     var c = readChar()
-    // skip leading \r, handle EOF / empty
-    while c == 13 {
+    if c < 0 { return optionalEmpty<str>() }
+    var line = ""
+    while c >= 0 && c != 10 {
+        line = line + chr(c)
         c = readChar()
     }
-    if c < 0 || c == 10 {
-        return ""
+    val n = strlen(line)
+    if c == 10 && n > 0 && strchar(line, n - 1) == 13 {
+        line = strslice(line, 0, n - 1)
     }
-    var result = chr(c)
-    c = readChar()
-    while c >= 0 {
-        if c == 10 {
-            return result
-        }
-        if c != 13 {
-            result = result + chr(c)
-        }
-        c = readChar()
-    }
-    return result
+    return optionalValue<str>(line)
 }
+
+fun readLine() -> str { return optionalGetOrElse<str>(readLineOptional(), "") }
 
 fun readAll() -> str {
+    var out = ""
     var c = readChar()
-    while c == 13 {
-        c = readChar()
+    while c >= 0 { out = out + chr(c); c = readChar() }
+    return out
+}
+
+fun readLines() -> list<str> {
+    val out = listWithCapacity<str>(8)
+    var item = readLineOptional()
+    while optionalHasValue<str>(item) {
+        out.push(optionalValueOrFail<str>(item))
+        item = readLineOptional()
     }
-    if c < 0 {
-        return ""
-    }
-    var result = chr(c)
-    c = readChar()
-    while c >= 0 {
-        if c != 13 {
-            result = result + chr(c)
-        }
-        c = readChar()
-    }
-    return result
+    return out
 }
 
-fun readLines() -> List<str> {
-    var lines = listNew<str>(8)
-    var c = readChar()
-    var inLine = false
-    var line = ""
-    while c >= 0 {
-        if c == 10 {
-            lines.push(line)
-            line = ""
-            inLine = false
-        } else if c != 13 {
-            if inLine {
-                line = line + chr(c)
-            } else {
-                line = chr(c)
-                inLine = true
-            }
-        }
-        c = readChar()
-    }
-    if inLine {
-        lines.push(line)
-    }
-    return lines
-}
+fun writeLine(value: str) -> unit { write(value); write(chr(10)) }
+fun remove(path: str) -> int { return removeFile(path) }
 
-// --- stdout ---
-
-fun writeLine(s: str) -> unit {
-    write(s)
-    write(chr(10))
-}
-
-// ============================================================
-//  File I/O
-// ============================================================
-
-fun readText(path: str) -> str {
-    return nativeFileReadText(path)
-}
-
-fun writeText(path: str, content: str) -> int {
-    return nativeFileWriteText(path, content)
-}
-
-fun appendText(path: str, content: str) -> int {
-    return nativeFileAppendText(path, content)
-}
-
-fun remove(path: str) -> int {
-    return nativeFileRemove(path)
-}
-
-fun exists(path: str) -> bool {
-    val content = nativeFileReadText(path)
-    return strlen(content) > 0
-}
-
-fun readLines(path: str) -> List<str> {
-    val content = nativeFileReadText(path)
-    var lines = listNew<str>(8)
-    val len = strlen(content)
-    if len == 0 {
-        return lines
-    }
+fun readLines(path: str) -> list<str> {
+    val content = readText(path)
+    val out = listWithCapacity<str>(8)
+    var start = 0
     var i = 0
-    var inLine = false
-    var line = ""
-    while i < len {
-        val ch = strchar(content, i)
-        if ch == 10 {
-            lines.push(line)
-            line = ""
-            inLine = false
-        } else if ch != 13 {
-            if inLine {
-                line = line + chr(ch)
-            } else {
-                line = chr(ch)
-                inLine = true
-            }
+    while i < strlen(content) {
+        if strchar(content, i) == 10 {
+            var end = i
+            if end > start && strchar(content, end - 1) == 13 { end -= 1 }
+            out.push(strslice(content, start, end - start))
+            start = i + 1
         }
         i += 1
     }
-    if inLine {
-        lines.push(line)
-    }
-    return lines
+    if start < i { out.push(strslice(content, start, i - start)) }
+    return out
 }
 
-fun writeLines(path: str, lines: List<str>) -> int {
-    val n = lines.size()
-    if n == 0 {
-        return nativeFileWriteText(path, "")
-    }
-    var joined = lines.get(0)
-    var i = 1
-    while i < n {
-        joined = joined + chr(10)
-        joined = joined + lines.get(i)
+fun writeLines(path: str, lines: list<str>) -> int {
+    var content = ""
+    var i = 0
+    while i < lines.size() {
+        if i > 0 { content = content + chr(10) }
+        content = content + lines.get(i)
         i += 1
     }
-    return nativeFileWriteText(path, joined)
+    return writeText(path, content)
+}
+
+object Console {
+    fun readLine() -> str { return this.readLineOptional().getOrElse("") }
+    fun readLineOptional() -> Optional<str> {
+        var c = syscall(0)
+        if c < 0 { return optionalEmpty<str>() }
+        var line = ""
+        while c >= 0 && c != 10 { line = line + chr(c); c = syscall(0) }
+        val size = strlen(line)
+        if c == 10 && size > 0 && strchar(line, size - 1) == 13 {
+            line = strslice(line, 0, size - 1)
+        }
+        return optionalValue<str>(line)
+    }
+    fun readAll() -> str {
+        var out = ""
+        var c = syscall(0)
+        while c >= 0 { out = out + chr(c); c = syscall(0) }
+        return out
+    }
+    fun print(value: str) -> unit { write(value) }
+    fun println(value: str) -> unit { write(value); write(chr(10)) }
 }

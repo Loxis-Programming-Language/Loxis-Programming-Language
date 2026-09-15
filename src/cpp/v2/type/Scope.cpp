@@ -181,7 +181,10 @@ void ScopeBuilder::resolveClass(ItemClass& cls, Scope* scope) {
     Scope* cs = classScope.get();
 
     // Set self type for 'this' binding
-    TyPtr selfTy = sym->ty;
+    std::vector<TyPtr> selfArgs;
+    for (size_t i = 0; i < cls.generics.size(); ++i)
+        selfArgs.push_back(std::make_shared<Ty>(TyParam{cls.generics[i].name, static_cast<uint32_t>(i)}));
+    TyPtr selfTy = std::make_shared<Ty>(TyClass{def, std::move(selfArgs)});
     cs->setSelfTy(selfTy);
     cs->setClassDef(def);
     cs->declare("this", SymbolKind::Value, nullptr, selfTy);
@@ -231,6 +234,9 @@ void ScopeBuilder::resolveClass(ItemClass& cls, Scope* scope) {
     for (const auto& m : cls.methods) {
         MethodInfo mi;
         mi.name = m.name;
+        for (const auto& generic : m.generics) mi.genericParams.push_back(generic.name);
+        for (const auto& param : m.params) mi.paramNames.push_back(param.first);
+        mi.varargIndex = m.varargIndex;
         mi.funcType = nullptr; // resolved during type checking
         mi.arity = static_cast<uint32_t>(m.params.size());
         mi.isOpen = m.isOpen;
@@ -278,6 +284,7 @@ void ScopeBuilder::inheritFromSuper(ClassDef& def, Scope* scope) {
 
     auto& superTy = std::get<TyClass>(*superSym->ty);
     auto superDef = superTy.def;
+    def.superDef = superDef;
 
     // Subclass fields start after super's total field size
     uint32_t baseOffset = superDef->totalFieldSize;
@@ -479,6 +486,8 @@ void ScopeBuilder::resolveInterface(ItemInterface& iface, Scope* scope) {
     for (const auto& m : iface.methods) {
         MethodInfo mi;
         mi.name = m.name;
+        for (const auto& param : m.params) mi.paramNames.push_back(param.first);
+        mi.varargIndex = m.varargIndex;
         mi.arity = static_cast<uint32_t>(m.params.size());
         mi.isAbstract = !m.defaultBody; // abstract if no default body
 
@@ -539,6 +548,9 @@ void ScopeBuilder::resolveObject(ItemObject& obj, Scope* scope) {
     for (const auto& m : obj.methods) {
         MethodInfo mi;
         mi.name = m.name;
+        for (const auto& generic : m.generics) mi.genericParams.push_back(generic.name);
+        for (const auto& param : m.params) mi.paramNames.push_back(param.first);
+        mi.varargIndex = m.varargIndex;
         mi.funcType = nullptr;
         mi.arity = static_cast<uint32_t>(m.params.size());
         mi.isOpen = m.isOpen;
@@ -563,8 +575,13 @@ void ScopeBuilder::resolveEnumClass(ItemEnumClass& ec, Scope* scope) {
 
     auto enumScope = std::make_unique<Scope>(scope);
     Scope* es = enumScope.get();
-    es->setSelfTy(sym->ty);
+    std::vector<TyPtr> selfArgs;
+    for (size_t i = 0; i < ec.generics.size(); ++i)
+        selfArgs.push_back(std::make_shared<Ty>(TyParam{ec.generics[i].name, static_cast<uint32_t>(i)}));
+    TyPtr selfTy = std::make_shared<Ty>(TyClass{def, std::move(selfArgs)});
+    es->setSelfTy(selfTy);
     es->setClassDef(def);
+    es->declare("this", SymbolKind::Value, nullptr, selfTy);
     scope->addChildMod(ec.name, std::move(enumScope));
 
     for (size_t i = 0; i < ec.generics.size(); ++i) {
@@ -626,7 +643,11 @@ void ScopeBuilder::resolveEnumClass(ItemEnumClass& ec, Scope* scope) {
     for (const auto& m : ec.methods) {
         MethodInfo mi;
         mi.name = m.name;
+        for (const auto& generic : m.generics) mi.genericParams.push_back(generic.name);
+        for (const auto& param : m.params) mi.paramNames.push_back(param.first);
+        mi.varargIndex = m.varargIndex;
         mi.funcType = nullptr;
+        mi.arity = static_cast<uint32_t>(m.params.size());
         def->methods.push_back(mi);
         es->declare(m.name, SymbolKind::Value, nullptr, nullptr);
     }

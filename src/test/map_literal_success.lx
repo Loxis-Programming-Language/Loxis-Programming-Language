@@ -1,0 +1,14 @@
+import loxis.collections.map
+import loxis.text
+
+fun main() -> int {
+    val scores = {"alice": 12, "bob": 27, "alice": 42}
+    require(scores.size() == 2, "duplicate keys replace values")
+    require(scores.get("alice").getOrElse(0) == 42, "string map literal")
+    val names = {1: "one", 2: "two"}
+    require(names.get(2).getOrElse("missing") == "two", "integer map literal")
+    val values = [3, 5, 8]
+    require(values[0] == 3 && values[2] == 8, "array literal")
+    print("literal maps: " + scores.size().toString() + ", " + names.size().toString())
+    return 0
+}

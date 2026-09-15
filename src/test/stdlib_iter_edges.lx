@@ -1,0 +1,27 @@
+import loxis.collections.stream
+
+class Tally(var calls: int) {}
+class NeverRead() : Iterator<int> {
+    override fun next() -> Optional<int> { return error("unexpected source evaluation") }
+}
+
+fun main() -> int {
+    require(stream<int>().count() == 0, "empty count")
+    require(!stream<int>().any({ value: int -> true }), "empty any")
+    require(stream<int>().all({ value: int -> false }), "empty all")
+    require(stream<int>(NeverRead()).take(0).next().isEmpty(), "zero take is lazy")
+    val xs = listWithCapacity<int>(2)
+    xs.push(10); xs.push(20)
+    val tally = Tally(0)
+    val source = stream<int>(xs).map<int>({ value: int -> tally.calls += 1; value + tally.calls })
+    require(tally.calls == 0, "map construction is lazy")
+    require(source.next().valueOrFail() == 11, "captured callback")
+    require(tally.calls == 1, "exactly one evaluation")
+    require(source.any({ value: int -> value == 22 }), "short circuit any")
+    require(tally.calls == 2 && source.next().isEmpty(), "callback exhaustion")
+    var seen = 0
+    for value in stream<int>(xs) { seen += value }
+    require(seen == 30, "stream for")
+    print("iterator edges ok")
+    return 0
+}

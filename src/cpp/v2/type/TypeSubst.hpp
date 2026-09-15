@@ -19,7 +19,7 @@ inline std::unordered_map<std::string, TyPtr> makeSubstMap(
 inline TyPtr substituteType(TyPtr ty, const std::unordered_map<std::string, TyPtr>& subst) {
     if (!ty) return ty;
 
-    return std::visit([&](const auto& t) -> TyPtr {
+    TyPtr result = std::visit([&](const auto& t) -> TyPtr {
         using T = std::decay_t<decltype(t)>;
         if constexpr (std::is_same_v<T, TyParam>) {
             auto it = subst.find(t.name);
@@ -63,6 +63,11 @@ inline TyPtr substituteType(TyPtr ty, const std::unordered_map<std::string, TyPt
             return std::make_shared<Ty>(std::move(copy));
         }
     }, *ty);
+    if (ty->nullable && result && !result->nullable) {
+        result = std::make_shared<Ty>(*result);
+        result->nullable = true;
+    }
+    return result;
 }
 
 inline TyPtr applyClassArgs(TyPtr base, const std::vector<TyPtr>& args) {

@@ -1,0 +1,16 @@
+import loxis.net
+import loxis.system
+import loxis.text
+
+fun main() -> int {
+    val args = System.arguments()
+    require(args.size() >= 2, "usage: tcp_client <host> <port> [message]")
+    val host = args.get(0)
+    val port = args.get(1).toIntResult().getOrElseGet({ reason: str -> error(reason) })
+    val message = if args.size() > 2 { args.get(2) } else { "hello from Loxis" }
+    val socket = Tcp.connect(host, port)
+    socket.write(message)
+    print(socket.read(4096))
+    socket.close()
+    return 0
+}

@@ -1,7 +1,7 @@
 import loxis.collections.list
 
 fun main() -> int {
-    val xs = listNew<int>(1)
+    val xs = listWithCapacity<int>(1)
     xs.push(4)
     xs.push(5)
     xs.push(6)

@@ -1,0 +1,7 @@
+import loxis.collections.map
+import loxis.text
+
+fun main() -> int {
+    val scores = {"alice": 12, "bob": 27, "alice": 42}
+    print(scores)
+}

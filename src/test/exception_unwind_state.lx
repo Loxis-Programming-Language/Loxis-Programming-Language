@@ -1,0 +1,15 @@
+fun clobber(a: int, b: int, c: int) -> unit {
+    val local = a + b + c
+    if local > 0 { error("state") }
+}
+
+fun main() -> int {
+    val preserved = "alive"
+    try {
+        clobber(1, 2, 3)
+    } catch (failure: Exception) {
+        print(preserved)
+        print(failure.message)
+    }
+    return 0
+}

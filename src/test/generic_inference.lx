@@ -1,0 +1,45 @@
+import loxis.collections.list
+
+class Box<T>(val value: T) {}
+
+fun identity<T>(value: T) -> T { return value }
+fun unwrap<T>(box: Box<T>) -> T { return box.value }
+fun apply<T, R>(value: T, f: fun(T) -> R) -> R { return f(value) }
+fun forward<T>(value: T) -> T { return identity(value) }
+class InferenceEmpty<T>() {}
+class Mapper() {
+    fun convert<T, R>(value: T, f: fun(T) -> R) -> R { return f(value) }
+}
+fun choose<T>(value: Box<T>) -> T { return value.value }
+fun choose(value: str) -> str { return value }
+fun makeEmpty() -> InferenceEmpty<int> { return InferenceEmpty() }
+fun acceptsEmpty(value: InferenceEmpty<int>) -> int { return 11 }
+fun main() -> int {
+    print(identity(42))
+    print(identity("hello"))
+    print(unwrap(Box(7)))
+    print(forward(9))
+    print(apply(3, { x -> x * 2 }))
+    print(Mapper().convert(4, { x -> x + 1 }))
+    val empty: InferenceEmpty<int> = InferenceEmpty()
+    val xs: list<int> = list()
+    xs.push(2)
+    xs.push(3)
+    val factor = 10
+    val ys = xs.map({ x -> x * factor })
+    print(ys.get(0) + ys.get(1))
+    listFree(ys)
+    listFree(xs)
+    print(choose(Box(12)))
+    print(choose("overload"))
+    print(unwrap(unwrap(Box(Box(8)))))
+    print(acceptsEmpty(InferenceEmpty()))
+    val optional: Optional<int> = optionalEmpty()
+    print(optional.getOrElse(15))
+    val nullable: int? = 16
+    val inferredNullable = identity(nullable)
+    print(inferredNullable!!)
+    print(apply(4, { x -> return x + 3 }))
+    return 0
+}
+

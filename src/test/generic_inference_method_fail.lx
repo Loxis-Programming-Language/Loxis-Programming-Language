@@ -1,0 +1,2 @@
+class Check() { fun same<T>(left: T, right: T) -> T { return left } }
+fun main() { Check().same(1, "bad") }

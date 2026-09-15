@@ -30,3 +30,7 @@ struct GalVMError : std::runtime_error {
 struct RuntimeError : GalVMError {
 	using GalVMError::GalVMError;
 };
+
+struct UncaughtLoxisException : GalVMError {
+	using GalVMError::GalVMError;
+};

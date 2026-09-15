@@ -1,0 +1,135 @@
+package loxis.collections.map
+
+import loxis.collections.list
+
+// Open addressing with linear probing. States: 0 empty, 1 occupied, 2 deleted.
+class HashMap<K, V>(val hash: fun(K) -> int, val equal: fun(K, K) -> bool) {
+    var states: list<int> = listWithCapacity<int>(8)
+    var keySlots: list<Optional<K>> = listWithCapacity<Optional<K>>(8)
+    var valueSlots: list<Optional<V>> = listWithCapacity<Optional<V>>(8)
+    var count: int = 0
+
+    fun ensureStorage() -> unit {
+        if !this.states.isEmpty() { return }
+        var i = 0
+        while i < 8 {
+            this.states.push(0)
+            this.keySlots.push(optionalEmpty<K>())
+            this.valueSlots.push(optionalEmpty<V>())
+            i += 1
+        }
+    }
+
+    fun size() -> int { return this.count }
+    fun isEmpty() -> bool { return this.count == 0 }
+
+    fun locate(key: K) -> int {
+        this.ensureStorage()
+        val capacity = this.states.size()
+        var index = this.hash(key) % capacity
+        if index < 0 { index += capacity }
+        var visited = 0
+        while visited < capacity {
+            val state = this.states.get(index)
+            if state == 0 { return -1 }
+            if state == 1 && this.equal(optionalValueOrFail<K>(this.keySlots.get(index)), key) { return index }
+            index = (index + 1) % capacity
+            visited += 1
+        }
+        return -1
+    }
+
+    fun containsKey(key: K) -> bool { return this.locate(key) >= 0 }
+    fun get(key: K) -> Optional<V> {
+        val index = this.locate(key)
+        if index < 0 { return optionalEmpty<V>() }
+        return this.valueSlots.get(index)
+    }
+
+    fun put(key: K, value: V) -> Optional<V> {
+        val oldIndex = this.locate(key)
+        if oldIndex >= 0 {
+            val old = this.valueSlots.get(oldIndex)
+            this.valueSlots.set(oldIndex, optionalValue<V>(value))
+            return old
+        }
+        if (this.count + 1) * 4 >= this.states.size() * 3 { this.grow() }
+        val capacity = this.states.size()
+        var index = this.hash(key) % capacity
+        if index < 0 { index += capacity }
+        while this.states.get(index) == 1 { index = (index + 1) % capacity }
+        this.states.set(index, 1)
+        this.keySlots.set(index, optionalValue<K>(key))
+        this.valueSlots.set(index, optionalValue<V>(value))
+        this.count += 1
+        return optionalEmpty<V>()
+    }
+
+    fun remove(key: K) -> Optional<V> {
+        val index = this.locate(key)
+        if index < 0 { return optionalEmpty<V>() }
+        val old = this.valueSlots.get(index)
+        this.states.set(index, 2)
+        this.keySlots.set(index, optionalEmpty<K>())
+        this.valueSlots.set(index, optionalEmpty<V>())
+        this.count -= 1
+        return old
+    }
+
+    fun grow() -> unit {
+        val oldStates = this.states
+        val oldKeys = this.keySlots
+        val oldValues = this.valueSlots
+        require(oldStates.size() <= 238609293, "map capacity overflow")
+        val capacity = oldStates.size() * 2
+        this.states = listWithCapacity<int>(capacity)
+        this.keySlots = listWithCapacity<Optional<K>>(capacity)
+        this.valueSlots = listWithCapacity<Optional<V>>(capacity)
+        this.count = 0
+        var i = 0
+        while i < capacity {
+            this.states.push(0)
+            this.keySlots.push(optionalEmpty<K>())
+            this.valueSlots.push(optionalEmpty<V>())
+            i += 1
+        }
+        i = 0
+        while i < oldStates.size() {
+            if oldStates.get(i) == 1 {
+                this.put(optionalValueOrFail<K>(oldKeys.get(i)), optionalValueOrFail<V>(oldValues.get(i)))
+            }
+            i += 1
+        }
+    }
+
+    fun keys() -> list<K> {
+        val out = listWithCapacity<K>(this.count)
+        var i = 0
+        while i < this.states.size() {
+            if this.states.get(i) == 1 { out.push(optionalValueOrFail<K>(this.keySlots.get(i))) }
+            i += 1
+        }
+        return out
+    }
+
+    fun clear() -> unit {
+        var i = 0
+        while i < this.states.size() {
+            this.states.set(i, 0)
+            this.keySlots.set(i, optionalEmpty<K>())
+            this.valueSlots.set(i, optionalEmpty<V>())
+            i += 1
+        }
+        this.count = 0
+    }
+}
+
+fun hashInt(value: int) -> int { return value }
+fun equalInt(a: int, b: int) -> bool { return a == b }
+fun hashString(value: str) -> int {
+    var hash = 0
+    var i = 0
+    while i < strlen(value) { hash = (hash * 31 + strchar(value, i)) % 2147483647; i += 1 }
+    return hash
+}
+fun equalString(a: str, b: str) -> bool { return a == b }

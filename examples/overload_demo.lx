@@ -1,0 +1,38 @@
+import loxis.collections.stream
+import loxis.text
+
+fun show(value: int) -> str { return "int(" + value.toString() + ")" }
+fun show(value: str) -> str { return "str(\"" + value + "\")" }
+fun show(value: bool) -> str {
+    if value { return "bool(true)" }
+    return "bool(false)"
+}
+
+fun streamLabel<T>() -> str { return "empty stream" }
+fun streamLabel<T>(items: list<T>) -> str {
+    return "list stream with " + items.size().toString() + " items"
+}
+fun streamLabel<T>(iter: Iterator<T>) -> str {
+    if iter.next().isEmpty() { return "exhausted iterator stream" }
+    return "non-empty iterator stream"
+}
+
+fun main() -> int {
+    print(show(42))
+    print(show("Loxis"))
+    print(show(true))
+
+    val numbers = list<int>()
+    numbers.push(3)
+    numbers.push(7)
+    numbers.push(11)
+
+    print(streamLabel<int>())
+    print(streamLabel<int>(numbers))
+    print(streamLabel<int>(listIter<int>(numbers)))
+
+    print("stream() count: " + stream<int>().count().toString())
+    print("stream(list) sum: " + stream<int>(numbers).fold<int>(0, { sum: int, value: int -> sum + value }).toString())
+    print("stream(iterator) first: " + stream<int>(listIter<int>(numbers)).next().getOrElse(-1).toString())
+    return 0
+}

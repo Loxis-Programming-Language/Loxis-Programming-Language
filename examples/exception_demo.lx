@@ -1,0 +1,42 @@
+import loxis.text
+
+open class AppException(message: str) : Exception(message)
+class ParseException(message: str) : AppException(message)
+
+fun parsePort(source: str) -> int {
+    if source == "oops" {
+        throw ParseException("invalid port: " + source)
+    }
+    return 8080
+}
+
+fun loadConfig() -> int {
+    print("loadConfig: opening config")
+    try {
+        return parsePort("oops")
+    } catch (failure: ParseException) {
+        print("loadConfig: caught and rethrowing")
+        throw failure
+    } finally {
+        print("loadConfig: config closed")
+    }
+}
+
+fun main() -> int {
+    print("=== Loxis exception demo ===")
+
+    val fallback = try {
+        loadConfig()
+    } catch (failure: ParseException) {
+        print("main: " + failure.message)
+        3000
+    } catch (failure: AppException) {
+        print("main: generic application failure")
+        4000
+    } finally {
+        print("main: initialization finished")
+    }
+
+    print("selected port: " + toString(fallback))
+    return 0
+}

@@ -1,0 +1,38 @@
+import loxis.json
+import loxis.fileio
+import loxis.system
+
+fun requiredText(value: Result<str, str>) -> str {
+    return when (value) {
+        Result::Success(text) -> text,
+        Result::Failure(reason) -> error(reason),
+        else -> error("invalid result")
+    }
+}
+
+fun requiredJson(value: Result<JsonValue, str>) -> JsonValue {
+    return when (value) {
+        Result::Success(json) -> json,
+        Result::Failure(reason) -> error(reason),
+        else -> error("invalid result")
+    }
+}
+
+// Usage: Loxis examples/json_report.lx -- input.json output.json
+// Input: a JSON array. Output: its length and original values in a JSON object.
+fun main() -> int {
+    val args = System.arguments()
+    require(args.size() == 2, "expected input and output paths")
+    val input = requiredJson(Json.parse(requiredText(File.readText(args.get(0)))))
+    val values = when (input) {
+        JsonValue::Array(items) -> items,
+        else -> error("input must be a JSON array")
+    }
+    val output = HashMap<str, JsonValue>(hashString, equalString)
+    output.put("count", Json.number(values.size().toString()))
+    output.put("values", Json.array(values.map<JsonValue>({ item: JsonValue -> item })))
+    val text = requiredText(Json.stringify(Json.dictionary(output)))
+    require(File.writeText(args.get(1), text).isSuccess(), "cannot write report")
+    print("report written")
+    return 0
+}

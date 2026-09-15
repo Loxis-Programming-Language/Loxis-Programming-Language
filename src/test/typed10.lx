@@ -1,7 +1,0 @@
-
-fun main() -> void {
-val x = 10
-val y = "hello"
-val z = x + y
-print(z)
-}

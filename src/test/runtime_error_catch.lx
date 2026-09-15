@@ -1,0 +1,24 @@
+import loxis.text
+
+fun divide() -> int { return 1 / 0 }
+
+fun main() -> int {
+    try {
+        val ignored = divide()
+    } catch (failure: RuntimeException) {
+        print("caught divide: " + failure.message)
+    }
+
+    try {
+        val ignored = parseInt("12x")
+    } catch (failure: RuntimeException) {
+        print("caught parse: " + failure.message)
+    }
+
+    try {
+        val ignored = hread(999999, 0)
+    } catch (failure: RuntimeException) {
+        print("caught heap: " + failure.message)
+    }
+    return 0
+}

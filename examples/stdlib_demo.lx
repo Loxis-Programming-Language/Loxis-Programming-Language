@@ -1,0 +1,87 @@
+import loxis.collections.iterator
+import loxis.text
+import loxis.math
+import loxis.json
+import loxis.fileio
+import loxis.path
+import loxis.system
+import loxis.random
+import loxis.time
+
+fun demoText(result: Result<str, str>) -> str {
+    return when (result) {
+        Result::Success(value) -> value,
+        Result::Failure(reason) -> error(reason),
+        else -> error("invalid result")
+    }
+}
+
+// Usage: Loxis examples/stdlib_demo.lx -- "some words some words" report.json
+// Counts are case-sensitive; punctuation remains part of each word.
+// The output file is overwritten on each run.
+fun main() -> int {
+    val started = Clock.monotonicNanos()
+    val args = System.arguments()
+    require(args.size() <= 2, "expected optional text and output path")
+    var source = "loxis makes code fun loxis makes lists fun loxis"
+    var outputPath = Path.join(Path.currentDirectory(), "stdlib-demo.json")
+    if args.size() > 0 { source = args.get(0) }
+    if args.size() > 1 { outputPath = Path.normalize(args.get(1)) }
+
+    print("=== Loxis stdlib playground ===")
+    print("Input: " + source)
+
+    // Text and collection APIs compose through values instead of prefixed free functions.
+    val words = source.words()
+    val unique = list<str>()
+    for word in words {
+        if unique.find({ candidate: str -> candidate == word }).isEmpty() { unique.push(word) }
+    }
+
+    // Capturing callbacks count words and sort the most frequent ones first.
+    val frequency = { word: str -> words.count({ candidate: str -> candidate == word }) }
+    unique.sortBy({ a: str, b: str -> frequency(a) > frequency(b) })
+    print("Words: " + words.size().toString() + ", unique: " + unique.size().toString())
+    print("Top words:")
+    for word in unique.take(5) {
+        print("  " + word + ": " + frequency(word).toString())
+    }
+
+    // Optional and Result keep empty input and parse errors explicit.
+    val first = words.first().getOrElse("(empty)")
+    print("First word: " + first)
+    val parsed = tryParseInt("12x")
+    print("Invalid integer fallback: " + parsed.getOrElse(-1).toString())
+    val scalars = source.codePoints()
+    require(scalars.isSuccess(), "input must be valid UTF-8")
+    print("UTF-8 bytes: " + source.length().toString() + ", code points: " + scalars.getOrElse(list<int>()).size().toString())
+    print("sqrt(81): " + Math.sqrt(81.0).toString())
+    val unicodeSample = Unicode.fromCodePoint(29483)
+    val unicodePoints = unicodeSample.codePoints().getOrElse(list<int>())
+    print("Unicode U+732B: " + unicodeSample.length().toString() + " bytes, " + unicodePoints.size().toString() + " code point")
+
+    // A fixed seed makes this selection reproducible for the same input.
+    val rng = Random.seeded(42)
+    if !words.isEmpty() { print("Seeded pick: " + words.get(rng.nextBounded(words.size()))) }
+
+    // Serialize [word, count] rows, write the file, then read and parse it back.
+    val rows = list<JsonValue>()
+    for word in listIter<str>(unique) {
+        val row = list<JsonValue>()
+        row.push(Json.string(word))
+        row.push(Json.number(frequency(word).toString()))
+        rows.push(Json.array(row))
+    }
+    val encoded = demoText(Json.array(rows).stringify())
+    val written = File.writeText(outputPath, encoded)
+    when (written) {
+        Result::Failure(reason) -> error(reason),
+        else -> 0
+    }
+    val restored = File.readText(outputPath).flatMap<JsonValue>({ text: str -> Json.parse(text) })
+    require(restored.isSuccess(), "JSON round trip failed")
+    print("JSON: " + encoded)
+    print("Saved and read back: " + outputPath)
+    print("Elapsed ns: " + (Clock.monotonicNanos() - started).toString())
+    return 0
+}

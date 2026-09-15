@@ -42,6 +42,9 @@ private:
     // Create specialized copies
     std::string monoFn(const HirFn& genericFn, const std::vector<CoreTyPtr>& typeArgs);
     std::string monoClass(const HirClass& genericCls, const std::vector<CoreTyPtr>& typeArgs);
+    std::string monoMethod(const HirClass& owner, const std::string& specializedOwner,
+                           const std::vector<CoreTyPtr>& classArgs, const HirFn& method,
+                           const std::vector<CoreTyPtr>& methodArgs);
 
     // Type substitution helpers
     void substFn(HirFn& fn, const SubstMap& subst);

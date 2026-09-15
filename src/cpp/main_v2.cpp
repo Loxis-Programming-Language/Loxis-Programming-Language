@@ -17,7 +17,10 @@ int main(int argc, char* argv[]) {
 
         for (int i = 2; i < argc; i++) {
             std::string arg = argv[i];
-            if (arg.rfind("--gc=", 0) == 0) {
+            if (arg == "--") {
+                for (++i; i < argc; ++i) opts.arguments.emplace_back(argv[i]);
+                break;
+            } else if (arg.rfind("--gc=", 0) == 0) {
                 if (!parseGCMode(arg.substr(5), opts.gc)) {
                     std::cerr << "Unknown GC backend: " << arg.substr(5)
                               << " (expected nogc, arc or aarc)\n";

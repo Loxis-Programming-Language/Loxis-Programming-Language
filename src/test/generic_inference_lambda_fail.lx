@@ -1,0 +1,2 @@
+fun apply<T, R>(value: T, f: fun(T) -> R) -> R { return f(value) }
+fun main() { apply(1, { x: str -> x }) }

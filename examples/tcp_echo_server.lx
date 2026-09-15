@@ -1,0 +1,16 @@
+import loxis.net
+import loxis.system
+import loxis.text
+
+fun main() -> int {
+    val args = System.arguments()
+    val port = if args.isEmpty() { 8080 } else { args.get(0).toIntResult().getOrElse(8080) }
+    val listener = Tcp.listen("127.0.0.1", port)
+    print("listening on 127.0.0.1:" + listener.localPort().toString())
+    val client = listener.accept()
+    val request = client.read(4096)
+    client.write("echo: " + request)
+    client.close()
+    listener.close()
+    return 0
+}

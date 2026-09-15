@@ -1,5 +1,6 @@
 #include "Monomorphizer.hpp"
 #include "../type/TypeSubst.hpp"
+#include <algorithm>
 #include <sstream>
 
 namespace loxis::v2 {
@@ -25,33 +26,7 @@ CoreTyPtr hirExprTy(const HirExprPtr& expr) {
 // ============================================================
 
 std::string Monomorphizer::typeSig(CoreTyPtr ty) {
-    if (!ty) return "?";
-    switch (ty->kind()) {
-        case TyKind::Int: return "i";
-        case TyKind::Long: return "l";
-        case TyKind::Float: return "f";
-        case TyKind::Double: return "d";
-        case TyKind::Bool: return "b";
-        case TyKind::Char: return "c";
-        case TyKind::Str: return "s";
-        case TyKind::Unit: return "u";
-        case TyKind::Never: return "n";
-        case TyKind::Null: return "0";
-        case TyKind::Class_: {
-            auto& c = std::get<TyClass>(*ty);
-            std::string sig = c.def->name;
-            for (const auto& a : c.args) sig += "$" + typeSig(a);
-            return sig;
-        }
-        case TyKind::Interface_: {
-            auto& iface = std::get<TyInterface>(*ty);
-            std::string sig = iface.def->name;
-            for (const auto& a : iface.args) sig += "$" + typeSig(a);
-            return sig;
-        }
-        case TyKind::Param: return std::get<TyParam>(*ty).name;
-        default: return "x";
-    }
+    return mangleType(ty);
 }
 
 std::string Monomorphizer::mangle(const std::string& base,
@@ -64,11 +39,8 @@ std::string Monomorphizer::mangle(const std::string& base,
 }
 
 std::string Monomorphizer::typeSigVec(const std::vector<CoreTyPtr>& types) {
-    std::string result;
-    for (size_t i = 0; i < types.size(); ++i) {
-        if (i > 0) result += "_";
-        result += typeSig(types[i]);
-    }
+    std::string result = std::to_string(types.size());
+    for (const auto& type : types) result += "_" + typeSig(type);
     return result;
 }
 
@@ -89,6 +61,13 @@ Monomorphizer::SubstMap Monomorphizer::makeSubst(
 
 CoreTyPtr Monomorphizer::substTy(CoreTyPtr ty, const SubstMap& subst) {
     if (!ty) return nullptr;
+    if (ty->nullable) {
+        auto base = std::make_shared<Ty>(*ty);
+        base->nullable = false;
+        auto result = std::make_shared<Ty>(*substTy(base, subst));
+        result->nullable = true;
+        return result;
+    }
     if (ty->kind() == TyKind::Param) {
         auto& param = std::get<TyParam>(*ty);
         auto it = subst.find(param.name);
@@ -140,6 +119,9 @@ CoreTyPtr Monomorphizer::substTy(CoreTyPtr ty, const SubstMap& subst) {
 
 void Monomorphizer::substExpr(HirExprPtr& expr, const SubstMap& subst) {
     if (!expr) return;
+    // HIR uses shared pointers. Each specialization must own its expression
+    // tree; rewriting a template corrupts subsequent type instantiations.
+    expr = std::make_shared<HirExpr>(*expr);
     std::visit([&](auto& e) {
         using T = std::decay_t<decltype(e)>;
         e.ty = substTy(e.ty, subst);
@@ -183,9 +165,21 @@ void Monomorphizer::substExpr(HirExprPtr& expr, const SubstMap& subst) {
         else if constexpr (std::is_same_v<T, HirMethodCall>) {
             substExpr(e.recv, subst);
             for (auto& a : e.args) substExpr(a, subst);
+            for (auto& arg : e.typeArgs) arg = substTy(arg, subst);
         }
         else if constexpr (std::is_same_v<T, HirBlock>) {
-            for (auto& s : e.stmts) scanStmt(s);  // Use scanStmt for recursion
+            for (auto& stmt : e.stmts) {
+                stmt = std::make_shared<HirStmt>(*stmt);
+                std::visit([&](auto& s) {
+                    using S = std::decay_t<decltype(s)>;
+                    if constexpr (std::is_same_v<S, HirStmtLet>) {
+                        s.ty = substTy(s.ty, subst);
+                        substExpr(s.init, subst);
+                    } else {
+                        substExpr(s.expr, subst);
+                    }
+                }, *stmt);
+            }
             if (e.tail) substExpr(e.tail, subst);
         }
         else if constexpr (std::is_same_v<T, HirIf>) {
@@ -206,7 +200,16 @@ void Monomorphizer::substExpr(HirExprPtr& expr, const SubstMap& subst) {
         }
         else if constexpr (std::is_same_v<T, HirWhen>) {
             if (e.scrut) substExpr(e.scrut, subst);
-            for (auto& arm : e.arms) substExpr(arm.body, subst);
+            for (auto& arm : e.arms) {
+                if (auto* cond = std::get_if<HirExprPtr>(&arm.condition)) substExpr(*cond, subst);
+                substExpr(arm.body, subst);
+            }
+        }
+        else if constexpr (std::is_same_v<T, HirEnumCtor>) {
+            for (auto& arg : e.args) substExpr(arg, subst);
+        }
+        else if constexpr (std::is_same_v<T, HirClosure>) {
+            for (auto& capture : e.captures) capture.ty = substTy(capture.ty, subst);
         }
         else if constexpr (std::is_same_v<T, HirBreak>) {
             if (e.expr) substExpr(e.expr, subst);
@@ -222,6 +225,18 @@ void Monomorphizer::substExpr(HirExprPtr& expr, const SubstMap& subst) {
         }
         else if constexpr (std::is_same_v<T, HirTry>) {
             substExpr(e.expr, subst);
+        }
+        else if constexpr (std::is_same_v<T, HirThrow>) {
+            substExpr(e.expr, subst);
+        }
+        else if constexpr (std::is_same_v<T, HirTryCatch>) {
+            substExpr(e.body, subst);
+            for (auto& clause : e.catches) {
+                clause.exceptionTy = substTy(clause.exceptionTy, subst);
+                substExpr(clause.body, subst);
+            }
+            if (e.finallyBody) substExpr(e.finallyBody, subst);
+            e.ty = substTy(e.ty, subst);
         }
         else if constexpr (std::is_same_v<T, HirCast>) {
             substExpr(e.expr, subst);
@@ -341,19 +356,43 @@ void Monomorphizer::scanExpr(HirExprPtr expr) {
         }
         else if constexpr (std::is_same_v<T, HirMethodCall>) {
             scanExpr(e.recv);
+            std::string ownerName;
+            std::string specializedOwner;
+            std::vector<CoreTyPtr> classArgs;
             if (CoreTyPtr recvTy = hirExprTy(e.recv)) {
                 if (recvTy->kind() == TyKind::Class_) {
                     auto& cls = std::get<TyClass>(*recvTy);
+                    ownerName = cls.def->name;
+                    specializedOwner = ownerName;
+                    classArgs = cls.args;
                     if (!cls.args.empty()) {
                         auto cit = m_classByName.find(cls.def->name);
                         if (cit != m_classByName.end() && hasGenerics(*cit->second)) {
                             std::string mangled = monoClass(*cit->second, cls.args);
+                            specializedOwner = mangled;
                             e.qualifiedName = mangled + "." + e.method;
                             e.vtableIndex = ~0u;
                             e.isInterfaceDispatch = false;
                         }
                     }
                 }
+            }
+            if (!e.typeArgs.empty() && !ownerName.empty()) {
+                auto owner = m_classByName.find(ownerName);
+                if (owner != m_classByName.end()) {
+                    for (const auto& method : owner->second->methods) {
+                        if (method.name == e.method && !method.generics.empty()) {
+                            std::string specializedMethod = monoMethod(
+                                *owner->second, specializedOwner, classArgs, method, e.typeArgs);
+                            e.method = specializedMethod;
+                            e.qualifiedName = specializedOwner + "." + specializedMethod;
+                            e.vtableIndex = ~0u;
+                            e.isInterfaceDispatch = false;
+                            break;
+                        }
+                    }
+                }
+                e.typeArgs.clear();
             }
             for (auto& a : e.args) scanExpr(a);
         }
@@ -397,7 +436,13 @@ void Monomorphizer::scanExpr(HirExprPtr expr) {
         }
         else if constexpr (std::is_same_v<T, HirWhen>) {
             if (e.scrut) scanExpr(e.scrut);
-            for (auto& arm : e.arms) scanExpr(arm.body);
+            for (auto& arm : e.arms) {
+                if (auto* cond = std::get_if<HirExprPtr>(&arm.condition)) scanExpr(*cond);
+                scanExpr(arm.body);
+            }
+        }
+        else if constexpr (std::is_same_v<T, HirEnumCtor>) {
+            for (auto& arg : e.args) scanExpr(arg);
         }
         else if constexpr (std::is_same_v<T, HirBreak>) {
             if (e.expr) scanExpr(e.expr);
@@ -413,6 +458,14 @@ void Monomorphizer::scanExpr(HirExprPtr expr) {
         }
         else if constexpr (std::is_same_v<T, HirTry>) {
             scanExpr(e.expr);
+        }
+        else if constexpr (std::is_same_v<T, HirThrow>) {
+            scanExpr(e.expr);
+        }
+        else if constexpr (std::is_same_v<T, HirTryCatch>) {
+            scanExpr(e.body);
+            for (auto& clause : e.catches) scanExpr(clause.body);
+            if (e.finallyBody) scanExpr(e.finallyBody);
         }
         else if constexpr (std::is_same_v<T, HirCast>) {
             scanExpr(e.expr);
@@ -449,22 +502,29 @@ void Monomorphizer::scanFn(const HirFn& fn) {
 
 std::string Monomorphizer::monoFn(const HirFn& genericFn,
                                    const std::vector<CoreTyPtr>& typeArgs) {
-    std::string mangled = mangle(genericFn.name, typeArgs);
-
     SpecKey key{genericFn.name, typeSigVec(typeArgs)};
     auto it = m_specMap.find(key);
     if (it != m_specMap.end()) return it->second;
-
-    m_specMap[key] = mangled;
 
     // Build substitution map
     SubstMap subst = makeSubst(genericFn.generics, typeArgs);
 
     // Clone and substitute
     HirFn specialized = genericFn;
-    specialized.name = mangled;
     specialized.generics.clear();
     substFn(specialized, subst);
+    const auto descriptor = genericFn.name.find("$P");
+    if (descriptor != std::string::npos) {
+        std::vector<TyPtr> params;
+        params.reserve(specialized.params.size());
+        for (const auto& param : specialized.params) params.push_back(param.second);
+        specialized.name = mangleFunctionSignature(
+            genericFn.name.substr(0, descriptor), TyFn{std::move(params), specialized.ret});
+    } else {
+        specialized.name = mangle(genericFn.name, typeArgs);
+    }
+    std::string mangled = specialized.name;
+    m_specMap[key] = mangled;
 
     // Add to worklist for recursive scanning
     m_worklist.push_back(key);
@@ -490,6 +550,10 @@ std::string Monomorphizer::monoClass(const HirClass& genericCls,
     specialized.generics.clear();
     specialized.typeId = m_nextTypeId++;
     substClass(specialized, subst);
+    specialized.methods.erase(
+        std::remove_if(specialized.methods.begin(), specialized.methods.end(),
+            [](const HirFn& method) { return !method.generics.empty(); }),
+        specialized.methods.end());
     for (auto& methodName : specialized.vtableMethodNames) {
         std::string prefix = genericCls.name + ".";
         if (methodName.rfind(prefix, 0) == 0) {
@@ -505,6 +569,35 @@ std::string Monomorphizer::monoClass(const HirClass& genericCls,
     m_worklist.push_back(key);
     m_output.items.push_back(specialized);
     return mangled;
+}
+
+std::string Monomorphizer::monoMethod(
+    const HirClass& owner,
+    const std::string& specializedOwner,
+    const std::vector<CoreTyPtr>& classArgs,
+    const HirFn& method,
+    const std::vector<CoreTyPtr>& methodArgs)
+{
+    SpecKey key{specializedOwner + "." + method.name, typeSigVec(methodArgs)};
+    if (auto found = m_specMap.find(key); found != m_specMap.end()) return found->second;
+
+    std::string specializedName = mangle(method.name, methodArgs);
+    m_specMap[key] = specializedName;
+
+    HirFn specialized = method;
+    if (!owner.generics.empty()) substFn(specialized, makeSubst(owner.generics, classArgs));
+    substFn(specialized, makeSubst(method.generics, methodArgs));
+    specialized.name = specializedName;
+    specialized.generics.clear();
+    scanFn(specialized);
+
+    for (auto& item : m_output.items) {
+        if (auto* cls = std::get_if<HirClass>(&item); cls && cls->name == specializedOwner) {
+            cls->methods.push_back(std::move(specialized));
+            break;
+        }
+    }
+    return specializedName;
 }
 
 // ============================================================
@@ -550,18 +643,24 @@ HirModule Monomorphizer::monomorphize(const HirModule& hir) {
         std::visit([&](const auto& i) {
             using T = std::decay_t<decltype(i)>;
             if constexpr (std::is_same_v<T, HirFn>) {
-                if (hasGenerics(i)) {
-                    scanFn(i);  // scan generic template body too
-                } else {
-                    scanFn(i);  // scan non-generic functions for calls to generics
-                    m_output.items.push_back(item);
+                if (!hasGenerics(i)) {
+                    auto copy = i;
+                    substFn(copy, {});
+                    scanFn(copy);
+                    m_output.items.push_back(std::move(copy));
                 }
             } else if constexpr (std::is_same_v<T, HirClass>) {
-                if (hasGenerics(i)) {
-                    for (const auto& m : i.methods) scanFn(m);
-                } else {
-                    for (const auto& m : i.methods) scanFn(m);
-                    m_output.items.push_back(item);
+                if (!hasGenerics(i)) {
+                    auto copy = i;
+                    substClass(copy, {});
+                    copy.methods.erase(
+                        std::remove_if(copy.methods.begin(), copy.methods.end(),
+                            [](const HirFn& method) { return !method.generics.empty(); }),
+                        copy.methods.end());
+                    for (const auto& f : copy.fields) scanExpr(f.initializer);
+                    for (const auto& block : copy.initBlocks) scanExpr(block);
+                    for (const auto& m : copy.methods) scanFn(m);
+                    m_output.items.push_back(std::move(copy));
                 }
             }
         }, item);
@@ -574,13 +673,18 @@ HirModule Monomorphizer::monomorphize(const HirModule& hir) {
 
         std::string mangled = m_specMap[key];
         // Find the specialized item and scan it
-        for (auto& item : m_output.items) {
+        const auto count = m_output.items.size();
+        for (size_t index = 0; index < count; ++index) {
+            // Scanning can append items and reallocate the output vector.
+            auto item = m_output.items[index];
             std::visit([&](auto& i) {
                 using T = std::decay_t<decltype(i)>;
                 if constexpr (std::is_same_v<T, HirFn>) {
                     if (i.name == mangled) { scanFn(i); }
                 } else if constexpr (std::is_same_v<T, HirClass>) {
                     if (i.name == mangled) {
+                        for (const auto& f : i.fields) scanExpr(f.initializer);
+                        for (const auto& block : i.initBlocks) scanExpr(block);
                         for (auto& m : i.methods) scanFn(m);
                     }
                 }

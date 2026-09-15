@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <variant>
+#include "../Token.hpp"
 #include "../type/Type.hpp"
 
 namespace loxis::v2 {
@@ -30,7 +31,7 @@ enum class MirAssignOp {
 // ============================================================
 struct OpCopy { LocalId local; };
 struct OpMove { LocalId local; };
-struct OpConst { std::variant<int64_t,uint64_t,double,bool,char,std::string> val; };
+struct OpConst { std::variant<int64_t,uint64_t,double,bool,char,std::string,std::monostate> val; };
 struct OpLabel { std::string label; };
 
 struct Operand : std::variant<OpCopy, OpMove, OpConst, OpLabel> {
@@ -89,6 +90,7 @@ struct Terminator : std::variant<
     TmVirtualCall, TmInterfaceCall
 > {
     using variant::variant;
+    SourceLoc loc;
 };
 
 // ============================================================
@@ -102,12 +104,16 @@ struct StDrop { LocalId local; };
 struct StPush { LocalId local; };
 struct StPop  { LocalId local; };
 struct StGlobalStore { uint32_t slot; Operand value; };
+struct StTryPush { BlockId handler; LocalId exceptionLocal; };
+struct StTryPop {};
+struct StThrow { Operand value; };
 
 struct Statement : std::variant<
     StAssign, StStorageLive, StStorageDead, StSetDiscriminant, StDrop,
-    StPush, StPop, StGlobalStore
+    StPush, StPop, StGlobalStore, StTryPush, StTryPop, StThrow
 > {
     using variant::variant;
+    SourceLoc loc;
 };
 
 // ============================================================
@@ -135,6 +141,7 @@ struct MirBody {
     std::vector<BasicBlock> blocks;
     std::string name;
     CoreTyPtr ret_ty;
+    uint32_t paramCount = 0;
 };
 
 } // namespace

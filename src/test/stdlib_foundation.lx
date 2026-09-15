@@ -1,0 +1,49 @@
+import loxis.text
+import loxis.math
+
+class Payload(val value: int) {}
+
+fun main() -> int {
+    val xs = listWithCapacity<Payload>(0)
+    var i = 0
+    while i < 40 { xs.push(Payload(i)); i += 1 }
+    xs.insert(0, Payload(99))
+    require(xs.get(0).value == 99, "insert")
+    require(xs.removeAt(0).value == 99, "remove")
+    require(xs.pop().valueOrFail().value == 39, "pop")
+    require(xs.get(17).value == 17, "reference survival")
+    val doubled = xs.take(3).map<int>({ item: Payload -> item.value * 2 })
+    require(doubled.fold<int>(0, { total: int, value: int -> total + value }) == 6, "list fluent map fold")
+    xs.clear()
+    require(xs.isEmpty() && xs.pop().isEmpty(), "empty list")
+    require("-9223372036854775808".toIntResult().getOrElse(0) == -9223372036854775807 - 1, "min integer")
+    require("9223372036854775807".toIntResult().getOrElse(0) == 9223372036854775807, "max integer")
+    require("9223372036854775808".toIntResult().isFailure(), "overflow")
+    require("12x".toIntResult().isFailure(), "trailing input")
+    require("+".toIntResult().isFailure(), "sign only")
+    require(" 1".toIntResult().isFailure(), "whitespace")
+    require(join(split("a,,b,", ","), "|") == "a||b|", "split join")
+    require(trim("  abc" + chr(9)) == "abc", "trim")
+    require(startsWith("hello", "he") && endsWith("hello", "lo"), "prefix suffix")
+    require(replace("abab", "ab", "x") == "xx", "replace")
+    val unicode = fromCodePoint(20013) + fromCodePoint(128570)
+    val points = unicode.codePoints().getOrElse(list<int>())
+    require(points.size() == 2 && points.get(1) == 128570, "unicode")
+    require((chr(192) + chr(128)).codePoints().isFailure(), "invalid utf8")
+    require(ftoi(Math.sqrt(itof(81))) == 9, "sqrt")
+    require(Math.sqrt(81.0) == 9.0 && Math.floor(-1.2) == -2.0 && Math.ceil(1.2) == 2.0, "float literals and ordering")
+    require(tryParseDouble("-1.25").getOrElse(0.0) == -1.25, "parse double")
+    require(tryParseDouble("1.0x").isFailure(), "invalid double")
+    require(!Math.isFinite(Math.sqrt(-1.0)), "nonfinite")
+    require(false && error("and not short circuit") == false || true, "and short circuit")
+    require(true || error("or not short circuit") == false, "or short circuit")
+    val zero: int? = 0
+    require(zero != null && zero!! == 0, "zero is not null")
+    require(Math.powInt(-2, 3) == -8 && Math.gcd(24, 18) == 6, "integer math")
+    require(Option.some<int>(9).getOrElseGet({ -> error("eager fallback") }) == 9, "lazy fallback")
+    require(Option.some<int>(4).map<int>({ value: int -> value + 1 }).getOrElse(0) == 5, "optional fluent map")
+    val success: Result<int, str> = Result::<int, str>::Success(7)
+    require(success.map<int>({ value: int -> value * 3 }).getOrElse(0) == 21, "result fluent map")
+    print("foundation ok")
+    return 0
+}

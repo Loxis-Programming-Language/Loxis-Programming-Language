@@ -1,0 +1,10 @@
+import loxis.text
+
+fun show(value: int) -> str { return "int:" + value.toString() }
+fun show(value: str) -> str { return "str:" + value }
+
+fun main() -> int {
+    print(show(7))
+    print(show("lox"))
+    return 0
+}

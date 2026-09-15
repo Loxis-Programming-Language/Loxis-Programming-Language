@@ -16,6 +16,10 @@ target_include_directories(loxis_vm PUBLIC
         src/cpp
         src/aarc)
 
+if(WIN32)
+    target_link_libraries(loxis_vm PUBLIC ws2_32)
+endif()
+
 add_library(loxis_v2
         src/cpp/v2/backend/Lowering.cpp
         src/cpp/v2/backend/MIRCompiler.cpp
@@ -45,6 +49,15 @@ add_test(
         NAME loxis_smoke
         COMMAND powershell -ExecutionPolicy Bypass -File ${CMAKE_SOURCE_DIR}/tests/run_smoke.ps1 -Exe $<TARGET_FILE:Loxis>
 )
+
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME loxis_stdlib
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_stdlib.py --exe $<TARGET_FILE:Loxis>)
+    set_tests_properties(loxis_stdlib PROPERTIES TIMEOUT 300)
+    add_test(NAME loxis_generic_inference
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_generic_inference.py --exe $<TARGET_FILE:Loxis>)
+endif()
 
 add_executable(LSPTest
         src/cpp/tools/LSPTest.cpp

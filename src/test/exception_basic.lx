@@ -1,0 +1,18 @@
+fun explode() -> int {
+    error("boom")
+}
+
+fun main() -> int {
+    var cleaned = 0
+    val answer = try {
+        explode()
+    } catch (failure: Exception) {
+        print("caught: " + failure.message)
+        42
+    } finally {
+        cleaned = 1
+    }
+    print(answer)
+    print(cleaned)
+    return 0
+}

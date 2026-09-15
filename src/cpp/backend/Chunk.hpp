@@ -12,7 +12,10 @@ enum class OperandTag : uint8_t {
 	Reg = 0x01,  // 1-byte register ID
 	Imm64 = 0x02,  // 8-byte signed int
 	StrIdx = 0x03,  // 4-byte string pool index
-	Addr = 0x04   // 4-byte bytecode address
+	Addr = 0x04,  // 4-byte bytecode address
+    Null = 0x05,
+    Float64 = 0x06, // IEEE-754 payload, 8 bytes
+    WideReg = 0x07 // 2-byte register ID
 };
 
 // Runtime itable entry for interface dispatch
@@ -32,6 +35,20 @@ struct PatchSite {
 	std::string label;    // Label name to resolve
 };
 
+struct FunctionDebugInfo {
+	std::string name;
+	uint32_t start = 0;
+	uint32_t end = 0;
+	uint16_t maxLocalRegister = 15;
+};
+
+struct SourceMapEntry {
+	uint32_t offset = 0;
+	std::string file;
+	uint32_t line = 0;
+	uint32_t col = 0;
+};
+
 struct Chunk {
 	std::vector <uint8_t> code;
 	std::vector <std::string> strings;  // Interned string pool
@@ -43,6 +60,11 @@ struct Chunk {
 
 	// VTable / itable metadata for OOP dispatch
 	std::vector<VTableEntry> vtables;
+	std::vector<uint32_t> typeParents; // typeId -> direct superclass typeId, or ~0u
+	std::vector<std::string> typeNames;
+	std::vector<FunctionDebugInfo> functions;
+	std::vector<SourceMapEntry> sourceMap;
+	std::unordered_map<std::string, std::vector<std::string>> sourceLines;
 
 	Chunk() = default;
 

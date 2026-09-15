@@ -1,0 +1,22 @@
+import loxis.collections.stream
+import loxis.text
+
+fun main() -> int {
+    val numbers: list<int> = list<int>()
+    numbers.push(1)
+    numbers.push(2)
+    numbers.push(3)
+    numbers.push(4)
+    numbers.push(5)
+    val squares = stream<int>(numbers)
+        .filter({ n: int -> n % 2 == 0 })
+        .map<int>({ n: int -> n * n })
+    print("Squares of even numbers:")
+    for n in squares { print(n) }
+
+    val words = list<str>()
+    words.push("hello")
+    words.push("Loxis")
+    print(join(words, " "))
+    return 0
+}

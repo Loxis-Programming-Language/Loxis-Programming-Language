@@ -1,0 +1,21 @@
+package loxis.collections.queue
+
+import loxis.collections.list
+
+// Two stacks provide amortized O(1) enqueue/dequeue and release removed values.
+class Queue<T>() {
+    val incoming: list<T> = listWithCapacity<T>(8)
+    val outgoing: list<T> = listWithCapacity<T>(8)
+    fun size() -> int { return this.incoming.size() + this.outgoing.size() }
+    fun isEmpty() -> bool { return this.size() == 0 }
+    fun enqueue(value: T) -> unit { this.incoming.push(value) }
+    fun dequeue() -> Optional<T> {
+        if this.outgoing.isEmpty() {
+            while !this.incoming.isEmpty() {
+                this.outgoing.push(optionalValueOrFail<T>(this.incoming.pop()))
+            }
+        }
+        return this.outgoing.pop()
+    }
+    fun clear() -> unit { this.incoming.clear(); this.outgoing.clear() }
+}

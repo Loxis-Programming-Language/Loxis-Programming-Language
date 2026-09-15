@@ -1,0 +1,27 @@
+fun returnThroughFinally() -> int {
+    try {
+        return 7
+    } finally {
+        print("finally-return")
+    }
+}
+
+fun rethrow() -> unit {
+    try {
+        error("again")
+    } catch (failure: RuntimeException) {
+        throw failure
+    }
+}
+
+fun main() -> int {
+    print(returnThroughFinally())
+    try {
+        rethrow()
+    } catch (failure: Exception) {
+        print("rethrow: " + failure.message)
+    } finally {
+        print("finally-rethrow")
+    }
+    return 0
+}

@@ -13,13 +13,15 @@ namespace loxis::v2 {
 class TypeChecker {
 public:
     bool checkModule(Module& mod);
-    const std::vector<std::string>& getErrors() const { return errors; }
+    const std::vector<Diagnostic>& getErrors() const { return errors; }
     Scope* getScope() const { return rootScope; }
 private:
     std::unique_ptr<Scope> rootOwner;
     Scope* rootScope = nullptr;
     uint32_t inferCounter = 0;
-    std::vector<std::string> errors;
+    std::vector<Diagnostic> errors;
+    SourceLoc currentLoc;
+    SourceLoc currentEndLoc;
     TyPtr currentRetTy = nullptr;
     uint32_t closureCounter = 0;
     uint32_t closureEnvTypeCounter = 0;
@@ -27,6 +29,7 @@ private:
     struct ClosureContext {
         Scope* scope = nullptr;
         ExprClosure* expr = nullptr;
+        std::vector<TyPtr> returns;
     };
     std::vector<ClosureContext> closureScopes;
 
@@ -38,8 +41,18 @@ private:
 
     TyPtr freshInfer();
     void error(const std::string& msg);
+    void error(const std::string& msg, std::string primaryLabel, std::string help);
 
-    TyPtr checkExpr(ExprPtr e, Scope* sc);
+    TyPtr checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy = nullptr);
+    bool inferCall(TyFn& signature, const std::vector<std::string>& names,
+                   const std::vector<ExprPtr>& args, Scope* sc,
+                   std::vector<TyPtr>& typeArgs, TyPtr expectedTy = nullptr,
+                   size_t offset = 0);
+    bool arrangeArguments(const std::vector<ExprPtr>& args,
+                          const std::vector<std::optional<std::string>>& argNames,
+                          const std::vector<std::string>& paramNames,
+                          std::optional<size_t> varargIndex,
+                          std::vector<ExprPtr>& arranged, bool diagnose = false);
     TyPtr checkClosure(ExprClosure& n, Scope* sc, TyPtr expectedFn = nullptr);
     void checkStmt(StmtPtr s, Scope* sc);
     void checkItem(ItemPtr i, Scope* sc);

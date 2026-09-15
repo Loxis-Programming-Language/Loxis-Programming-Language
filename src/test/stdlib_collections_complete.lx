@@ -1,0 +1,61 @@
+import loxis.collections.stream
+import loxis.collections.set
+import loxis.collections.queue
+import loxis.text
+
+fun collision(key: int) -> int { return -1 }
+class Box(val number: int) {}
+
+fun main() -> int {
+    val map = HashMap<int, Box>(collision, equalInt)
+    var i = 0
+    while i < 40 { map.put(i, Box(i * 2)); i += 1 }
+    require(map.size() == 40, "map growth")
+    require(map.remove(0).valueOrFail().number == 0, "map remove")
+    require(map.get(30).valueOrFail().number == 60, "collision lookup after deletion")
+    require(map.put(30, Box(99)).valueOrFail().number == 60, "replace value")
+    require(map.size() == 39 && !map.containsKey(0), "map size")
+    map.put(0, Box(12))
+    require(map.keys().size() == 40, "tombstone reuse")
+    val set = HashSet<str>(hashString, equalString)
+    require(set.add("x") && !set.add("x"), "set uniqueness")
+    require(set.remove("x") && !set.contains("x"), "set removal")
+    val queue = Queue<Box>()
+    queue.enqueue(Box(1)); queue.enqueue(Box(2))
+    require(queue.dequeue().valueOrFail().number == 1, "queue fifo")
+    queue.enqueue(Box(3))
+    require(queue.dequeue().valueOrFail().number == 2, "queue interleave")
+    require(queue.dequeue().valueOrFail().number == 3, "queue refill")
+    require(queue.dequeue().isEmpty(), "queue empty")
+    val xs: list<int> = list<int>()
+    xs.push(1); xs.push(2); xs.push(3); xs.push(4)
+    val mapped = stream<int>(xs).filter({ x: int -> x % 2 == 0 }).map<str>({ x: int -> (x * 10).toString() })
+    val limited = mapped.take(1)
+    require(limited.next().valueOrFail() == "20", "lazy map filter")
+    require(limited.next().isEmpty(), "take exhaustion")
+    require(mapped.next().valueOrFail() == "40", "take does not overconsume")
+    val nullable = list<int?>()
+    nullable.push(null); nullable.push(7)
+    val iter = listIter<int?>(nullable)
+    val first = iter.next()
+    require(first.hasValue(), "nullable is not end")
+    require(first.valueOrFail() == null, "nullable payload")
+    require(iter.next().valueOrFail() == 7, "next nullable")
+    require(iter.next().isEmpty(), "nullable end")
+    var sum = 0
+    for value in listIter<int>(xs) {
+        if value == 2 { continue }
+        sum += value
+        if value == 3 { break }
+    }
+    require(sum == 4, "iterator for control flow")
+    val dropped = stream<int>(xs).drop(1).take(2)
+    require(dropped.count() == 2 && dropped.count() == 0, "single pass stream")
+    val zipped = stream<int>(xs).zip<int>(stream<int>(xs).take(2)).toList()
+    require(zipped.size() == 2 && zipped.get(1).first == 2, "zip")
+    require(stream<int>(xs).fold<int>(0, { a: int, b: int -> a + b }) == 10, "fold")
+    map.clear()
+    require(map.isEmpty(), "map clear")
+    print("collections ok")
+    return 0
+}

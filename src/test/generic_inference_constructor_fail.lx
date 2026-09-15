@@ -1,0 +1,2 @@
+class Pair<T>(val left: T, val right: T) {}
+fun main() { Pair(1, "bad") }

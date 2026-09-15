@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 #include "../../backend/Chunk.hpp"
 #include "../../vm/GC.hpp"
 
@@ -7,6 +8,7 @@ namespace loxis::v2 {
 
 struct RunOptions {
     std::string file;
+    std::vector<std::string> arguments;
     int maxInstr = 1000000;
     bool verbose = false;
     GCMode gc = GCMode::NoGC;

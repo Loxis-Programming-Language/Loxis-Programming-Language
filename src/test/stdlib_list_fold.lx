@@ -1,23 +1,23 @@
 import loxis.collections.list
 
 fun main() -> int {
-    val xs = listNew<int>(4)
+    val xs = listWithCapacity<int>(4)
     xs.push(2)
     xs.push(4)
     xs.push(6)
     xs.push(8)
 
-    print(listFold<int, int>(xs, 0, { acc: int, x: int -> acc + x }))
-    print(listFold<int, int>(xs, 1, { acc, x -> acc * x }))
-    print(listCount<int>(xs, { x -> x > 4 }))
+    print(xs.fold<int>(0, { acc: int, x: int -> acc + x }))
+    print(xs.fold<int>(1, { acc, x -> acc * x }))
+    print(xs.count({ x -> x > 4 }))
 
-    if listAny<int>(xs, { x -> x == 6 }) {
+    if xs.any({ x -> x == 6 }) {
         print(1)
     } else {
         print(0)
     }
 
-    if listAll<int>(xs, { x -> x < 10 }) {
+    if xs.all({ x -> x < 10 }) {
         print(1)
     } else {
         print(0)

@@ -1,0 +1,24 @@
+package loxis.random
+
+// Park-Miller generator; reproducible across hosts, not cryptographic.
+class RandomGenerator(var state: int) {
+    fun nextInt() -> int {
+        this.state = this.state * 48271 % 2147483647
+        return this.state - 1
+    }
+    fun nextBounded(bound: int) -> int {
+        require(bound > 0 && bound <= 2147483646, "random bound out of range")
+        val limit = 2147483646 - 2147483646 % bound
+        var value = this.nextInt()
+        while value >= limit { value = this.nextInt() }
+        return value % bound
+    }
+    fun nextDouble() -> double { return fdiv(itof(this.nextInt()), itof(2147483646)) }
+}
+object Random {
+    fun seeded(seed: int) -> RandomGenerator {
+        var normalized = seed % 2147483646
+        if normalized < 0 { normalized += 2147483646 }
+        return RandomGenerator(normalized + 1)
+    }
+}

@@ -1,0 +1,252 @@
+package loxis.json
+
+import loxis.text
+import loxis.collections.map
+
+// Number lexemes are preserved exactly: parsing never rounds large integers.
+enum class JsonValue {
+    Null,
+    Boolean(bool),
+    Number(str),
+    String(str),
+    Array(list<JsonValue>),
+    Object(HashMap<str, JsonValue>),
+
+    fun stringify() -> Result<str, str> { return Json.stringify(this) }
+    fun asString() -> Optional<str> {
+        return when (this) {
+            JsonValue::String(value) -> optionalValue<str>(value),
+            else -> optionalEmpty<str>()
+        }
+    }
+    fun asArray() -> Optional<list<JsonValue>> {
+        return when (this) {
+            JsonValue::Array(value) -> optionalValue<list<JsonValue>>(value),
+            else -> optionalEmpty<list<JsonValue>>()
+        }
+    }
+    fun asObject() -> Optional<HashMap<str, JsonValue>> {
+        return when (this) {
+            JsonValue::Object(value) -> optionalValue<HashMap<str, JsonValue>>(value),
+            else -> optionalEmpty<HashMap<str, JsonValue>>()
+        }
+    }
+}
+
+fun jsonDigit(code: int) -> bool { return code >= 48 && code <= 57 }
+fun jsonHex(code: int) -> int {
+    if code >= 48 && code <= 57 { return code - 48 }
+    if code >= 65 && code <= 70 { return code - 55 }
+    if code >= 97 && code <= 102 { return code - 87 }
+    return -1
+}
+
+class JsonParser(val source: str, var position: int, var failure: str) {
+    fun fail(message: str) -> unit {
+        if strlen(this.failure) == 0 { this.failure = message + " at byte " + i2s(this.position) }
+    }
+    fun peek() -> int { return strchar(this.source, this.position) }
+    fun whitespace() -> unit {
+        var c = this.peek()
+        while c == 32 || c == 9 || c == 10 || c == 13 { this.position += 1; c = this.peek() }
+    }
+    fun hex4() -> int {
+        var value = 0
+        var i = 0
+        while i < 4 {
+            val digit = jsonHex(this.peek())
+            if digit < 0 { this.fail("invalid Unicode escape"); return 0 }
+            value = value * 16 + digit
+            this.position += 1
+            i += 1
+        }
+        return value
+    }
+    fun stringValue() -> str {
+        if this.peek() != 34 { this.fail("expected string"); return "" }
+        this.position += 1
+        var out = ""
+        while this.position < strlen(this.source) && strlen(this.failure) == 0 {
+            val c = this.peek()
+            this.position += 1
+            if c == 34 { return out }
+            if c < 32 { this.fail("unescaped control character"); return "" }
+            if c != 92 { out = out + chr(c) }
+            else {
+                val escape = this.peek()
+                this.position += 1
+                if escape == 34 || escape == 92 || escape == 47 { out = out + chr(escape) }
+                else if escape == 98 { out = out + chr(8) }
+                else if escape == 102 { out = out + chr(12) }
+                else if escape == 110 { out = out + chr(10) }
+                else if escape == 114 { out = out + chr(13) }
+                else if escape == 116 { out = out + chr(9) }
+                else if escape == 117 {
+                    var code = this.hex4()
+                    if code >= 55296 && code <= 56319 {
+                        if this.peek() != 92 || strchar(this.source, this.position + 1) != 117 {
+                            this.fail("missing low surrogate"); return ""
+                        }
+                        this.position += 2
+                        val low = this.hex4()
+                        if low < 56320 || low > 57343 { this.fail("invalid low surrogate"); return "" }
+                        code = 65536 + (code - 55296) * 1024 + low - 56320
+                    } else if code >= 56320 && code <= 57343 { this.fail("unpaired low surrogate"); return "" }
+                    if strlen(this.failure) == 0 { out = out + fromCodePoint(code) }
+                } else { this.fail("invalid escape"); return "" }
+            }
+        }
+        this.fail("unterminated string")
+        return ""
+    }
+    fun numberValue() -> JsonValue {
+        val start = this.position
+        if this.peek() == 45 { this.position += 1 }
+        if this.peek() == 48 { this.position += 1 }
+        else {
+            if this.peek() < 49 || this.peek() > 57 { this.fail("expected digit"); return JsonValue::Null() }
+            while jsonDigit(this.peek()) { this.position += 1 }
+        }
+        if this.peek() == 46 {
+            this.position += 1
+            if !jsonDigit(this.peek()) { this.fail("expected fractional digit"); return JsonValue::Null() }
+            while jsonDigit(this.peek()) { this.position += 1 }
+        }
+        if this.peek() == 101 || this.peek() == 69 {
+            this.position += 1
+            if this.peek() == 43 || this.peek() == 45 { this.position += 1 }
+            if !jsonDigit(this.peek()) { this.fail("expected exponent digit"); return JsonValue::Null() }
+            while jsonDigit(this.peek()) { this.position += 1 }
+        }
+        return JsonValue::Number(strslice(this.source, start, this.position - start))
+    }
+    fun value(depth: int) -> JsonValue {
+        this.whitespace()
+        if depth > 128 { this.fail("JSON nesting limit exceeded"); return JsonValue::Null() }
+        val c = this.peek()
+        if c == 34 { return JsonValue::String(this.stringValue()) }
+        if c == 45 || jsonDigit(c) { return this.numberValue() }
+        if strslice(this.source, this.position, 4) == "null" { this.position += 4; return JsonValue::Null() }
+        if strslice(this.source, this.position, 4) == "true" { this.position += 4; return JsonValue::Boolean(true) }
+        if strslice(this.source, this.position, 5) == "false" { this.position += 5; return JsonValue::Boolean(false) }
+        if c == 91 {
+            this.position += 1
+            val items = listWithCapacity<JsonValue>(4)
+            this.whitespace()
+            if this.peek() == 93 { this.position += 1; return JsonValue::Array(items) }
+            while strlen(this.failure) == 0 {
+                items.push(this.value(depth + 1))
+                this.whitespace()
+                if this.peek() == 93 { this.position += 1; return JsonValue::Array(items) }
+                if this.peek() != 44 { this.fail("expected comma or closing bracket"); return JsonValue::Null() }
+                this.position += 1
+            }
+        }
+        if c == 123 {
+            this.position += 1
+            val members = HashMap<str, JsonValue>(hashString, equalString)
+            this.whitespace()
+            if this.peek() == 125 { this.position += 1; return JsonValue::Object(members) }
+            while strlen(this.failure) == 0 {
+                this.whitespace()
+                val key = this.stringValue()
+                this.whitespace()
+                if this.peek() != 58 { this.fail("expected colon"); return JsonValue::Null() }
+                this.position += 1
+                val member = this.value(depth + 1)
+                if members.containsKey(key) { this.fail("duplicate object key"); return JsonValue::Null() }
+                members.put(key, member)
+                this.whitespace()
+                if this.peek() == 125 { this.position += 1; return JsonValue::Object(members) }
+                if this.peek() != 44 { this.fail("expected comma or closing brace"); return JsonValue::Null() }
+                this.position += 1
+            }
+        }
+        this.fail("expected JSON value")
+        return JsonValue::Null()
+    }
+}
+
+class JsonWriter(val chunks: list<str>, var failure: str) {
+    fun stringValue(value: str) -> unit {
+        if resultIsFailure<list<int>, str>(codePoints(value)) { this.failure = "invalid UTF-8 string"; return }
+        this.chunks.push(chr(34))
+        var i = 0
+        while i < strlen(value) {
+            val c = strchar(value, i)
+            if c == 34 || c == 92 { this.chunks.push(chr(92) + chr(c)) }
+            else if c < 32 {
+                val hex = "0123456789abcdef"
+                this.chunks.push(chr(92) + "u00" + strslice(hex, c / 16, 1) + strslice(hex, c % 16, 1))
+            } else { this.chunks.push(chr(c)) }
+            i += 1
+        }
+        this.chunks.push(chr(34))
+    }
+    fun value(value: JsonValue, depth: int) -> unit {
+        if depth > 128 { this.failure = "JSON nesting limit exceeded"; return }
+        if strlen(this.failure) > 0 { return }
+        when (value) {
+            JsonValue::Null() -> this.chunks.push("null"),
+            JsonValue::Boolean(flag) -> {
+                if flag { this.chunks.push("true") } else { this.chunks.push("false") }
+            },
+            JsonValue::Number(number) -> {
+                val parser = JsonParser(number, 0, "")
+                parser.numberValue()
+                if strlen(parser.failure) > 0 || parser.position != strlen(number) { this.failure = "invalid JSON number" }
+                else { this.chunks.push(number) }
+            },
+            JsonValue::String(text) -> this.stringValue(text),
+            JsonValue::Array(items) -> {
+                this.chunks.push("[")
+                var i = 0
+                while i < items.size() {
+                    if i > 0 { this.chunks.push(",") }
+                    this.value(items.get(i), depth + 1)
+                    i += 1
+                }
+                this.chunks.push("]")
+            },
+            JsonValue::Object(members) -> {
+                this.chunks.push("{")
+                val keys = members.keys()
+                var i = 0
+                while i < keys.size() {
+                    if i > 0 { this.chunks.push(",") }
+                    val key = keys.get(i)
+                    this.stringValue(key)
+                    this.chunks.push(":")
+                    this.value(optionalValueOrFail<JsonValue>(members.get(key)), depth + 1)
+                    i += 1
+                }
+                this.chunks.push("}")
+            },
+            else -> { this.failure = "invalid JSON variant" }
+        }
+    }
+}
+
+object Json {
+    fun parse(source: str) -> Result<JsonValue, str> {
+        if resultIsFailure<list<int>, str>(codePoints(source)) { return resultFailure<JsonValue, str>("invalid UTF-8") }
+        val parser = JsonParser(source, 0, "")
+        val value = parser.value(0)
+        parser.whitespace()
+        if parser.position != strlen(source) { parser.fail("trailing input") }
+        if strlen(parser.failure) > 0 { return resultFailure<JsonValue, str>(parser.failure) }
+        return resultSuccess<JsonValue, str>(value)
+    }
+    fun stringify(value: JsonValue) -> Result<str, str> {
+        val writer = JsonWriter(listWithCapacity<str>(16), "")
+        writer.value(value, 0)
+        if strlen(writer.failure) > 0 { return resultFailure<str, str>(writer.failure) }
+        return resultSuccess<str, str>(join(writer.chunks, ""))
+    }
+    fun nullValue() -> JsonValue { return JsonValue::Null() }
+    fun boolean(value: bool) -> JsonValue { return JsonValue::Boolean(value) }
+    fun number(value: str) -> JsonValue { return JsonValue::Number(value) }
+    fun string(value: str) -> JsonValue { return JsonValue::String(value) }
+    fun array(values: list<JsonValue>) -> JsonValue { return JsonValue::Array(values) }
+    fun dictionary(values: HashMap<str, JsonValue>) -> JsonValue { return JsonValue::Object(values) }
+}

@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <optional>
+#include <stdexcept>
 
 // Tag byte stored alongside every value, in registers, in globals and in heap
 // cells. A cell tagged TAG_HEAP holds a Heap handle; everything else is a plain
@@ -16,6 +18,10 @@ constexpr uint8_t TAG_STR = 1;
 constexpr uint8_t TAG_HEAP = 2;
 constexpr uint8_t TAG_FLOAT = 3;
 constexpr uint8_t TAG_NULL = 4;
+
+struct HeapInvariantError : std::runtime_error {
+	using std::runtime_error::runtime_error;
+};
 
 // Heap with stable object identity.
 //
@@ -103,12 +109,14 @@ public:
 	}
 
 	// Store/load one 9-byte cell at `byteOff` inside the payload.
-	void storeCell(uint32_t handle, uint32_t byteOff, int64_t val, uint8_t tag);
-	std::pair<int64_t, uint8_t> loadCell(uint32_t handle, uint32_t byteOff) const;
+	bool storeCell(uint32_t handle, uint32_t byteOff, int64_t val, uint8_t tag);
+	std::optional<std::pair<int64_t, uint8_t>> loadCell(uint32_t handle, uint32_t byteOff) const;
 
 	// Cell i of a payload, for collectors that must scan an object's fields.
 	std::pair<int64_t, uint8_t> cellAt(uint32_t handle, uint32_t index) const {
-		return loadCell(handle, index * SLOT_SIZE);
+		auto cell = loadCell(handle, index * SLOT_SIZE);
+		if (!cell) throw HeapInvariantError("collector accessed an invalid heap cell");
+		return *cell;
 	}
 
 	size_t slotCount() const { return slots_.size(); }
@@ -213,30 +221,31 @@ inline void Heap::freePayload(uint32_t handle) {
 	stats_.liveObjects--;
 }
 
-inline void Heap::storeCell(uint32_t handle, uint32_t byteOff, int64_t val, uint8_t tag) {
-	if (handle >= slots_.size()) return;
+inline bool Heap::storeCell(uint32_t handle, uint32_t byteOff, int64_t val, uint8_t tag) {
+	if (handle >= slots_.size()) return false;
 	const ObjectSlot& s = slots_[handle];
-	if (!s.live || s.payloadOffset == INVALID) return;
+	if (!s.live || s.payloadOffset == INVALID) return false;
 	// Bounds are the caller's request, not the allocator's rounding: a padded
 	// payload must not silently legalize a store past what was asked for.
-	if (byteOff + SLOT_SIZE > s.logicalSize) return;
+	if (byteOff > s.logicalSize || SLOT_SIZE > s.logicalSize - byteOff) return false;
 
 	uint32_t offset = s.payloadOffset + byteOff;
 	uint64_t u = static_cast<uint64_t>(val);
 	for (int i = 0; i < 8; i++)
 		memory_[offset + i] = static_cast<uint8_t>((u >> (i * 8)) & 0xFF);
 	memory_[offset + 8] = tag;
+	return true;
 }
 
-inline std::pair<int64_t, uint8_t> Heap::loadCell(uint32_t handle, uint32_t byteOff) const {
-	if (handle >= slots_.size()) return {0, 0};
+inline std::optional<std::pair<int64_t, uint8_t>> Heap::loadCell(uint32_t handle, uint32_t byteOff) const {
+	if (handle >= slots_.size()) return std::nullopt;
 	const ObjectSlot& s = slots_[handle];
-	if (!s.live || s.payloadOffset == INVALID) return {0, 0};
-	if (byteOff + SLOT_SIZE > s.logicalSize) return {0, 0};
+	if (!s.live || s.payloadOffset == INVALID) return std::nullopt;
+	if (byteOff > s.logicalSize || SLOT_SIZE > s.logicalSize - byteOff) return std::nullopt;
 
 	uint32_t offset = s.payloadOffset + byteOff;
 	uint64_t u = 0;
 	for (int i = 0; i < 8; i++)
 		u |= (static_cast<uint64_t>(memory_[offset + i]) << (i * 8));
-	return {static_cast<int64_t>(u), memory_[offset + 8]};
+	return std::pair<int64_t, uint8_t>{static_cast<int64_t>(u), memory_[offset + 8]};
 }

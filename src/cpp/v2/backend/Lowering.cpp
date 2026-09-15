@@ -1,7 +1,28 @@
 #include "Lowering.hpp"
 #include <cassert>
+#include <stdexcept>
 
 namespace loxis::v2 {
+
+bool Lowering::lowerFinalizersTo(size_t depth) {
+    if (depth > m_finallyStack.size()) depth = m_finallyStack.size();
+    auto saved = m_finallyStack;
+    auto savedHandlers = m_finallyHandlerActive;
+    m_finallyStack.resize(depth);
+    m_finallyHandlerActive.resize(depth);
+    for (size_t i = saved.size(); i > depth; --i) {
+        if (i - 1 < savedHandlers.size() && savedHandlers[i - 1]) emit(StTryPop{});
+        if (saved[i - 1]) lowerExpr(*saved[i - 1]);
+        if (m_blockTerminated) {
+            m_finallyStack = std::move(saved);
+            m_finallyHandlerActive = std::move(savedHandlers);
+            return false;
+        }
+    }
+    m_finallyStack = std::move(saved);
+    m_finallyHandlerActive = std::move(savedHandlers);
+    return true;
+}
 
 LoweringOutput Lowering::lower(const HirModule& hir) {
     LoweringOutput output;
@@ -21,6 +42,7 @@ LoweringOutput Lowering::lower(const HirModule& hir) {
                 LoweredClass lc;
                 lc.name = i.name;
                 lc.typeId = i.typeId;
+                lc.parentTypeId = i.parentTypeId;
                 lc.vtableEntryCount = i.vtableEntryCount;
                 lc.vtableMethodNames = i.vtableMethodNames;
                 lc.itables = i.itables;
@@ -36,6 +58,7 @@ MirBody Lowering::lowerClassCtor(const HirClass& cls) {
     m_currentClassName = cls.name;
     body.name = cls.name + ".init";
     body.ret_ty = mkInt();
+    body.paramCount = static_cast<uint32_t>(cls.ctorParams.size());
     body.locals.push_back({body.ret_ty, "_return", false});
 
     m_scope.clear();
@@ -48,6 +71,8 @@ MirBody Lowering::lowerClassCtor(const HirClass& cls) {
 
     m_body = &body;
     m_loopStack.clear();
+    m_finallyStack.clear();
+    m_finallyHandlerActive.clear();
     body.blocks.clear();
 
     BlockId entry = newBlock();
@@ -61,14 +86,20 @@ MirBody Lowering::lowerClassCtor(const HirClass& cls) {
     m_scope["this"] = obj;
     emit(StAssign{obj, RvAlloc{allocSize, cls.typeId}});
 
-    uint32_t nextCtorFieldOffset = 0;
+    for (size_t i = 0; i < cls.superClassArgs.size(); ++i) {
+        LocalId value = lowerExpr(*cls.superClassArgs[i]);
+        uint32_t offset = i < cls.superFieldOffsets.size()
+            ? cls.superFieldOffsets[i]
+            : static_cast<uint32_t>(i * 9);
+        emit(StAssign{obj, RvHStore{offset, OpCopy{value}}});
+    }
+
     for (const auto& pd : cls.ctorParams) {
         if (pd.isVal || pd.isVar) {
             auto it = m_scope.find(pd.name);
             if (it != m_scope.end()) {
-                emit(StAssign{obj, RvHStore{nextCtorFieldOffset, OpCopy{it->second}}});
+                emit(StAssign{obj, RvHStore{pd.fieldOffset, OpCopy{it->second}}});
             }
-            nextCtorFieldOffset += 9;
         }
     }
 
@@ -104,6 +135,7 @@ MirBody Lowering::lowerMethod(const HirClass& cls, const HirFn& method) {
     MirBody body;
     body.name = qualifiedName;
     body.ret_ty = method.ret;
+    body.paramCount = static_cast<uint32_t>(method.params.size() + 1);
     body.locals.push_back({body.ret_ty, "_return", false});
 
     m_scope.clear();
@@ -121,6 +153,8 @@ MirBody Lowering::lowerMethod(const HirClass& cls, const HirFn& method) {
 
     m_body = &body;
     m_loopStack.clear();
+    m_finallyStack.clear();
+    m_finallyHandlerActive.clear();
     body.blocks.clear();
 
     BlockId entry = newBlock();
@@ -147,6 +181,7 @@ MirBody Lowering::lowerFn(const HirFn& fn) {
     MirBody body;
     body.name = fn.name;
     body.ret_ty = fn.ret;
+    body.paramCount = static_cast<uint32_t>(fn.params.size() + (fn.closureEnvTypeId != ~0u ? 1 : 0));
     body.locals.push_back({body.ret_ty, "_return", false});
 
     m_scope.clear();
@@ -165,6 +200,8 @@ MirBody Lowering::lowerFn(const HirFn& fn) {
 
     m_body = &body;
     m_loopStack.clear();
+    m_finallyStack.clear();
+    m_finallyHandlerActive.clear();
     body.blocks.clear();
 
     BlockId entry = newBlock();
@@ -200,11 +237,13 @@ BlockId Lowering::newBlock() {
 
 void Lowering::emit(Statement stmt) {
     if (m_blockTerminated) return;
+    stmt.loc = m_currentLoc;
     m_body->blocks[m_currentBlock].stmts.push_back(std::move(stmt));
 }
 
 void Lowering::term(Terminator t) {
     if (m_blockTerminated) return;
+    t.loc = m_currentLoc;
     m_body->blocks[m_currentBlock].term = std::move(t);
     m_blockTerminated = true;
 }
@@ -236,11 +275,13 @@ LocalId Lowering::lowerPlace(const HirExpr& expr) {
 LocalId Lowering::lowerExpr(const HirExpr& expr) {
     if (m_blockTerminated) return unitLocal();
 
-    return std::visit([&](const auto& e) -> LocalId {
+    SourceLoc previousLoc = m_currentLoc;
+    m_currentLoc = expr.loc;
+    LocalId lowered = std::visit([&](const auto& e) -> LocalId {
         using T = std::decay_t<decltype(e)>;
         if constexpr (std::is_same_v<T, HirLit>) {
             LocalId tmp = newLocal(e.ty, "lit");
-            emit(StAssign{tmp, RvUse{OpConst{e.val}}});
+            std::visit([&](const auto& value) { emit(StAssign{tmp, RvUse{OpConst{value}}}); }, e.val);
             return tmp;
         } else if constexpr (std::is_same_v<T, HirPath>) {
             if (e.globalSlot != ~0u) {
@@ -335,23 +376,12 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
             }
             LocalId dest = newLocal(e.ty, "call");
 
-            std::vector<LocalId> saved;
-            uint32_t n = static_cast<uint32_t>(m_body->locals.size());
-            for (uint32_t lid = 1; lid < n; ++lid) {
-                emit(StPush{static_cast<LocalId>(lid)});
-                saved.push_back(static_cast<LocalId>(lid));
-            }
-
             BlockId resume = newBlock();
             if (directCall) term(TmCall{funcOp, std::move(args), dest, resume});
             else if (closureCall) term(TmClosureCall{funcOp, std::move(args), dest, resume});
             else term(TmCallIndirect{funcOp, std::move(args), dest, resume});
             m_currentBlock = resume;
             m_blockTerminated = false;
-
-            for (auto it = saved.rbegin(); it != saved.rend(); ++it) {
-                emit(StPop{*it});
-            }
 
             emit(StAssign{dest, RvUse{OpMove{0}}});
             return dest;
@@ -365,13 +395,6 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
             }
             LocalId dest = newLocal(e.ty, "call");
 
-            std::vector<LocalId> saved;
-            uint32_t n = static_cast<uint32_t>(m_body->locals.size());
-            for (uint32_t lid = 1; lid < n; ++lid) {
-                emit(StPush{static_cast<LocalId>(lid)});
-                saved.push_back(static_cast<LocalId>(lid));
-            }
-
             BlockId resume = newBlock();
             if (e.isInterfaceDispatch) {
                 term(TmInterfaceCall{recv, e.ifaceTypeId, e.ifaceMethodIndex, std::move(args), dest, resume});
@@ -384,10 +407,6 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
 
             m_currentBlock = resume;
             m_blockTerminated = false;
-
-            for (auto it = saved.rbegin(); it != saved.rend(); ++it) {
-                emit(StPop{*it});
-            }
 
             emit(StAssign{dest, RvUse{OpMove{0}}});
             return dest;
@@ -418,6 +437,13 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
             }
             return tmp;
         } else if constexpr (std::is_same_v<T, HirBinary>) {
+            if (e.op == MirBinOp::And || e.op == MirBinOp::Or) {
+                auto constant = std::make_shared<HirExpr>(HirLit{mkBool(), e.op == MirBinOp::Or});
+                HirIf branch{e.l,
+                    e.op == MirBinOp::And ? e.r : constant,
+                    e.op == MirBinOp::And ? constant : e.r, mkBool()};
+                return lowerExpr(HirExpr{branch});
+            }
             LocalId l = lowerExpr(*e.l);
             LocalId r = lowerExpr(*e.r);
             LocalId tmp = newLocal(e.ty, "bin");
@@ -532,7 +558,7 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
 
             m_currentBlock = body_bb;
             m_blockTerminated = false;
-            m_loopStack.push_back({exit_bb, header, e.label});
+            m_loopStack.push_back({exit_bb, header, e.label, m_finallyStack.size()});
             lowerExpr(*e.body);
             m_loopStack.pop_back();
             if (!m_blockTerminated) term(TmGoto{header});
@@ -547,7 +573,7 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
 
             m_currentBlock = body_bb;
             m_blockTerminated = false;
-            m_loopStack.push_back({exit_bb, body_bb, e.label});
+            m_loopStack.push_back({exit_bb, body_bb, e.label, m_finallyStack.size()});
             lowerExpr(*e.body);
             m_loopStack.pop_back();
             if (!m_blockTerminated) term(TmGoto{body_bb});
@@ -562,7 +588,7 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
 
             m_currentBlock = body_bb;
             m_blockTerminated = false;
-            m_loopStack.push_back({exit_bb, body_bb, e.label});
+            m_loopStack.push_back({exit_bb, body_bb, e.label, m_finallyStack.size()});
             lowerExpr(*e.body);
             m_loopStack.pop_back();
             term(TmGoto{exit_bb});
@@ -678,35 +704,41 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
             return result;
         } else if constexpr (std::is_same_v<T, HirBreak>) {
             BlockId target = 0;
+            size_t finallyDepth = m_finallyStack.size();
             if (e.label) {
                 for (auto it = m_loopStack.rbegin(); it != m_loopStack.rend(); ++it) {
-                    if (it->label == e.label) { target = it->breakTarget; break; }
+                    if (it->label == e.label) { target = it->breakTarget; finallyDepth = it->finallyDepth; break; }
                 }
             } else if (!m_loopStack.empty()) {
                 target = m_loopStack.back().breakTarget;
+                finallyDepth = m_loopStack.back().finallyDepth;
             }
             if (e.expr) { LocalId val = lowerExpr(*e.expr); (void)val; }
-            term(TmGoto{target});
+            if (lowerFinalizersTo(finallyDepth)) term(TmGoto{target});
             return unitLocal();
         } else if constexpr (std::is_same_v<T, HirContinue>) {
             BlockId target = 0;
+            size_t finallyDepth = m_finallyStack.size();
             if (e.label) {
                 for (auto it = m_loopStack.rbegin(); it != m_loopStack.rend(); ++it) {
-                    if (it->label == e.label) { target = it->continueTarget; break; }
+                    if (it->label == e.label) { target = it->continueTarget; finallyDepth = it->finallyDepth; break; }
                 }
             } else if (!m_loopStack.empty()) {
                 target = m_loopStack.back().continueTarget;
+                finallyDepth = m_loopStack.back().finallyDepth;
             }
-            term(TmGoto{target});
+            if (lowerFinalizersTo(finallyDepth)) term(TmGoto{target});
             return unitLocal();
         } else if constexpr (std::is_same_v<T, HirReturn>) {
+            LocalId val = 0;
             if (e.expr) {
-                LocalId val = lowerExpr(*e.expr);
-                emit(StAssign{0, RvUse{OpCopy{val}}});
-            } else {
-                emit(StAssign{0, RvUse{OpConst{0}}});
+                val = lowerExpr(*e.expr);
             }
-            term(TmGoto{m_exitBlock});
+            if (lowerFinalizersTo(0)) {
+                if (e.expr) emit(StAssign{0, RvUse{OpCopy{val}}});
+                else emit(StAssign{0, RvUse{OpConst{0}}});
+                term(TmGoto{m_exitBlock});
+            }
             return unitLocal();
         } else if constexpr (std::is_same_v<T, HirRef>) {
             LocalId val = lowerExpr(*e.expr);
@@ -720,6 +752,83 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
             return tmp;
         } else if constexpr (std::is_same_v<T, HirTry>) {
             return lowerExpr(*e.expr);
+        } else if constexpr (std::is_same_v<T, HirThrow>) {
+            LocalId value = lowerExpr(*e.expr);
+            size_t runtimeHandledDepth = 0;
+            for (size_t i = m_finallyHandlerActive.size(); i > 0; --i) {
+                if (m_finallyHandlerActive[i - 1]) { runtimeHandledDepth = i; break; }
+            }
+            if (lowerFinalizersTo(runtimeHandledDepth)) {
+                emit(StThrow{OpCopy{value}});
+                m_blockTerminated = true;
+            }
+            return unitLocal();
+        } else if constexpr (std::is_same_v<T, HirTryCatch>) {
+            LocalId result = newLocal(e.ty, "try_result");
+            LocalId exception = newLocal(mkInt(), "exception");
+            BlockId handlerB = newBlock();
+            BlockId normalFinallyB = newBlock();
+            BlockId exceptionalFinallyB = newBlock();
+            BlockId mergeB = newBlock();
+
+            emit(StTryPush{handlerB, exception});
+            if (e.finallyBody) { m_finallyStack.push_back(e.finallyBody); m_finallyHandlerActive.push_back(true); }
+            LocalId bodyValue = lowerExpr(*e.body);
+            if (e.finallyBody) { m_finallyStack.pop_back(); m_finallyHandlerActive.pop_back(); }
+            if (!m_blockTerminated) {
+                emit(StAssign{result, RvUse{OpCopy{bodyValue}}});
+                emit(StTryPop{});
+                term(TmGoto{normalFinallyB});
+            }
+
+            m_currentBlock = handlerB;
+            m_blockTerminated = false;
+            BlockId nextTest = handlerB;
+            for (const auto& clause : e.catches) {
+                m_currentBlock = nextTest;
+                m_blockTerminated = false;
+                LocalId matches = newLocal(mkBool(), "catch_match");
+                emit(StAssign{matches, RvIsCheck{exception, clause.typeId}});
+                BlockId catchB = newBlock();
+                nextTest = newBlock();
+                term(TmSwitchInt{OpCopy{matches}, {{1, catchB}}, nextTest});
+
+                m_currentBlock = catchB;
+                m_blockTerminated = false;
+                auto old = m_scope.find(clause.name);
+                std::optional<LocalId> oldLocal;
+                if (old != m_scope.end()) oldLocal = old->second;
+                m_scope[clause.name] = exception;
+                if (e.finallyBody) { m_finallyStack.push_back(e.finallyBody); m_finallyHandlerActive.push_back(false); }
+                LocalId catchValue = lowerExpr(*clause.body);
+                if (e.finallyBody) { m_finallyStack.pop_back(); m_finallyHandlerActive.pop_back(); }
+                if (oldLocal) m_scope[clause.name] = *oldLocal;
+                else m_scope.erase(clause.name);
+                if (!m_blockTerminated) {
+                    emit(StAssign{result, RvUse{OpCopy{catchValue}}});
+                    term(TmGoto{normalFinallyB});
+                }
+            }
+            m_currentBlock = nextTest;
+            m_blockTerminated = false;
+            term(TmGoto{exceptionalFinallyB});
+
+            m_currentBlock = normalFinallyB;
+            m_blockTerminated = false;
+            if (e.finallyBody) lowerExpr(*e.finallyBody);
+            if (!m_blockTerminated) term(TmGoto{mergeB});
+
+            m_currentBlock = exceptionalFinallyB;
+            m_blockTerminated = false;
+            if (e.finallyBody) lowerExpr(*e.finallyBody);
+            if (!m_blockTerminated) {
+                emit(StThrow{OpCopy{exception}});
+                m_blockTerminated = true;
+            }
+
+            m_currentBlock = mergeB;
+            m_blockTerminated = false;
+            return result;
         } else if constexpr (std::is_same_v<T, HirCast>) {
             LocalId val = lowerExpr(*e.expr);
             LocalId tmp = newLocal(e.targetTy, "cast");
@@ -789,7 +898,9 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
             return result;
         } else if constexpr (std::is_same_v<T, HirNull>) {
             LocalId tmp = newLocal(e.ty, "null");
-            emit(StAssign{tmp, RvUse{OpConst{0}}});
+            if (e.ty && e.ty->kind() == TyKind::Null)
+                emit(StAssign{tmp, RvUse{OpConst{std::monostate{}}}});
+            else emit(StAssign{tmp, RvUse{OpConst{0}}});
             return tmp;
         } else if constexpr (std::is_same_v<T, HirIs>) {
             LocalId val = lowerExpr(*e.expr);
@@ -804,9 +915,11 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
             emit(StAssign{tmp, RvUnary{MirUnaryOp::Not, OpCopy{checkTmp}}});
             return tmp;
         } else {
-            return unitLocal();
+            throw std::runtime_error("lowering received an unhandled HIR expression");
         }
     }, expr);
+    m_currentLoc = std::move(previousLoc);
+    return lowered;
 }
 
 void Lowering::lowerStmt(const HirStmt& stmt) {

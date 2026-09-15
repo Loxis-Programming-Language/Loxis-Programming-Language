@@ -1,4 +1,4 @@
-﻿package loxis.collections.stream
+package loxis.collections.stream
 
 import loxis.collections.list
 import loxis.collections.iterator
@@ -7,7 +7,9 @@ import loxis.collections.iterator
 //  Stream<T> - fluent wrapper around Iterator<T>
 // ============================================================
 
-class Stream<T>(var iter: Iterator<T>) {
+class Stream<T>(var iter: Iterator<T>) : Iterator<T> {
+
+    override fun next() -> Optional<T> { return this.iter.next() }
 
     fun forEach(f: fun(T) -> unit) -> unit {
         iterForEach<T>(this.iter, f)
@@ -17,11 +19,11 @@ class Stream<T>(var iter: Iterator<T>) {
         return iterCount<T>(this.iter)
     }
 
-    fun toList() -> List<T> {
-        var result = listNew<T>(8)
+    fun toList() -> list<T> {
+        var result = listWithCapacity<T>(8)
         var item = this.iter.next()
-        while item != null {
-            result.push(item!!)
+        while optionalHasValue<T>(item) {
+            result.push(optionalValueOrFail<T>(item))
             item = this.iter.next()
         }
         return result
@@ -35,19 +37,28 @@ class Stream<T>(var iter: Iterator<T>) {
         return iterAll<T>(this.iter, pred)
     }
 
-    fun find(pred: fun(T) -> bool) -> T? {
+    fun find(pred: fun(T) -> bool) -> Optional<T> {
         return iterFind<T>(this.iter, pred)
     }
+
+    fun filter(pred: fun(T) -> bool) -> Stream<T> { return Stream<T>(iterFilter<T>(this.iter, pred)) }
+    fun map<U>(f: fun(T) -> U) -> Stream<U> { return Stream<U>(iterMap<T, U>(this.iter, f)) }
+    fun fold<U>(initial: U, f: fun(U, T) -> U) -> U { return iterFold<T, U>(this.iter, initial, f) }
+    fun zip<U>(other: Stream<U>) -> Stream<Pair<T, U>> {
+        return Stream<Pair<T, U>>(iterZip<T, U>(this.iter, other.iter))
+    }
+    fun take(count: int) -> Stream<T> { return Stream<T>(iterTake<T>(this.iter, count)) }
+    fun drop(count: int) -> Stream<T> { return Stream<T>(iterDrop<T>(this.iter, count)) }
 }
 
 // ============================================================
 //  Constructors
 // ============================================================
 
-fun streamOf<T>(iter: Iterator<T>) -> Stream<T> {
-    return Stream<T>(iter)
-}
+fun stream<T>(items: list<T>) -> Stream<T> { return Stream<T>(listIter<T>(items)) }
+fun stream<T>(iter: Iterator<T>) -> Stream<T> { return Stream<T>(iter) }
+fun stream<T>() -> Stream<T> { return Stream<T>(emptyIter<T>()) }
 
-fun streamFromList<T>(list: List<T>) -> Stream<T> {
-    return Stream<T>(listIter<T>(list))
+fun streamMap<T, U>(stream: Stream<T>, f: fun(T) -> U) -> Stream<U> {
+    return Stream<U>(iterMap<T, U>(stream.iter, f))
 }

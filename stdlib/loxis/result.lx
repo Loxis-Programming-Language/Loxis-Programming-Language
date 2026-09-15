@@ -1,8 +1,59 @@
 package loxis.result
 
+import loxis.option
+
 enum class Result<T, E> {
     Success(T),
-    Failure(E)
+    Failure(E),
+
+    fun isSuccess() -> bool {
+        return when (this) { Result::Success(_) -> true, else -> false }
+    }
+
+    fun isFailure() -> bool { return !this.isSuccess() }
+
+    fun getOrElse(fallback: T) -> T {
+        return when (this) { Result::Success(inner) -> inner, else -> fallback }
+    }
+
+    fun getOrElseGet(fallback: fun(E) -> T) -> T {
+        return when (this) {
+            Result::Success(inner) -> inner,
+            Result::Failure(reason) -> fallback(reason),
+            else -> error("invalid result")
+        }
+    }
+
+    fun toOptional() -> Optional<T> {
+        return when (this) {
+            Result::Success(inner) -> Optional::<T>::Value(inner),
+            else -> Optional::<T>::Empty()
+        }
+    }
+
+    fun map<U>(f: fun(T) -> U) -> Result<U, E> {
+        return when (this) {
+            Result::Success(inner) -> Result::<U, E>::Success(f(inner)),
+            Result::Failure(reason) -> Result::<U, E>::Failure(reason),
+            else -> Result::<U, E>::Failure(error("invalid result"))
+        }
+    }
+
+    fun flatMap<U>(f: fun(T) -> Result<U, E>) -> Result<U, E> {
+        return when (this) {
+            Result::Success(inner) -> f(inner),
+            Result::Failure(reason) -> Result::<U, E>::Failure(reason),
+            else -> Result::<U, E>::Failure(error("invalid result"))
+        }
+    }
+
+    fun mapError<F>(f: fun(E) -> F) -> Result<T, F> {
+        return when (this) {
+            Result::Success(inner) -> Result::<T, F>::Success(inner),
+            Result::Failure(reason) -> Result::<T, F>::Failure(f(reason)),
+            else -> Result::<T, F>::Failure(error("invalid result"))
+        }
+    }
 }
 
 fun resultSuccess<T, E>(value: T) -> Result<T, E> {
@@ -55,5 +106,27 @@ fun resultGetOrElse<T, E>(value: Result<T, E>, fallback: T) -> T {
     return when (value) {
         Result::Success(inner) -> inner,
         else -> fallback
+    }
+}
+
+fun resultGetOrElseGet<T, E>(value: Result<T, E>, fallback: fun(E) -> T) -> T {
+    return when (value) {
+        Result::Success(inner) -> inner,
+        Result::Failure(reason) -> fallback(reason),
+        else -> error("invalid result")
+    }
+}
+
+fun resultToOptional<T, E>(value: Result<T, E>) -> Optional<T> {
+    return when (value) {
+        Result::Success(inner) -> optionalValue<T>(inner),
+        else -> optionalEmpty<T>()
+    }
+}
+
+fun optionalToResult<T, E>(value: Optional<T>, reason: E) -> Result<T, E> {
+    return when (value) {
+        Optional::Value(inner) -> resultSuccess<T, E>(inner),
+        else -> resultFailure<T, E>(reason)
     }
 }

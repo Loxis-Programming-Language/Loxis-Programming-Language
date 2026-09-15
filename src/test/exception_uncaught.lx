@@ -1,0 +1,6 @@
+fun bottom() -> unit { throw RuntimeException("uncaught-demo") }
+fun middle() -> unit { bottom() }
+fun main() -> int {
+    middle()
+    return 0
+}

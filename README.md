@@ -28,6 +28,7 @@ Requirements:
 - CMake 3.26 or newer
 - A C++20 compiler
 - PowerShell for the smoke test suite
+- Python 3 for the standard-library regression suite
 
 Visual Studio example:
 
@@ -75,7 +76,23 @@ It is also registered with CTest as `loxis_smoke`:
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
+When Python is available at configuration time, CTest also registers
+`loxis_stdlib`. It exercises collections, JSON, host services and error paths
+under NoGC, ARC and AARC. Both harnesses use this repository's standard library.
+
+See the [standard-library API reference](docs/stdlib.md) and the complete
+[JSON file-processing example](examples/json_report.lx). Pass application
+arguments after `--`, for example `Loxis examples/json_report.lx -- input.json output.json`.
+
+For a runnable tour of text, lists, iterators, Optional/Result, math, random and
+JSON file I/O, try `Loxis examples/stdlib_demo.lx 10000000`.
+See [example instructions](examples/README.md) for custom input and output paths.
+
 ## Language
+
+Built-in type names use lowercase. For example, `val xs: list<int> = list<int>()`
+creates an empty list after importing `loxis.collections.list`.
+Try `Loxis examples/list_demo.lx` for list construction, lazy filtering and mapping.
 
 Loxis v2 uses Kotlin-inspired declarations and expressions:
 

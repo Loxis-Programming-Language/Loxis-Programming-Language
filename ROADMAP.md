@@ -11,7 +11,7 @@
 - [x] **Monomorphizer** — generic instantiation scan + substitution pass; name mangling (`src/cpp/v2/hir/Monomorphizer.cpp`)
 - [x] **MIR lowering** — HIR → CFG (MirBody, BasicBlock, Operand, Rvalue, Terminator); loop context stack, field/store dispatch (`src/cpp/v2/backend/Lowering.cpp`)
 - [x] **MIR compiler** — MIR → bytecode; patch table for label resolution, vtable/itable metadata (`src/cpp/v2/backend/MIRCompiler.cpp`)
-- [x] **VM** — register-based (256 int64 regs + type tags), JIT instruction decode, call stack, data stack, heap (9-byte cells, type-id header), syscall dispatch (`src/cpp/vm/VM.cpp`, `src/cpp/vm/Heap.hpp`)
+- [x] **VM** — register-based (4096 int64 regs + type tags), JIT instruction decode, call stack, data stack, heap (9-byte cells, type-id header), syscall dispatch (`src/cpp/vm/VM.cpp`, `src/cpp/vm/Heap.hpp`)
 - [x] **Module loader** — recursive import resolution, stdlib discovery, visibility filtering, selective import enforcement (`src/cpp/v2/driver/ModuleLoader.cpp`)
 
 ## ✅ Done — Language Features (executable end-to-end)
@@ -20,7 +20,7 @@
 - [x] Top-level functions — block bodies and expression-body shorthand
 - [x] Local `val` / `var` bindings — with optional type annotations
 - [x] Top-level immutable `val` declarations — lowered to synthetic getter functions
-- [x] Function values and arity-based function overloading
+- [x] Function values and canonical-signature function overloading with structural name mangling
 - [x] Operator overloading baseline — binary `+`, unary operators, and equality
 - [x] Integer arithmetic, comparisons, recursion
 - [x] `if` / `else`, `while`, `loop`, `break` / `continue` with labels
@@ -29,7 +29,7 @@
 ### Types & Generics
 - [x] Primitive types — `int`, `long`, `float`, `double`, `bool`, `char`, `str`, `unit`, `noreturn`
 - [x] Generic functions — monomorphized at HIR level
-- [x] Generic classes — `List<T>` with monomorphized methods
+- [x] Generic classes — `list<T>` with monomorphized methods
 - [x] Type aliases — including aliases for function types
 - [x] Type casting — `as`, `is`, `!is` with runtime type-id checks
 
@@ -70,13 +70,14 @@
 
 ### Standard Library (`stdlib/loxis/`)
 - [x] `prelude.lx` — VM primitive wrappers (heap, string, syscall, float)
-- [x] `collections/list.lx` — `List<T>` with `push`, `get`, `set`, `size`; HOFs: `listMap`, `listFilter`, `listForEach`, `listFold`, `listCount`, `listAny`, `listAll`; algorithms: `listAppend`, `listReverse`, `listReversed`, `listSortBy`
-- [x] `text.lx` — `len`, `concat`, `parseInt`, `toString`, `charCodeAt`, `slice`, `indexOf`, `contains`
-- [x] `math.lx` — integer math helpers
-- [x] `fileio.lx` — `readText`, `writeText`, `appendText`, `removeFile` (VM syscalls)
+- [x] `collections/list.lx` — fluent `list<T>` collection, HOF, search, ordering, slicing, and reversal methods
+- [x] `collections/stream.lx` — fluent lazy `Stream<T>` pipelines with generic `map`, `zip`, and `fold`
+- [x] `text.lx` — string extensions for splitting, words, replacement, parsing, Unicode, slicing, and search
+- [x] `math.lx` — organized `Math` integer and floating-point helpers
+- [x] `fileio.lx`, `fs.lx`, `path.lx` — `File`, `Files`, and `Path` host APIs
 - [x] `functional.lx` — `apply`, `twice` (works with capturing closures)
-- [x] `option.lx` — `Option<T>` with `optionSome`/`optionNone`/`optionMap`/`optionFlatMap`/`optionGetOrElse`/`optionIsSome`/`optionIsNone`
-- [x] `result.lx` — `Result<T,E>` with `resultOk`/`resultErr`/`resultMap`/`resultFlatMap`/`resultMapError`/`resultGetOrElse`/`resultIsOk`/`resultIsErr`
+- [x] `option.lx` — `Option` factories and fluent `Optional<T>` mapping, defaults, and nullable conversions
+- [x] `result.lx` — `Result<T,E>` variants plus fluent mapping, defaults, and Optional conversions
 
 ### VM Builtins
 - [x] Console: `print`, `println`, `write`, `error`
@@ -88,8 +89,8 @@
 - [x] Virtual/interface call: `VCall`, `ICall` with vtable/itable resolution
 
 ### Testing & Validation
-- [x] Smoke test harness — `tests/run_smoke.ps1` with 37 cases
-- [x] CTest integration — `loxis_smoke` target
+- [x] Smoke test harness — `tests/run_smoke.ps1` with 39 cases
+- [x] CTest integration — `loxis_smoke` and `loxis_stdlib` targets
 
 ## ✅ Done — Tooling
 
@@ -130,9 +131,11 @@
 - [ ] Full enum pattern coverage (struct variants, nested patterns)
 
 ### Standard Library
-- [ ] `HashMap<K, V>` / `HashSet<T>`
-- [ ] `Iterator<T>` trait and collection adapters
-- [ ] JSON parsing/serialization
+- [x] `HashMap<K, V>` / `HashSet<T>` and `Queue<T>`
+- [x] Optional-based `Iterator<T>`, lazy adapters, streams and iterator-driven `for`
+- [x] JSON parsing/serialization and file-processing example
+- [x] Filesystem/path/binary I/O, arguments/environment, clocks and seeded random
+- [x] Strict numeric parsing, Unicode helpers and double math
 - [ ] Networking / HTTP
 
 ### Tooling

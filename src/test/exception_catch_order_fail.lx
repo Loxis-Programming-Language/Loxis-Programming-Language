@@ -1,0 +1,10 @@
+fun main() -> int {
+    try {
+        throw RuntimeException("x")
+    } catch (failure: Exception) {
+        print("base")
+    } catch (failure: RuntimeException) {
+        print("unreachable")
+    }
+    return 0
+}

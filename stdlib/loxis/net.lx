@@ -1,0 +1,61 @@
+package loxis.net
+
+class SocketException(message: str) : Exception(message)
+
+// Blocking TCP sockets. An empty read means the peer closed cleanly.
+class TcpSocket(var handle: int) {
+    fun isOpen() -> bool { return this.handle >= 0 }
+    fun read(maxBytes: int) -> str {
+        if !this.isOpen() { throw SocketException("socket is closed") }
+        val value = nativeSocketRead(this.handle, maxBytes)
+        if value == null { throw SocketException(nativeNetError()) }
+        return value!!
+    }
+    fun write(value: str) -> int {
+        if !this.isOpen() { throw SocketException("socket is closed") }
+        val written = nativeSocketWrite(this.handle, value)
+        if written < 0 { throw SocketException(nativeNetError()) }
+        return written
+    }
+    fun localPort() -> int {
+        if !this.isOpen() { throw SocketException("socket is closed") }
+        val port = nativeSocketLocalPort(this.handle)
+        if port < 0 { throw SocketException(nativeNetError()) }
+        return port
+    }
+    fun close() -> unit {
+        if this.isOpen() { nativeSocketClose(this.handle); this.handle = -1 }
+    }
+}
+
+class TcpListener(var handle: int) {
+    fun isOpen() -> bool { return this.handle >= 0 }
+    fun accept() -> TcpSocket {
+        if !this.isOpen() { throw SocketException("listener is closed") }
+        val client = nativeTcpAccept(this.handle)
+        if client < 0 { throw SocketException(nativeNetError()) }
+        return TcpSocket(client)
+    }
+    fun localPort() -> int {
+        if !this.isOpen() { throw SocketException("listener is closed") }
+        val port = nativeSocketLocalPort(this.handle)
+        if port < 0 { throw SocketException(nativeNetError()) }
+        return port
+    }
+    fun close() -> unit {
+        if this.isOpen() { nativeSocketClose(this.handle); this.handle = -1 }
+    }
+}
+
+object Tcp {
+    fun connect(host: str, port: int) -> TcpSocket {
+        val handle = nativeTcpConnect(host, port)
+        if handle < 0 { throw SocketException(nativeNetError()) }
+        return TcpSocket(handle)
+    }
+    fun listen(host: str, port: int) -> TcpListener {
+        val handle = nativeTcpBind(host, port)
+        if handle < 0 { throw SocketException(nativeNetError()) }
+        return TcpListener(handle)
+    }
+}

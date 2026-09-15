@@ -41,7 +41,7 @@ private:
     std::vector<WhereBound> parseWhere();
     TypePtr parseRet();
     std::vector<ParamDecl> parseClassParams();
-    std::vector<std::pair<std::string,TypePtr>> parseFnParams();
+    std::vector<std::pair<std::string,TypePtr>> parseFnParams(std::optional<size_t>* varargIndex = nullptr);
     Path parsePath();
     Path parseTypePath();
     std::vector<TypePtr> parseGenericArgs();
@@ -90,6 +90,8 @@ private:
     ExprPtr parsePostfix();
     bool tryAttachGenericArgs(ExprPtr& expr);
     ExprPtr parsePrimary();
+    ExprPtr parseMapLiteral();
+    bool looksLikeMapLiteral();
     ExprPtr parseBlockOrClosure();
     ExprPtr parseBlockBody();
     ExprPtr parseBlock();
@@ -101,6 +103,8 @@ private:
     ExprPtr parseBreak();
     ExprPtr parseContinue();
     ExprPtr parseReturn();
+    ExprPtr parseThrow();
+    ExprPtr parseTryCatch();
     ExprPtr parseStructExpr(Path path);
     ExprPtr parseLiteral();
     ExprPtr parseNull();

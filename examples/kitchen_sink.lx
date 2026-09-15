@@ -1,0 +1,105 @@
+import loxis.collections.list
+import loxis.collections.iterator
+import loxis.collections.stream
+import loxis.collections.map
+import loxis.collections.set
+import loxis.collections.queue
+import loxis.text
+import loxis.math
+import loxis.json
+import loxis.fileio
+import loxis.path
+import loxis.random
+import loxis.time
+
+open class DemoException(message: str) : Exception(message)
+class EmptyInputException(message: str) : DemoException(message)
+
+fun unwrapText(value: Result<str, str>) -> str {
+    return when (value) {
+        Result::Success(text) -> text,
+        Result::Failure(reason) -> throw DemoException(reason),
+        else -> throw DemoException("invalid Result variant")
+    }
+}
+
+fun main() -> int {
+    val started = Clock.monotonicNanos()
+    print("=== Loxis kitchen sink ===")
+
+    // Array and map literals.
+    val fibonacci = [1, 1, 2, 3, 5, 8, 13]
+    val scores = {"alice": 12, "bob": 27, "alice": 42}
+    print("array: first=" + fibonacci[0].toString() + ", last=" + fibonacci[6].toString())
+    print("map: size=" + scores.size().toString() + ", alice=" + scores.get("alice").getOrElse(0).toString())
+
+    // Text extensions and list operations.
+    val sentence = "  loxis makes collections composable loxis makes demos fun  ".trim()
+    val words = sentence.words()
+    if words.isEmpty() { throw EmptyInputException("no words") }
+    val unique = list<str>()
+    for word in words {
+        if unique.find({ candidate: str -> candidate == word }).isEmpty() {
+            unique.push(word)
+        }
+    }
+    unique.sortBy({ a: str, b: str -> a < b })
+    print("words=" + words.size().toString() + ", unique=" + unique.size().toString())
+    print("joined=" + unique.join(", "))
+
+    // Lazy stream pipeline with a capturing callback.
+    val minimum = 4
+    val selected = stream<int>(words.map<int>({ word: str -> word.length() }))
+        .filter({ length: int -> length >= minimum })
+        .map<int>({ length: int -> length * length })
+        .take(5)
+        .toList()
+    print("squared lengths=" + selected.map<str>({ value: int -> value.toString() }).join(", "))
+
+    // Set and queue.
+    val seen = HashSet<str>(hashString, equalString)
+    val pending = Queue<str>()
+    for word in words { seen.add(word); pending.enqueue(word) }
+    print("set size=" + seen.size().toString() + ", queue size=" + pending.size().toString())
+    print("queue head=" + pending.dequeue().getOrElse("(empty)"))
+
+    // Option, Result, Unicode, deterministic random, and math.
+    val parsed = "120".toIntResult().getOrElse(-1)
+    val unicode = Unicode.fromCodePoint(29483)
+    val rng = Random.seeded(42)
+    print("parsed=" + parsed.toString() + ", unicode=" + unicode)
+    print("gcd=" + Math.gcd(84, 30).toString() + ", sqrt=" + Math.sqrt(81.0).toString())
+    print("seeded pick=" + words.get(rng.nextBounded(words.size())))
+
+    // Structured JSON through the organized Json API.
+    val report = {
+        "title": Json.string("Loxis demo"),
+        "wordCount": Json.number(words.size().toString()),
+        "uniqueCount": Json.number(unique.size().toString()),
+        "ok": Json.boolean(true)
+    }
+    val encoded = unwrapText(Json.stringify(Json.dictionary(report)))
+    val decoded = Json.parse(encoded)
+    require(decoded.isSuccess(), "JSON round trip failed")
+    print("json=" + encoded)
+
+    // File and path APIs, with exception handling and deterministic cleanup.
+    val output = Path.join(Path.currentDirectory(), "loxis-kitchen-sink.json")
+    try {
+        when (File.writeText(output, encoded)) {
+            Result::Failure(reason) -> throw DemoException(reason),
+            else -> 0
+        }
+        val restored = unwrapText(File.readText(output))
+        require(restored == encoded, "file round trip changed the payload")
+        print("file=" + Path.name(output) + ", bytes=" + restored.length().toString())
+    } catch (failure: DemoException) {
+        print("I/O failure: " + failure.message)
+    } finally {
+        if File.exists(output) { File.remove(output) }
+        print("temporary file cleaned up")
+    }
+
+    print("elapsed ns=" + (Clock.monotonicNanos() - started).toString())
+    return 0
+}

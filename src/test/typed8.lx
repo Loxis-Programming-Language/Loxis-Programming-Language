@@ -1,7 +1,0 @@
-fun greet(name) {
-    print(name)
-}
-
-fun main() {
-    greet("hi")
-}

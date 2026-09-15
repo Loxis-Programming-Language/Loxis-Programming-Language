@@ -1,13 +1,14 @@
 package loxis.collections.iterator
 
 import loxis.collections.list
+import loxis.option
 
 // ============================================================
 //  Iterator<T> interface
 // ============================================================
 
 interface Iterator<T> {
-    fun next() -> T?
+    fun next() -> Optional<T>
 }
 
 // ============================================================
@@ -15,8 +16,8 @@ interface Iterator<T> {
 // ============================================================
 
 class EmptyIterator<T>() : Iterator<T> {
-    override fun next() -> T? {
-        return null
+    override fun next() -> Optional<T> {
+        return optionalEmpty<T>()
     }
 }
 
@@ -24,25 +25,25 @@ fun emptyIter<T>() -> EmptyIterator<T> {
     return EmptyIterator<T>()
 }
 
-class ListIterator<T>(var list: List<T>, var index: int) : Iterator<T> {
-    override fun next() -> T? {
-        if this.index >= this.list.len {
-            return null
+class ListIterator<T>(var items: list<T>, var index: int) : Iterator<T> {
+    override fun next() -> Optional<T> {
+        if this.index >= this.items.len {
+            return optionalEmpty<T>()
         }
-        val value = arrayGet(this.list.buffer, this.index)
+        val value = this.items.get(this.index)
         this.index += 1
-        return value
+        return optionalValue<T>(value)
     }
 }
 
-fun listIter<T>(list: List<T>) -> ListIterator<T> {
-    return ListIterator<T>(list, 0)
+fun listIter<T>(items: list<T>) -> ListIterator<T> {
+    return ListIterator<T>(items, 0)
 }
 
 fun iterForEach<T>(iter: Iterator<T>, f: fun(T) -> unit) -> unit {
     var item = iter.next()
-    while item != null {
-        f(item!!)
+    while optionalHasValue<T>(item) {
+        f(optionalValueOrFail<T>(item))
         item = iter.next()
     }
 }
@@ -50,7 +51,7 @@ fun iterForEach<T>(iter: Iterator<T>, f: fun(T) -> unit) -> unit {
 fun iterCount<T>(iter: Iterator<T>) -> int {
     var count = 0
     var item = iter.next()
-    while item != null {
+    while optionalHasValue<T>(item) {
         count += 1
         item = iter.next()
     }
@@ -59,8 +60,8 @@ fun iterCount<T>(iter: Iterator<T>) -> int {
 
 fun iterAny<T>(iter: Iterator<T>, pred: fun(T) -> bool) -> bool {
     var item = iter.next()
-    while item != null {
-        if pred(item!!) {
+    while optionalHasValue<T>(item) {
+        if pred(optionalValueOrFail<T>(item)) {
             return true
         }
         item = iter.next()
@@ -70,8 +71,8 @@ fun iterAny<T>(iter: Iterator<T>, pred: fun(T) -> bool) -> bool {
 
 fun iterAll<T>(iter: Iterator<T>, pred: fun(T) -> bool) -> bool {
     var item = iter.next()
-    while item != null {
-        if !pred(item!!) {
+    while optionalHasValue<T>(item) {
+        if !pred(optionalValueOrFail<T>(item)) {
             return false
         }
         item = iter.next()
@@ -79,14 +80,99 @@ fun iterAll<T>(iter: Iterator<T>, pred: fun(T) -> bool) -> bool {
     return true
 }
 
-fun iterFind<T>(iter: Iterator<T>, pred: fun(T) -> bool) -> T? {
+fun iterFind<T>(iter: Iterator<T>, pred: fun(T) -> bool) -> Optional<T> {
     var item = iter.next()
-    while item != null {
-        val value = item!!
+    while optionalHasValue<T>(item) {
+        val value = optionalValueOrFail<T>(item)
         if pred(value) {
-            return value
+            return item
         }
         item = iter.next()
     }
-    return null
+    return optionalEmpty<T>()
+}
+
+class MapIterator<T, U>(val source: Iterator<T>, val transform: fun(T) -> U) : Iterator<U> {
+    override fun next() -> Optional<U> {
+        return optionalMap<T, U>(this.source.next(), this.transform)
+    }
+}
+
+class FilterIterator<T>(val source: Iterator<T>, val predicate: fun(T) -> bool) : Iterator<T> {
+    override fun next() -> Optional<T> {
+        var item = this.source.next()
+        while optionalHasValue<T>(item) {
+            if this.predicate(optionalValueOrFail<T>(item)) { return item }
+            item = this.source.next()
+        }
+        return optionalEmpty<T>()
+    }
+}
+
+class TakeIterator<T>(val source: Iterator<T>, var remaining: int) : Iterator<T> {
+    override fun next() -> Optional<T> {
+        if this.remaining == 0 { return optionalEmpty<T>() }
+        val item = this.source.next()
+        if optionalIsEmpty<T>(item) { this.remaining = 0 }
+        else { this.remaining -= 1 }
+        return item
+    }
+}
+
+class DropIterator<T>(val source: Iterator<T>, var remaining: int) : Iterator<T> {
+    override fun next() -> Optional<T> {
+        while this.remaining > 0 {
+            this.remaining -= 1
+            if optionalIsEmpty<T>(this.source.next()) {
+                this.remaining = 0
+                return optionalEmpty<T>()
+            }
+        }
+        return this.source.next()
+    }
+}
+
+class Pair<A, B>(val first: A, val second: B) {}
+
+class ZipIterator<A, B>(val left: Iterator<A>, val right: Iterator<B>, var done: bool) : Iterator<Pair<A, B>> {
+    override fun next() -> Optional<Pair<A, B>> {
+        if this.done { return optionalEmpty<Pair<A, B>>() }
+        val a = this.left.next()
+        if optionalIsEmpty<A>(a) { this.done = true; return optionalEmpty<Pair<A, B>>() }
+        val b = this.right.next()
+        if optionalIsEmpty<B>(b) { this.done = true; return optionalEmpty<Pair<A, B>>() }
+        return optionalValue<Pair<A, B>>(Pair<A, B>(optionalValueOrFail<A>(a), optionalValueOrFail<B>(b)))
+    }
+}
+
+fun iterMap<T, U>(source: Iterator<T>, f: fun(T) -> U) -> MapIterator<T, U> { return MapIterator<T, U>(source, f) }
+fun iterFilter<T>(source: Iterator<T>, f: fun(T) -> bool) -> FilterIterator<T> { return FilterIterator<T>(source, f) }
+fun iterTake<T>(source: Iterator<T>, count: int) -> TakeIterator<T> {
+    require(count >= 0, "negative iterator count")
+    return TakeIterator<T>(source, count)
+}
+fun iterDrop<T>(source: Iterator<T>, count: int) -> DropIterator<T> {
+    require(count >= 0, "negative iterator count")
+    return DropIterator<T>(source, count)
+}
+fun iterZip<A, B>(left: Iterator<A>, right: Iterator<B>) -> ZipIterator<A, B> {
+    return ZipIterator<A, B>(left, right, false)
+}
+fun iterFold<T, U>(iter: Iterator<T>, initial: U, f: fun(U, T) -> U) -> U {
+    var total = initial
+    var item = iter.next()
+    while optionalHasValue<T>(item) {
+        total = f(total, optionalValueOrFail<T>(item))
+        item = iter.next()
+    }
+    return total
+}
+fun iterToList<T>(iter: Iterator<T>) -> list<T> {
+    val out = listWithCapacity<T>(8)
+    var item = iter.next()
+    while optionalHasValue<T>(item) {
+        out.push(optionalValueOrFail<T>(item))
+        item = iter.next()
+    }
+    return out
 }

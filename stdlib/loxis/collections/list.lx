@@ -1,6 +1,11 @@
 package loxis.collections
 
-class List<T>(var buffer: int, var len: int, var cap: int) {
+import loxis.option
+
+class list<T>() {
+    var buffer: int = arrayNew(0)
+    var len: int = 0
+    var cap: int = 0
     fun size() -> int {
         return this.len
     }
@@ -10,15 +15,57 @@ class List<T>(var buffer: int, var len: int, var cap: int) {
     }
 
     fun get(index: int) -> T {
+        require(index >= 0 && index < this.len, "list index out of bounds")
         return arrayGet(this.buffer, index)
     }
 
     fun set(index: int, value: T) -> unit {
+        require(index >= 0 && index < this.len, "list index out of bounds")
         arraySet(this.buffer, index, value)
+    }
+
+    fun isEmpty() -> bool { return this.len == 0 }
+
+    fun clear() -> unit {
+        var i = 0
+        while i < this.len {
+            hset(this.buffer, 9 + i * 9, null)
+            i += 1
+        }
+        this.len = 0
+    }
+
+    fun insert(index: int, value: T) -> unit {
+        require(index >= 0 && index <= this.len, "list index out of bounds")
+        this.push(value)
+        var i = this.len - 1
+        while i > index {
+            this.set(i, this.get(i - 1))
+            i -= 1
+        }
+        this.set(index, value)
+    }
+
+    fun removeAt(index: int) -> T {
+        val value = this.get(index)
+        var i = index
+        while i + 1 < this.len {
+            this.set(i, this.get(i + 1))
+            i += 1
+        }
+        this.len -= 1
+        hset(this.buffer, 9 + this.len * 9, null)
+        return value
+    }
+
+    fun pop() -> Optional<T> {
+        if this.len == 0 { return optionalEmpty<T>() }
+        return optionalValue<T>(this.removeAt(this.len - 1))
     }
 
     fun push(value: T) -> unit {
         if this.len >= this.cap {
+            require(this.cap <= 238609293, "list capacity overflow")
             var nextCap = this.cap * 2
             if nextCap <= 0 {
                 nextCap = 1
@@ -39,39 +86,148 @@ class List<T>(var buffer: int, var len: int, var cap: int) {
         arraySet(this.buffer, this.len, value)
         this.len += 1
     }
+
+    fun forEach(f: fun(T) -> unit) -> unit {
+        var i = 0
+        while i < this.len { f(this.get(i)); i += 1 }
+    }
+
+    fun map<U>(f: fun(T) -> U) -> list<U> {
+        val out = listWithCapacity<U>(this.len)
+        var i = 0
+        while i < this.len { out.push(f(this.get(i))); i += 1 }
+        return out
+    }
+
+    fun filter(pred: fun(T) -> bool) -> list<T> {
+        val out = listWithCapacity<T>(this.len)
+        var i = 0
+        while i < this.len {
+            val value = this.get(i)
+            if pred(value) { out.push(value) }
+            i += 1
+        }
+        return out
+    }
+
+    fun fold<U>(initial: U, f: fun(U, T) -> U) -> U {
+        var acc = initial
+        var i = 0
+        while i < this.len { acc = f(acc, this.get(i)); i += 1 }
+        return acc
+    }
+
+    fun count(pred: fun(T) -> bool) -> int {
+        var total = 0
+        var i = 0
+        while i < this.len { if pred(this.get(i)) { total += 1 }; i += 1 }
+        return total
+    }
+
+    fun any(pred: fun(T) -> bool) -> bool {
+        var i = 0
+        while i < this.len { if pred(this.get(i)) { return true }; i += 1 }
+        return false
+    }
+
+    fun all(pred: fun(T) -> bool) -> bool {
+        var i = 0
+        while i < this.len { if !pred(this.get(i)) { return false }; i += 1 }
+        return true
+    }
+
+    fun find(pred: fun(T) -> bool) -> Optional<T> {
+        var i = 0
+        while i < this.len {
+            val value = this.get(i)
+            if pred(value) { return optionalValue<T>(value) }
+            i += 1
+        }
+        return optionalEmpty<T>()
+    }
+
+    fun first() -> Optional<T> {
+        if this.len == 0 { return optionalEmpty<T>() }
+        return optionalValue<T>(this.get(0))
+    }
+
+    fun sortBy(before: fun(T, T) -> bool) -> unit {
+        listSortBy<T>(this, before)
+    }
+
+    fun take(count: int) -> list<T> {
+        require(count >= 0, "negative take count")
+        val limit = min(count, this.len)
+        val out = listWithCapacity<T>(limit)
+        var i = 0
+        while i < limit { out.push(this.get(i)); i += 1 }
+        return out
+    }
+
+    fun append(other: list<T>) -> list<T> {
+        val out = listWithCapacity<T>(this.len + other.size())
+        var i = 0
+        while i < this.len { out.push(this.get(i)); i += 1 }
+        i = 0
+        while i < other.size() { out.push(other.get(i)); i += 1 }
+        return out
+    }
+
+    fun reverse() -> unit {
+        var left = 0
+        var right = this.len - 1
+        while left < right {
+            val value = this.get(left)
+            this.set(left, this.get(right))
+            this.set(right, value)
+            left += 1
+            right -= 1
+        }
+    }
+
+    fun reversed() -> list<T> {
+        val out = listWithCapacity<T>(this.len)
+        var i = this.len - 1
+        while i >= 0 { out.push(this.get(i)); i -= 1 }
+        return out
+    }
 }
 
-fun listNew<T>(capacity: int) -> List<T> {
-    return List<T>(arrayNew(capacity), 0, capacity)
+fun listWithCapacity<T>(capacity: int) -> list<T> {
+    val storage = arrayNew(capacity)
+    val out = list<T>()
+    out.buffer = storage
+    out.cap = capacity
+    return out
 }
 
-fun listFree<T>(list: List<T>) -> unit {
-    arrayFree(list.buffer)
+fun listFree<T>(items: list<T>) -> unit {
+    arrayFree(items.buffer)
 }
 
-fun listForEach<T>(list: List<T>, f: fun(T) -> unit) -> unit {
+fun listForEach<T>(items: list<T>, f: fun(T) -> unit) -> unit {
     var i = 0
-    while i < list.size() {
-        f(list.get(i))
+    while i < items.size() {
+        f(items.get(i))
         i += 1
     }
 }
 
-fun listMap<T, U>(list: List<T>, f: fun(T) -> U) -> List<U> {
-    val out = listNew<U>(list.size())
+fun listMap<T, U>(items: list<T>, f: fun(T) -> U) -> list<U> {
+    val out = listWithCapacity<U>(items.size())
     var i = 0
-    while i < list.size() {
-        out.push(f(list.get(i)))
+    while i < items.size() {
+        out.push(f(items.get(i)))
         i += 1
     }
     return out
 }
 
-fun listFilter<T>(list: List<T>, pred: fun(T) -> bool) -> List<T> {
-    val out = listNew<T>(list.size())
+fun listFilter<T>(items: list<T>, pred: fun(T) -> bool) -> list<T> {
+    val out = listWithCapacity<T>(items.size())
     var i = 0
-    while i < list.size() {
-        val value = list.get(i)
+    while i < items.size() {
+        val value = items.get(i)
         if pred(value) {
             out.push(value)
         }
@@ -80,21 +236,21 @@ fun listFilter<T>(list: List<T>, pred: fun(T) -> bool) -> List<T> {
     return out
 }
 
-fun listFold<T, U>(list: List<T>, initial: U, f: fun(U, T) -> U) -> U {
+fun listFold<T, U>(items: list<T>, initial: U, f: fun(U, T) -> U) -> U {
     var acc = initial
     var i = 0
-    while i < list.size() {
-        acc = f(acc, list.get(i))
+    while i < items.size() {
+        acc = f(acc, items.get(i))
         i += 1
     }
     return acc
 }
 
-fun listCount<T>(list: List<T>, pred: fun(T) -> bool) -> int {
+fun listCount<T>(items: list<T>, pred: fun(T) -> bool) -> int {
     var count = 0
     var i = 0
-    while i < list.size() {
-        if pred(list.get(i)) {
+    while i < items.size() {
+        if pred(items.get(i)) {
             count += 1
         }
         i += 1
@@ -102,10 +258,10 @@ fun listCount<T>(list: List<T>, pred: fun(T) -> bool) -> int {
     return count
 }
 
-fun listAny<T>(list: List<T>, pred: fun(T) -> bool) -> bool {
+fun listAny<T>(items: list<T>, pred: fun(T) -> bool) -> bool {
     var i = 0
-    while i < list.size() {
-        if pred(list.get(i)) {
+    while i < items.size() {
+        if pred(items.get(i)) {
             return true
         }
         i += 1
@@ -113,10 +269,10 @@ fun listAny<T>(list: List<T>, pred: fun(T) -> bool) -> bool {
     return false
 }
 
-fun listAll<T>(list: List<T>, pred: fun(T) -> bool) -> bool {
+fun listAll<T>(items: list<T>, pred: fun(T) -> bool) -> bool {
     var i = 0
-    while i < list.size() {
-        if !pred(list.get(i)) {
+    while i < items.size() {
+        if !pred(items.get(i)) {
             return false
         }
         i += 1
@@ -124,8 +280,8 @@ fun listAll<T>(list: List<T>, pred: fun(T) -> bool) -> bool {
     return true
 }
 
-fun listAppend<T>(left: List<T>, right: List<T>) -> List<T> {
-    val out = listNew<T>(left.size() + right.size())
+fun listAppend<T>(left: list<T>, right: list<T>) -> list<T> {
+    val out = listWithCapacity<T>(left.size() + right.size())
     var i = 0
     while i < left.size() {
         out.push(left.get(i))
@@ -140,47 +296,57 @@ fun listAppend<T>(left: List<T>, right: List<T>) -> List<T> {
     return out
 }
 
-fun listReverse<T>(list: List<T>) -> unit {
+fun listReverse<T>(items: list<T>) -> unit {
     var left = 0
-    var right = list.size() - 1
+    var right = items.size() - 1
     while left < right {
-        val a = list.get(left)
-        val b = list.get(right)
-        list.set(left, b)
-        list.set(right, a)
+        val a = items.get(left)
+        val b = items.get(right)
+        items.set(left, b)
+        items.set(right, a)
         left += 1
         right -= 1
     }
 }
 
-fun listReversed<T>(list: List<T>) -> List<T> {
-    val out = listNew<T>(list.size())
-    var i = list.size() - 1
+fun listReversed<T>(items: list<T>) -> list<T> {
+    val out = listWithCapacity<T>(items.size())
+    var i = items.size() - 1
     while i >= 0 {
-        out.push(list.get(i))
+        out.push(items.get(i))
         i -= 1
     }
     return out
 }
 
-fun listSortBy<T>(list: List<T>, before: fun(T, T) -> bool) -> unit {
+fun listSortBy<T>(items: list<T>, before: fun(T, T) -> bool) -> unit {
     var i = 0
-    while i < list.size() {
+    while i < items.size() {
         var best = i
         var j = i + 1
-        while j < list.size() {
-            if before(list.get(j), list.get(best)) {
+        while j < items.size() {
+            if before(items.get(j), items.get(best)) {
                 best = j
             }
             j += 1
         }
 
         if best != i {
-            val a = list.get(i)
-            val b = list.get(best)
-            list.set(i, b)
-            list.set(best, a)
+            val a = items.get(i)
+            val b = items.get(best)
+            items.set(i, b)
+            items.set(best, a)
         }
         i += 1
     }
+}
+
+fun listFind<T>(items: list<T>, pred: fun(T) -> bool) -> Optional<T> {
+    var i = 0
+    while i < items.size() {
+        val item = items.get(i)
+        if pred(item) { return optionalValue<T>(item) }
+        i += 1
+    }
+    return optionalEmpty<T>()
 }

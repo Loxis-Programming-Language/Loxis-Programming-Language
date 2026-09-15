@@ -2,7 +2,40 @@ package loxis.option
 
 enum class Optional<T> {
     Empty,
-    Value(T)
+    Value(T),
+
+    fun hasValue() -> bool {
+        return when (this) { Optional::Value(_) -> true, else -> false }
+    }
+
+    fun isEmpty() -> bool { return !this.hasValue() }
+
+    fun getOrElse(fallback: T) -> T {
+        return when (this) { Optional::Value(inner) -> inner, else -> fallback }
+    }
+
+    fun getOrElseGet(fallback: fun() -> T) -> T {
+        return when (this) { Optional::Value(inner) -> inner, else -> fallback() }
+    }
+
+    fun valueOrFail() -> T {
+        return when (this) { Optional::Value(inner) -> inner, else -> error("missing optional value") }
+    }
+
+    fun map<U>(f: fun(T) -> U) -> Optional<U> {
+        return when (this) {
+            Optional::Value(inner) -> Optional::<U>::Value(f(inner)),
+            else -> Optional::<U>::Empty()
+        }
+    }
+
+    fun flatMap<U>(f: fun(T) -> Optional<U>) -> Optional<U> {
+        return when (this) {
+            Optional::Value(inner) -> f(inner),
+            else -> Optional::<U>::Empty()
+        }
+    }
+
 }
 
 fun optionalValue<T>(value: T) -> Optional<T> {
@@ -52,5 +85,33 @@ fun optionalValueOrFail<T>(value: Optional<T>) -> T {
     return when (value) {
         Optional::Value(inner) -> inner,
         else -> error("missing optional value")
+    }
+}
+
+fun optionalGetOrElseGet<T>(value: Optional<T>, fallback: fun() -> T) -> T {
+    return when (value) {
+        Optional::Value(inner) -> inner,
+        else -> fallback()
+    }
+}
+
+fun optionalFromNullable<T>(value: T?) -> Optional<T> {
+    if value == null { return optionalEmpty<T>() }
+    return optionalValue<T>(value!!)
+}
+
+fun optionalOrNull<T>(value: Optional<T>) -> T? {
+    return when (value) {
+        Optional::Value(inner) -> inner,
+        else -> null
+    }
+}
+
+object Option {
+    fun some<T>(value: T) -> Optional<T> { return Optional::<T>::Value(value) }
+    fun none<T>() -> Optional<T> { return Optional::<T>::Empty() }
+    fun fromNullable<T>(value: T?) -> Optional<T> {
+        if value == null { return Optional::<T>::Empty() }
+        return Optional::<T>::Value(value!!)
     }
 }

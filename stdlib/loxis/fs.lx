@@ -1,0 +1,35 @@
+package loxis.fs
+
+import loxis.fileio
+
+fun isDirectory(path: str) -> bool { return nativeIsDirectory(path) != 0 }
+fun createDirectories(path: str) -> Result<bool, str> {
+    if nativeCreateDirectories(path) == 0 { return resultFailure<bool, str>(nativeIoError()) }
+    return resultSuccess<bool, str>(true)
+}
+// Removes empty directories only.
+fun removeDirectory(path: str) -> Result<bool, str> {
+    if nativeRemoveDirectory(path) == 0 { return resultFailure<bool, str>(nativeIoError()) }
+    return resultSuccess<bool, str>(true)
+}
+fun listDirectory(path: str) -> Result<list<str>, str> {
+    val n = nativeListDirectory(path)
+    if n < 0 { return resultFailure<list<str>, str>(nativeIoError()) }
+    val entries = listWithCapacity<str>(n)
+    var i = 0
+    while i < n { entries.push(nativeDirectoryEntry(i)); i += 1 }
+    return resultSuccess<list<str>, str>(entries)
+}
+
+object Files {
+    fun isDirectory(path: str) -> bool { return nativeIsDirectory(path) != 0 }
+    fun createDirectories(path: str) -> Result<bool, str> {
+        if nativeCreateDirectories(path) == 0 { return resultFailure<bool, str>(nativeIoError()) }
+        return resultSuccess<bool, str>(true)
+    }
+    fun removeDirectory(path: str) -> Result<bool, str> {
+        if nativeRemoveDirectory(path) == 0 { return resultFailure<bool, str>(nativeIoError()) }
+        return resultSuccess<bool, str>(true)
+    }
+    fun entries(path: str) -> Result<list<str>, str> { return listDirectory(path) }
+}

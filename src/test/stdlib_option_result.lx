@@ -19,25 +19,25 @@ fun resultInc(x: int) -> Result<int, str> {
 fun main() -> int {
     val optValue = optionalValue<int>(3)
     val optEmpty = optionalEmpty<int>()
-    val mapped = optionalMap<int, int>(optValue, inc)
-    val flatMapped = optionalFlatMap<int, int>(mapped, keepEven)
+    val mapped = optValue.map<int>(inc)
+    val flatMapped = mapped.flatMap<int>(keepEven)
 
-    print(optionalGetOrElse<int>(mapped, 0))
-    print(optionalGetOrElse<int>(optEmpty, 7))
-    print(optionalGetOrElse<int>(flatMapped, 0))
-    print(optionalHasValue<int>(optValue))
-    print(optionalIsEmpty<int>(optEmpty))
+    print(mapped.getOrElse(0))
+    print(optEmpty.getOrElse(7))
+    print(flatMapped.getOrElse(0))
+    print(optValue.hasValue())
+    print(optEmpty.isEmpty())
 
     val successValue = resultSuccess<int, str>(10)
     val failureValue = resultFailure<int, str>("bad")
-    val resultMapped = resultMap<int, str, int>(successValue, inc)
-    val resultFlatMapped = resultFlatMap<int, str, int>(resultMapped, resultInc)
+    val resultMapped = successValue.map<int>(inc)
+    val resultFlatMapped = resultMapped.flatMap<int>(resultInc)
 
-    print(resultGetOrElse<int, str>(resultMapped, 0))
-    print(resultGetOrElse<int, str>(failureValue, 5))
-    print(resultGetOrElse<int, str>(resultFlatMapped, 0))
-    print(resultIsSuccess<int, str>(successValue))
-    print(resultIsFailure<int, str>(failureValue))
+    print(resultMapped.getOrElse(0))
+    print(failureValue.getOrElse(5))
+    print(resultFlatMapped.getOrElse(0))
+    print(successValue.isSuccess())
+    print(failureValue.isFailure())
 
     return 0
 }

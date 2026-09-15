@@ -92,6 +92,15 @@ struct ExprPath { Path path;
 };
 struct ExprTuple { std::vector<ExprPtr> elems; };
 struct ExprArray { std::vector<ExprPtr> elems; };
+struct ExprMapEntry { ExprPtr key; ExprPtr value; };
+struct ExprMap {
+    std::vector<ExprMapEntry> entries;
+    TyPtr keyTy;
+    TyPtr valueTy;
+    TyPtr resolvedTy;
+    std::string hashFunction;
+    std::string equalFunction;
+};
 struct ExprFieldInit { std::string name; ExprPtr expr; };
 struct ExprStruct { Path path; std::vector<ExprFieldInit> fields; bool rest = false;
     // Filled by TypeChecker for backend construction:
@@ -108,6 +117,7 @@ struct ExprCall {
     std::string mangledName; // Overloaded function target label
     std::vector<TyPtr> resolvedTypeArgs; // TypeChecker: concrete generic args
     TyPtr resolvedTy = nullptr; // TypeChecker: return type of the call
+    std::vector<std::optional<std::string>> argNames;
 };
 struct ExprMethodCall { ExprPtr recv; std::string method; std::vector<ExprPtr> args;
     std::string qualifiedName;        // "ClassName.method" for static dispatch
@@ -116,9 +126,14 @@ struct ExprMethodCall { ExprPtr recv; std::string method; std::vector<ExprPtr> a
     uint32_t ifaceTypeId = ~0u;
     uint32_t ifaceMethodIndex = 0;
     TyPtr resolvedTy = nullptr;
+    ExprPtr callableField;
+    std::vector<TypePtr> typeArgs;
+    std::vector<TyPtr> resolvedTypeArgs;
+    std::vector<std::optional<std::string>> argNames;
 };
 struct ExprField { ExprPtr obj; std::string field;
     uint32_t fieldOffset = 0;         // Filled by TypeChecker: byte offset in object
+    TyPtr resolvedTy = nullptr;
 };
 struct ExprIndex { ExprPtr obj; ExprPtr idx; };
 struct ExprUnary {
@@ -156,11 +171,13 @@ struct ExprFor {
     ExprPtr iter;
     ExprPtr body;
     std::optional<std::string> label;
-    enum class IterKind : uint8_t { None, IntRange, IntRangeInclusive, Array, Iterable };
+    enum class IterKind : uint8_t { None, IntRange, IntRangeInclusive, Array, Iterable, Iterator };
     IterKind iterKind = IterKind::None;
     uint64_t arrayLen = 0;
     std::string iterClassName;
     TyPtr iterResolvedTy = nullptr;
+    ExprPtr iteratorNext;
+    TyPtr iteratorElementTy = nullptr;
 };
 struct ExprLoop { ExprPtr body; std::optional<std::string> label; };
 
@@ -175,6 +192,20 @@ struct ExprWhen { ExprPtr scrut; std::vector<WhenArm> arms; };
 struct ExprBreak { std::optional<std::string> label; ExprPtr expr; };
 struct ExprContinue { std::optional<std::string> label; };
 struct ExprReturn { ExprPtr expr; };
+struct CatchClause {
+    std::string name;
+    TypePtr ty;
+    ExprPtr body;
+    TyPtr resolvedTy = nullptr;
+    uint32_t typeId = ~0u;
+};
+struct ExprThrow { ExprPtr expr; };
+struct ExprTryCatch {
+    ExprPtr body;
+    std::vector<CatchClause> catches;
+    ExprPtr finallyBody;
+    TyPtr resolvedTy = nullptr;
+};
 struct ClosureCapture {
     std::string name;
     TyPtr ty = nullptr;
@@ -222,14 +253,17 @@ struct ExprNull {};
 struct ExprStringTemplate { std::vector<std::variant<std::string, ExprPtr>> parts; };
 
 struct Expr : std::variant<
-    ExprLit, ExprPath, ExprTuple, ExprArray, ExprStruct, ExprCall, ExprMethodCall,
+    ExprLit, ExprPath, ExprTuple, ExprArray, ExprMap, ExprStruct, ExprCall, ExprMethodCall,
     ExprField, ExprIndex, ExprUnary, ExprBinary, ExprAssign, ExprBlock, ExprIf,
     ExprWhile, ExprRange, ExprFor, ExprLoop, ExprWhen, ExprBreak, ExprContinue, ExprReturn,
+    ExprThrow, ExprTryCatch,
     ExprClosure, ExprRef, ExprDeref, ExprTry, ExprCast,
     ExprSafeCall, ExprSafeField, ExprElvis, ExprForceUnwrap,
     ExprIs, ExprIsNot, ExprNull, ExprStringTemplate
 > {
     using variant::variant;
+    SourceLoc loc;
+    SourceLoc endLoc;
 };
 
 // ============================================================
@@ -292,6 +326,8 @@ struct ItemFun {
     // Extension function support
     TypePtr receiverType;     // non-null for extension functions: the type being extended
     std::string receiverName = "this"; // name bound to the receiver value
+    std::optional<size_t> varargIndex;
+    std::vector<TyPtr> resolvedParamTys;
 };
 
 // Class
@@ -323,6 +359,7 @@ struct InterfaceMethodDecl {
     std::vector<std::pair<std::string,TypePtr>> params;
     TypePtr ret;
     ExprPtr defaultBody;
+    std::optional<size_t> varargIndex;
 };
 
 struct ItemInterface {

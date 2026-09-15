@@ -52,6 +52,9 @@ struct EnumVariantInfo {
 
 struct MethodInfo {
     std::string name;
+    std::vector<std::string> genericParams;
+    std::vector<std::string> paramNames;
+    std::optional<size_t> varargIndex;
     TyPtr funcType;             // (self, params...) -> ret
     uint32_t arity = 0;         // number of source parameters (excluding self)
     uint32_t vtableIndex = ~0u; // ~0u = static/final dispatch
@@ -85,6 +88,7 @@ struct ClassDef {
     std::vector<MethodInfo> methods;   // own methods (includes overrides)
     std::vector<uint32_t> vtable;      // indices into methods[] for virtual dispatch
     std::optional<std::string> superName;
+    std::shared_ptr<ClassDef> superDef;
     std::vector<std::string> interfaceNames;
     std::vector<ItableEntry> itables;   // one entry per implemented interface
     bool isOpen = false;
@@ -202,6 +206,81 @@ inline std::string Ty::toString() const {
     case TyKind::Error: return "<error>";
     }
     return "?" + suffix;
+}
+
+// Stable, structural encoding for backend symbols. This operates on resolved
+// types, so aliases have already been reduced to their canonical meaning.
+inline std::string mangleType(const TyPtr& ty) {
+    if (!ty) return "X";
+    if (ty->nullable) {
+        auto base = std::make_shared<Ty>(*ty);
+        base->nullable = false;
+        return "N" + mangleType(base);
+    }
+    auto named = [](char tag, const std::string& name) {
+        return std::string(1, tag) + std::to_string(name.size()) + "_" + name;
+    };
+    auto args = [&](const std::vector<TyPtr>& values) {
+        std::string out = std::to_string(values.size());
+        for (const auto& value : values) out += "_" + mangleType(value);
+        return out;
+    };
+    switch (ty->kind()) {
+        case TyKind::Infer: return "V" + std::to_string(std::get<InferVar>(*ty).id);
+        case TyKind::Never: return "v";
+        case TyKind::Unit: return "u";
+        case TyKind::Bool: return "b";
+        case TyKind::Char: return "c";
+        case TyKind::Int: return "i";
+        case TyKind::Long: return "l";
+        case TyKind::Float: return "f";
+        case TyKind::Double: return "d";
+        case TyKind::Str: return "s";
+        case TyKind::Null: return "z";
+        case TyKind::Fn: {
+            const auto& fn = std::get<TyFn>(*ty);
+            return "F" + args(fn.params) + "_R_" + mangleType(fn.ret);
+        }
+        case TyKind::Tuple: return "T" + args(std::get<TyTuple>(*ty).elems);
+        case TyKind::Array: {
+            const auto& array = std::get<TyArray>(*ty);
+            return "A" + std::to_string(array.len) + "_" + mangleType(array.elem);
+        }
+        case TyKind::Slice: return "S" + mangleType(std::get<TySlice>(*ty).elem);
+        case TyKind::Ref: {
+            const auto& ref = std::get<TyRef>(*ty);
+            return std::string(ref.mut ? "Qm" : "Qi") + mangleType(ref.elem);
+        }
+        case TyKind::RawPtr: {
+            const auto& ptr = std::get<TyRawPtr>(*ty);
+            return std::string(ptr.mut ? "Pm" : "Pi") + mangleType(ptr.elem);
+        }
+        case TyKind::Adt: {
+            const auto& adt = std::get<TyAdt>(*ty);
+            return named('E', adt.def->name) + "_G" + args(adt.args);
+        }
+        case TyKind::Class_: {
+            const auto& cls = std::get<TyClass>(*ty);
+            return named('C', cls.def->name) + "_G" + args(cls.args);
+        }
+        case TyKind::Interface_: {
+            const auto& iface = std::get<TyInterface>(*ty);
+            return named('I', iface.def->name) + "_G" + args(iface.args);
+        }
+        case TyKind::Param: return "G" + std::to_string(std::get<TyParam>(*ty).idx);
+        case TyKind::Projection: {
+            const auto& projection = std::get<TyProjection>(*ty);
+            return "J" + mangleType(projection.base) + "_" + named('A', projection.assoc);
+        }
+        case TyKind::Error: return "X";
+    }
+    return "X";
+}
+
+inline std::string mangleFunctionSignature(const std::string& name, const TyFn& fn) {
+    std::string out = name + "$P" + std::to_string(fn.params.size());
+    for (const auto& param : fn.params) out += "_" + mangleType(param);
+    return out + "$R_" + mangleType(fn.ret);
 }
 
 // Factory functions

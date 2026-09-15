@@ -58,6 +58,10 @@ enum class OpCode : uint8_t {
 	VCall = 0x3A,   // virtual call: obj_reg, slot_imm, nargs_imm, return_addr
 	ICall = 0x3B,   // interface call: obj_reg, iface_typeid_imm, method_idx_imm, nargs_imm, return_addr
 	TypeOf = 0x3C,  // load typeId: obj_reg, result_reg
+	TryPush = 0x43, // install handler: handler_addr, exception_reg
+	TryPop = 0x44,  // remove innermost handler
+	Throw = 0x45,   // throw value_reg
+	IsA = 0x46,     // subtype test: value_reg, type_id, result_reg
 
 	// I/O
 	Print = 0x40,

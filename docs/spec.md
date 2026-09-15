@@ -166,6 +166,17 @@ fun greet(name: str) -> str {
 }
 ```
 
+Top-level functions may overload by canonical parameter type. Parameter names
+and return types do not distinguish overloads:
+
+```
+fun show(value: int) -> str = "integer"
+fun show(value: str) -> str = value
+```
+
+Backend symbols use structural descriptors containing parameter and return
+types. A declaration that differs only by return type is rejected.
+
 ### Extension functions
 ```
 fun str.isLong() -> bool = length > 10
@@ -174,13 +185,45 @@ fun str.isLong() -> bool = length > 10
 ## Expressions
 
 - Literals, paths, blocks `{ stmts... expr }`
+- Array literals: `[1, 2, 3]`
+- Map literals: `{"one": 1, "two": 2}` or `{1: "one", 2: "two"}`; keys currently support `str` and `int`
 - String templates: `"Hello, $name"`, `"${expr}"`
 - Operators: arithmetic, comparison, logical, elvis (`?:`), safe call (`?.`), force unwrap (`!!`)
-- Control flow: `if`, `when`, `while`, `for`, `loop`, `break`, `continue`, `return`
+- Control flow: `if`, `when`, `while`, `for`, `loop`, `break`, `continue`, `return`, `throw`, `try/catch/finally`
 - Closures: `{ x: int -> x * 2 }`
 - Cast: `expr as Type`
 - Type check: `expr is Type`, `expr !is Type`
 - Try: `expr?` (error propagation)
+
+## Exceptions
+
+Exceptions are typed objects derived from the auto-imported `Exception` class.
+`RuntimeException` is the standard concrete exception, and `error(message)`
+throws one.
+
+```lox
+try {
+    dangerousOperation()
+} catch (failure: RuntimeException) {
+    print(failure.message)
+} catch (failure: Exception) {
+    print("other exception: " + failure.message)
+} finally {
+    cleanup()
+}
+```
+
+Catch clauses are tested in source order. A catch shadowed by an earlier base
+type is a compile error. `finally` runs on normal completion, exception unwind,
+`return`, `break`, and `continue`; an abrupt exit from `finally` replaces the
+pending exit. Uncaught exceptions terminate with their dynamic type and message,
+preceded by a Python-style traceback. Every mapped frame includes its source
+file, line number, function name, original source line, and a caret marker.
+Runtime failures that valid source programs can cause, including integer
+division by zero, strict numeric parsing failures, and checked heap access,
+raise catchable `RuntimeException` values through the same unwind path. Invalid
+bytecode, impossible operand tags, corrupt handles, and broken VM/GC invariants
+instead terminate with an uncatchable `Loxis VM panic` diagnostic.
 
 ## `when` Expression
 ```
@@ -243,6 +286,11 @@ loxis.math         — math utilities
 loxis.text         — string utilities
 ```
 
+Standard-library APIs prefer receiver methods and cohesive singleton entry
+points over type-prefixed free functions. Generic methods take explicit result
+type arguments when inference would be ambiguous, for example
+`stream.map<str>({ value: int -> value.toString() })`.
+
 ### Prelude (auto-imported)
 `loxis` package is auto-imported into every file:
 - `int`, `long`, `float`, `double`, `bool`, `char`, `str`
@@ -252,6 +300,8 @@ loxis.text         — string utilities
 - `fun require(condition: bool, message: str = "")`
 - `fun TODO() -> noreturn`
 - `fun error(message: str) -> noreturn`
+- `open class Exception(val message: str)`
+- `class RuntimeException(message: str) : Exception(message)`
 
 ### Directory layout
 ```
