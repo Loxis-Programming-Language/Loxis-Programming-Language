@@ -1,0 +1,65 @@
+// `continue` must advance a `for` loop, and loop labels must bind.
+//
+// Regression: the index step lived in the loop body's tail while `continue`
+// jumped to the while's condition, so `continue` skipped the step and the loop
+// never terminated -- it only stopped at the instruction limit. The index now
+// steps at the top of the body, which is where `continue` returns to.
+//
+// Labels were unparseable: the parser looked for an identifier after already
+// requiring the next token to be the loop keyword, so the branch could never
+// match.
+import loxis.text
+
+class Box {
+    fun size() -> int { return 4 }
+    fun get(i: int) -> int { return i * 7 }
+}
+
+fun main() -> int {
+    print("continue")
+    for i in 0..5 {
+        if i == 2 { continue }
+        print(i)
+    }
+
+    print("break")
+    for i in 0..9 {
+        if i == 3 { break }
+        print(i)
+    }
+
+    print("continue array")
+    for x in [1, 2, 3, 4] {
+        if x == 3 { continue }
+        print(x)
+    }
+
+    print("continue size/get")
+    for v in Box() {
+        if v == 7 { continue }
+        print(v)
+    }
+
+    print("nested labeled")
+    outer: for i in 0..3 {
+        for j in 0..3 {
+            if j == 1 { continue }
+            if i == 2 { break outer }
+            print(i * 10 + j)
+        }
+    }
+
+    print("continue outer")
+    skip: for i in 0..3 {
+        for j in 0..3 {
+            if j == 1 { continue skip }
+            print(i * 10 + j)
+        }
+    }
+
+    print("empty range")
+    for i in 3..3 { print("never") }
+
+    print("done")
+    return 0
+}

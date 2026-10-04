@@ -8,7 +8,14 @@ if(MSVC)
     add_compile_options(/utf-8)
 endif()
 
+# <winsock2.h> and <windows.h> define min/max as function-like macros unless
+# NOMINMAX is set. Those macros corrupt any `std::min(...)`, `std::max(...)` or
+# `std::numeric_limits<T>::max()` call in a translation unit that includes the
+# Windows headers -- the argument list is rewritten before the compiler sees it.
+add_compile_definitions(NOMINMAX)
+
 add_library(loxis_vm
+        src/cpp/backend/Disasm.cpp
         src/cpp/vm/VM.cpp
         src/cpp/vm/GC.cpp)
 
@@ -23,6 +30,12 @@ endif()
 add_library(loxis_v2
         src/cpp/v2/backend/Lowering.cpp
         src/cpp/v2/backend/MIRCompiler.cpp
+        src/cpp/v2/dump/AstDump.cpp
+        src/cpp/v2/dump/Dump.cpp
+        src/cpp/v2/dump/HirDump.cpp
+        src/cpp/v2/dump/MirDump.cpp
+        src/cpp/v2/dump/TokensDump.cpp
+        src/cpp/v2/dump/Trace.cpp
         src/cpp/v2/hir/HirBuilder.cpp
         src/cpp/v2/hir/Monomorphizer.cpp
         src/cpp/v2/driver/ModuleLoader.cpp
@@ -43,6 +56,13 @@ add_executable(Loxis
 
 target_link_libraries(Loxis PRIVATE loxis_v2)
 
+# Recursive-descent parsing and the AST walkers that follow all run on the native
+# stack. The default 1 MB reserve is what the nesting limits below are sized
+# against; give them room so those limits are not forced down to single digits.
+if(MSVC)
+    target_link_options(Loxis PRIVATE /STACK:8388608)
+endif()
+
 enable_testing()
 
 add_test(
@@ -57,6 +77,8 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(loxis_stdlib PROPERTIES TIMEOUT 300)
     add_test(NAME loxis_generic_inference
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_generic_inference.py --exe $<TARGET_FILE:Loxis>)
+    add_test(NAME loxis_parser_regressions
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_parser_regressions.py --exe $<TARGET_FILE:Loxis>)
 endif()
 
 add_executable(LSPTest

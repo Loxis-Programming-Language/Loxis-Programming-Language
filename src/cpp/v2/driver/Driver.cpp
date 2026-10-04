@@ -2,12 +2,16 @@
 #include "ModuleLoader.hpp"
 #include "../backend/Lowering.hpp"
 #include "../backend/MIRCompiler.hpp"
+#include "../dump/Dump.hpp"
+#include "../dump/Trace.hpp"
 #include "../hir/HirBuilder.hpp"
 #include "../hir/Monomorphizer.hpp"
 #include "../type/TypeChecker.hpp"
+#include "../../backend/Disasm.hpp"
 #include "../../vm/VM.hpp"
 #include "../../Error.hpp"
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #ifdef _WIN32
@@ -27,6 +31,21 @@ bool enableStderrColor() {
     return SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
 #else
     return isatty(fileno(stderr));
+#endif
+}
+
+// Programs that draw in place (cursor moves, screen clears) emit ANSI escapes on
+// stdout. Windows only interprets those once the console handle has VT processing
+// switched on, and leaves it off by default -- without this they print as garbage.
+bool enableStdoutVirtualTerminal() {
+#ifdef _WIN32
+    if (!_isatty(_fileno(stdout))) return false;
+    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode = 0;
+    if (handle == INVALID_HANDLE_VALUE || !GetConsoleMode(handle, &mode)) return false;
+    return SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+#else
+    return isatty(fileno(stdout));
 #endif
 }
 
@@ -94,29 +113,73 @@ void printUncaughtTraceback(const std::string& traceback) {
 namespace loxis::v2 {
 
 int Driver::compileToChunk(const std::string& file, bool verbose, Chunk& out) {
+    RunOptions opts;
+    opts.file = file;
+    opts.verbose = verbose;
+    return compileToChunk(opts, out);
+}
+
+int Driver::compileToChunk(const RunOptions& opts, Chunk& out) {
+    Trace trace;
+    if (opts.trace) trace.out = &std::cout;
+    // --trace implies the stage banners too; the per-stage timing is the point.
+    const bool verbose = opts.verbose || opts.trace;
+
+    const auto clock = [] { return std::chrono::steady_clock::now(); };
+    const auto elapsedMs = [](auto start, auto end) {
+        return std::chrono::duration<double, std::milli>(end - start).count();
+    };
+
     try {
+        if (opts.dumps.tokens) {
+            std::ifstream input(opts.file, std::ios::binary);
+            std::string source((std::istreambuf_iterator<char>(input)),
+                               std::istreambuf_iterator<char>());
+            dump::dumpTokens(source, opts.file, std::cout);
+        }
+
         if (verbose) {
             std::cout << "Loading modules...\n";
         }
+        auto anchor = clock();
 
-        ModuleLoader loader(file);
+        ModuleLoader loader(opts.file);
+        loader.setTrace(opts.trace ? &trace : nullptr);
         Module mod = loader.load();
+
+        if (verbose) {
+            for (const auto& path : loader.loadOrder()) {
+                std::cout << "  [module] " << path.filename().string() << "\n";
+            }
+            std::cout << "  [parse]  " << mod.items.size() << " items\n";
+        }
+        trace.stage("parse", elapsedMs(anchor, clock()));
+
+        if (opts.dumps.ast) dump::dumpAst(mod, std::cout);
 
         if (verbose) {
             std::cout << "Checking types...\n";
         }
+        anchor = clock();
 
         TypeChecker checker;
+        checker.setTrace(opts.trace ? &trace : nullptr);
         if (!checker.checkModule(mod)) {
             for (const auto& err : checker.getErrors()) {
                 printCompilerDiagnostic(err);
             }
             return 1;
         }
+        trace.stage("typecheck", elapsedMs(anchor, clock()));
+
+        if (opts.dumps.scopes && checker.getScope()) {
+            dump::dumpScopes(*checker.getScope(), std::cout);
+        }
 
         if (verbose) {
             std::cout << "Building HIR...\n";
         }
+        anchor = clock();
 
         HirBuilder hirBuilder;
         hirBuilder.setScope(checker.getScope());
@@ -128,20 +191,33 @@ int Driver::compileToChunk(const std::string& file, bool verbose, Chunk& out) {
 
         Monomorphizer mono;
         hir = mono.monomorphize(hir);
+        trace.stage("hir+mono", elapsedMs(anchor, clock()));
+
+        if (opts.dumps.hir) dump::dumpHir(hir, std::cout);
 
         if (verbose) {
             std::cout << "Lowering HIR -> MIR...\n";
         }
+        anchor = clock();
 
         Lowering lowering;
         auto output = lowering.lower(hir);
+        trace.stage("lowering", elapsedMs(anchor, clock()));
+
+        if (opts.dumps.mir) dump::dumpMir(output, std::cout);
 
         if (verbose) {
             std::cout << "Compiling MIR -> bytecode...\n";
         }
+        anchor = clock();
 
         MIRCompiler compiler;
         out = compiler.compile(output);
+        trace.stage("compile", elapsedMs(anchor, clock()));
+
+        if (opts.dumps.bytecode) dumpBytecode(out, std::cout);
+
+        std::cout.flush();
         return 0;
     } catch (const FrontendError& e) {
         printCompilerDiagnostic(e.diagnostic);
@@ -154,13 +230,18 @@ int Driver::compileToChunk(const std::string& file, bool verbose, Chunk& out) {
 
 int Driver::compileAndRun(const RunOptions& opts) {
     Chunk chunk;
-    if (compileToChunk(opts.file, opts.verbose, chunk) != 0) return 1;
+    if (compileToChunk(opts, chunk) != 0) return 1;
+
+    // Dumps are compile-only: the VM is never constructed, so IR text and
+    // program output can never interleave on stdout.
+    if (opts.dumps.any()) return 0;
 
     try {
         if (opts.verbose) {
             std::cout << "Running VM (max instructions: " << opts.maxInstr << ")...\n";
         }
 
+        enableStdoutVirtualTerminal();
         VM vm(std::move(chunk), opts.verbose, opts.gc, opts.heapSlots);
         vm.setArguments(opts.arguments);
         vm.run(opts.maxInstr);

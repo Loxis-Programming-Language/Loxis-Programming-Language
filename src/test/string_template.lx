@@ -1,0 +1,26 @@
+// String templates. Every string interpolates; there is no `$"..."` prefix.
+//
+// Regression: `${...}` was stored as a variable literally named by its own
+// source text, so `${a + b}` resolved to nothing and silently contributed a
+// zero, and the literal chunks kept their backslashes.
+import loxis.text
+
+fun main() -> int {
+    val a = 3
+    val b = 4
+    val name = "loxis"
+
+    print("sum ${a + b}")
+    print("${a < b} ${a > b}")
+    print("hi $name!")
+    print("line1\nline2")
+    print("literal $$ here")
+    // A `$` only interpolates before `{` or an identifier, so ordinary dollar
+    // signs need no escaping.
+    print("cost $5 and lone $ sign")
+    print("100% done")
+    print("nested ${if (a < b) { "smaller" } else { "bigger" }}")
+    print("bool ${a < b}")
+    print("reeval ${a} ${a} ${a + b * 2}")
+    return 0
+}

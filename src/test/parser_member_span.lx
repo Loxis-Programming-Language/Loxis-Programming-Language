@@ -1,0 +1,11 @@
+// `missing` sits on its own continuation line. The diagnostic must point at
+// the member (line 9), not at the start of the chain (line 8) -- postfix nodes
+// are built with their own location precisely so this holds.
+class Foo { }
+
+fun main() -> int {
+    val f = Foo()
+    val g = f
+        .missing
+    return 0
+}

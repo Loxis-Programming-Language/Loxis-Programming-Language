@@ -26,6 +26,7 @@
 #endif
 #include "../Error.hpp"
 #include "../ir/OpCode.hpp"
+#include "../backend/Disasm.hpp"
 
 namespace { struct RuntimeUnwind {}; }
 
@@ -66,64 +67,8 @@ NativeSocket decodeSocket(int64_t value) { return static_cast<NativeSocket>(valu
 int64_t encodeSocket(NativeSocket value) { return static_cast<int64_t>(value); }
 }
 
-static const char *traceOpcodeName(OpCode op) {
-	switch (op) {
-		case OpCode::Nop:   return "nop";
-		case OpCode::Push:  return "push";
-		case OpCode::Pop:   return "pop";
-		case OpCode::Mov:   return "mov";
-		case OpCode::PushR: return "pushr";
-		case OpCode::PopR:  return "popr";
-		case OpCode::Alloc: return "alloc";
-		case OpCode::HFree: return "hfree";
-		case OpCode::HStore:return "hstore";
-		case OpCode::HLoad: return "hload";
-		case OpCode::Shl:   return "shl";
-		case OpCode::Shr:   return "shr";
-		case OpCode::Rem:   return "rem";
-		case OpCode::BitAnd:return "band";
-		case OpCode::BitOr: return "bor";
-		case OpCode::BitXor:return "bxor";
-		case OpCode::Add:   return "add";
-		case OpCode::Sub:   return "sub";
-		case OpCode::Mul:   return "mul";
-		case OpCode::Div:   return "div";
-		case OpCode::FAdd:  return "fadd";
-		case OpCode::FSub:  return "fsub";
-		case OpCode::FMul:  return "fmul";
-		case OpCode::FDiv:  return "fdiv";
-		case OpCode::ItoF:  return "itof";
-		case OpCode::FtoI:  return "ftoi";
-		case OpCode::FNeg:  return "fneg";
-		case OpCode::GLoad: return "gload";
-		case OpCode::GStore:return "gstore";
-		case OpCode::Cmp:   return "cmp";
-		case OpCode::Jmp:   return "jmp";
-		case OpCode::Jnz:   return "jnz";
-		case OpCode::Jz:    return "jz";
-		case OpCode::Skip:  return "skip";
-		case OpCode::Call:  return "call";
-		case OpCode::Ret:   return "ret";
-		case OpCode::Br:    return "br";
-		case OpCode::Jn:    return "jn";
-		case OpCode::NullChk: return "nullchk";
-		case OpCode::CallInd: return "callind";
-		case OpCode::VCall:  return "vcall";
-		case OpCode::ICall:  return "icall";
-		case OpCode::TypeOf: return "typeof";
-		case OpCode::TryPush: return "trypush";
-		case OpCode::TryPop: return "trypop";
-		case OpCode::Throw: return "throw";
-		case OpCode::IsA: return "isa";
-		case OpCode::Syscall: return "syscall";
-		case OpCode::Write:  return "write";
-		case OpCode::Print:  return "print";
-		case OpCode::StrLen: return "strlen";
-		case OpCode::ToStr:  return "tostr";
-		case OpCode::Halt:   return "halt";
-	}
-	return "?";
-}
+// The opcode-name table moved to backend/Disasm.cpp (opcodeName) so the VM, its
+// panic reports and --dump-bytecode all read from one place.
 
 #define vm_panic(msg) panic(msg)
 #define runtime_error(msg) raiseRuntime(msg)
@@ -200,196 +145,37 @@ int VM::run(int maxExecuteCount) {
 
 // ---- JIT Implementation ----
 
-bool VM::decodeOperandAt(uint32_t &ip, JitOperand &out) const {
-	if (ip >= m_chunk.code.size()) return false;
-
-	uint8_t tag = m_chunk.code[ip++];
-	out.tag = static_cast<OperandTag>(tag);
-
-	switch (out.tag) {
-		case OperandTag::WideReg:
-            if (ip + 1 >= m_chunk.code.size()) return false;
-            out.intVal = m_chunk.code[ip] | (static_cast<uint16_t>(m_chunk.code[ip + 1]) << 8);
-            ip += 2;
-            if (out.intVal >= 4096) return false;
-            out.tag = OperandTag::Reg;
-            break;
-		case OperandTag::Reg:
-			if (ip >= m_chunk.code.size()) return false;
-			out.intVal = m_chunk.code[ip++];
-			break;
-
-        case OperandTag::Null: out.intVal = 0; break;
-        case OperandTag::Float64:
-		case OperandTag::Imm64:
-			if (ip + 7 >= m_chunk.code.size()) return false;
-			{
-				uint64_t value = 0;
-				value |= (static_cast<uint64_t>(m_chunk.code[ip++]) << 0);
-				value |= (static_cast<uint64_t>(m_chunk.code[ip++]) << 8);
-				value |= (static_cast<uint64_t>(m_chunk.code[ip++]) << 16);
-				value |= (static_cast<uint64_t>(m_chunk.code[ip++]) << 24);
-				value |= (static_cast<uint64_t>(m_chunk.code[ip++]) << 32);
-				value |= (static_cast<uint64_t>(m_chunk.code[ip++]) << 40);
-				value |= (static_cast<uint64_t>(m_chunk.code[ip++]) << 48);
-				value |= (static_cast<uint64_t>(m_chunk.code[ip++]) << 56);
-				out.intVal = static_cast<int64_t>(value);
-			}
-			break;
-
-		case OperandTag::StrIdx:
-			if (ip + 3 >= m_chunk.code.size()) return false;
-			{
-				uint32_t value = 0;
-				value |= (static_cast<uint32_t>(m_chunk.code[ip++]) << 0);
-				value |= (static_cast<uint32_t>(m_chunk.code[ip++]) << 8);
-				value |= (static_cast<uint32_t>(m_chunk.code[ip++]) << 16);
-				value |= (static_cast<uint32_t>(m_chunk.code[ip++]) << 24);
-				out.strIdx = value;
-			}
-			break;
-
-		case OperandTag::Addr:
-			if (ip + 3 >= m_chunk.code.size()) return false;
-			{
-				uint32_t value = 0;
-				value |= (static_cast<uint32_t>(m_chunk.code[ip++]) << 0);
-				value |= (static_cast<uint32_t>(m_chunk.code[ip++]) << 8);
-				value |= (static_cast<uint32_t>(m_chunk.code[ip++]) << 16);
-				value |= (static_cast<uint32_t>(m_chunk.code[ip++]) << 24);
-				out.intVal = value;  // bytecode offset stored in intVal
-			}
-			break;
-
-		default:
-			return false;
-	}
-
-	return true;
-}
-
+// Decoding lives in backend/Disasm.cpp so `--dump-bytecode` and the JIT agree
+// on operand lengths by construction; this only reshapes the result into the
+// instruction array the dispatch loop indexes.
 bool VM::tryBuildJit() {
 	if (m_jitReady) return true;
 
 	m_jitCode.clear();
 	m_jitIpMap.clear();
 
-	uint32_t ip = 0;
-	uint32_t lastByteOffset = 0;
-	OpCode lastOp = OpCode::Nop;
-	while (ip < m_chunk.code.size()) {
-		size_t jitIdx = m_jitCode.size();
-		m_jitIpMap[ip] = jitIdx;
+	std::vector<DecodedInstr> decoded;
+	std::string decodeError;
+	if (!decodeBytecode(m_chunk, decoded, &decodeError)) {
+		if (m_trace) std::cerr << decodeError << std::endl;
+		return false;
+	}
 
+	m_jitCode.reserve(decoded.size());
+	for (const DecodedInstr &src : decoded) {
 		JitInstruction instr;
-		instr.byteOffset = ip;
-
-		uint8_t opcode = m_chunk.code[ip++];
-		instr.op = static_cast<OpCode>(opcode);
-
-		int operandCount = 0;
-		switch (instr.op) {
-			case OpCode::Nop:
-			case OpCode::Ret:
-			case OpCode::TryPop:
-			case OpCode::Halt:
-				operandCount = 0;
-				break;
-			case OpCode::Jnz:
-			case OpCode::Jz:
-			case OpCode::Jn:
-			case OpCode::Call:
-			case OpCode::Write:
-				case OpCode::Print:
-			case OpCode::PushR:
-			case OpCode::PopR:
-			case OpCode::Throw:
-				operandCount = 1;
-				break;
-			case OpCode::Push:
-			case OpCode::Mov:
-			case OpCode::Cmp:
-			case OpCode::Jmp:
-			case OpCode::GLoad:
-			case OpCode::GStore:
-				operandCount = 2;
-				break;
-			case OpCode::HFree:
-				operandCount = 1;
-				break;
-			case OpCode::Add:
-			case OpCode::Sub:
-			case OpCode::Mul:
-			case OpCode::Div:
-			case OpCode::HStore:
-			case OpCode::HLoad:
-			case OpCode::Alloc:
-			case OpCode::Shl:
-			case OpCode::Shr:
-			case OpCode::Rem:
-			case OpCode::BitAnd:
-			case OpCode::BitOr:
-			case OpCode::BitXor:
-			case OpCode::FAdd:
-			case OpCode::FSub:
-			case OpCode::FMul:
-			case OpCode::FDiv:
-			case OpCode::IsA:
-				operandCount = 3;
-				break;
-			case OpCode::ItoF:
-			case OpCode::FtoI:
-			case OpCode::FNeg:
-			case OpCode::NullChk:
-			case OpCode::TypeOf:
-			case OpCode::StrLen:
-			case OpCode::ToStr:
-			case OpCode::TryPush:
-				operandCount = 2;
-				break;
-			case OpCode::CallInd:
-				operandCount = 2;
-				break;
-			case OpCode::Syscall:
-				operandCount = 1; // syscall number in reg
-				break;
-			case OpCode::VCall:
-				operandCount = 4; // obj_reg, slot_imm, nargs_imm, return_addr
-				break;
-			case OpCode::ICall:
-				operandCount = 5; // obj_reg, iface_typeid_imm, method_idx_imm, nargs_imm, return_addr
-				break;
-			case OpCode::Skip:
-				// 0 or 1 operands: peek if next byte is an Addr tag
-				if (ip < m_chunk.code.size() &&
-				    m_chunk.code[ip] == static_cast<uint8_t>(OperandTag::Addr)) {
-					operandCount = 1;
-				} else {
-					operandCount = 0;
-				}
-				break;
-			default:
-				return false;
+		instr.op = src.op;
+		instr.byteOffset = src.byteOffset;
+		instr.operands.reserve(src.operands.size());
+		for (const DecodedOperand &operand : src.operands) {
+			JitOperand dst;
+			dst.tag = operand.tag;
+			dst.intVal = operand.intVal;
+			dst.strIdx = operand.strIdx;
+			instr.operands.push_back(dst);
 		}
-
-		for (int i = 0; i < operandCount; i++) {
-			JitOperand op;
-			if (!decodeOperandAt(ip, op)) {
-				if (m_trace) {
-					std::cerr << "Failed to decode operand " << i
-					          << " for opcode " << traceOpcodeName(instr.op)
-					          << " at byte offset " << instr.byteOffset
-					          << "; previous opcode " << traceOpcodeName(lastOp)
-					          << " at byte offset " << lastByteOffset << std::endl;
-				}
-				return false;
-			}
-			instr.operands.push_back(op);
-		}
-
+		m_jitIpMap[src.byteOffset] = m_jitCode.size();
 		m_jitCode.push_back(std::move(instr));
-		lastByteOffset = m_jitCode.back().byteOffset;
-		lastOp = m_jitCode.back().op;
 	}
 
 	m_jitReady = true;
@@ -476,7 +262,7 @@ void VM::restoreCallFrame() {
 	std::ostringstream out;
 	out << "Loxis VM panic: " << message;
 	if (m_jitIp < m_jitCode.size()) {
-		out << "\n  opcode: " << traceOpcodeName(m_jitCode[m_jitIp].op)
+		out << "\n  opcode: " << opcodeName(m_jitCode[m_jitIp].op)
 		    << "\n  bytecode offset: 0x" << std::hex << m_jitCode[m_jitIp].byteOffset;
 	}
 	out << "\nThis is a compiler or VM bug.";
@@ -1695,25 +1481,10 @@ void VM::execJitInstruction(const JitInstruction &instr, bool &halted) {
 	}
 }
 
+// JitOperand and DecodedOperand carry the same three fields; this bridges them
+// so trace output and --dump-bytecode render operands through one formatter.
 static std::string formatTraceOperand(const VM::JitOperand &op, const Chunk &chunk) {
-	std::ostringstream oss;
-	switch (op.tag) {
-		case OperandTag::Reg:
-			oss << "r" << (int)op.intVal;
-			break;
-		case OperandTag::Imm64:
-			oss << "#" << op.intVal;
-			break;
-		case OperandTag::StrIdx:
-			oss << "str[" << op.strIdx << "]";
-			if (op.strIdx < chunk.strings.size())
-				oss << "(\"" << chunk.strings[op.strIdx] << "\")";
-			break;
-		case OperandTag::Addr:
-			oss << "0x" << std::hex << std::setw(8) << std::setfill('0') << (uint32_t)op.intVal << std::dec;
-			break;
-	}
-	return oss.str();
+	return formatOperand(DecodedOperand{op.tag, op.intVal, op.strIdx}, chunk);
 }
 
 int VM::runJit(int maxExecuteCount) {
@@ -1737,7 +1508,7 @@ int VM::runJit(int maxExecuteCount) {
 				if (m_rtag[r] != TAG_HEAP) continue;
 				if (m_heap.valid(static_cast<uint32_t>(m_regs[r]))) continue;
 				std::cerr << "[gc-check] step " << executeCount << " before "
-				          << traceOpcodeName(instr.op) << " @" << instr.byteOffset
+				          << opcodeName(instr.op) << " @" << instr.byteOffset
 				          << ": r" << r << " holds dead handle " << m_regs[r] << "\n";
 				reports++;
 				break;
@@ -1748,7 +1519,7 @@ int VM::runJit(int maxExecuteCount) {
 		if (m_trace) {
 			std::cerr << std::right << "[" << std::dec << std::setw(6) << std::setfill(' ') << executeCount << "] "
 			          << "0x" << std::right << std::hex << std::setw(6) << std::setfill('0') << instr.byteOffset << std::dec << " " << std::setfill(' ')
-			          << std::setw(7) << std::left << traceOpcodeName(instr.op);
+			          << std::setw(7) << std::left << opcodeName(instr.op);
 			for (size_t i = 0; i < instr.operands.size(); i++) {
 				if (i > 0) std::cerr << ",";
 				std::cerr << " " << formatTraceOperand(instr.operands[i], m_chunk);

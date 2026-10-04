@@ -34,6 +34,13 @@ and code-point counts do not depend on argument encoding.
 
 Other examples:
 
+- `snake.lx`: a playable game, and the only example that needs a real console —
+  it redraws the board in place with ANSI escapes and reads keys with `readChar`.
+  Input is blocking, so the snake takes one step per keypress rather than moving
+  on a timer; `w`/`a`/`s`/`d` or the arrow keys steer, `q` quits. The first
+  argument is the instruction budget and a number after `--` seeds the game, so
+  `snake.lx 50000000 -- 12345` replays the same food sequence every time. The
+  default budget of 1,000,000 lasts roughly 450 steps.
 - `list_demo.lx`: a short `list<int>()` and lazy iterator introduction.
 - `json_report.lx -- input.json output.json`: reads a JSON array and wraps it with
   its element count. Both paths are required, and the output is overwritten.

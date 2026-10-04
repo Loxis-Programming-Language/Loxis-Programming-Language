@@ -50,6 +50,13 @@ private:
     HirExprPtr makeMethodCall(HirExprPtr recv, const std::string& qualifiedName, std::vector<HirExprPtr> args);
     HirExprPtr makeIndex(HirExprPtr obj, HirExprPtr idx);
     HirExprPtr makeBlockWithTail(HirExprPtr first, HirExprPtr tail);
+    HirExprPtr makeSeqBlock(std::vector<HirExprPtr> stmts, HirExprPtr tail);
+    HirExprPtr makeBreakIf(HirExprPtr cond);
+    // Builds one rotated `for` body: step the index at the top, leave once the
+    // index has passed the end, then run the user's body with the pattern bound.
+    HirExprPtr makeForLoopBody(HirExprPtr idxPath, HirExprPtr incIdx, HirExprPtr exitCond,
+                               const PatPtr& pat, HirExprPtr elem, HirExprPtr body,
+                               const std::optional<std::string>& label);
 };
 
 } // namespace loxis::v2

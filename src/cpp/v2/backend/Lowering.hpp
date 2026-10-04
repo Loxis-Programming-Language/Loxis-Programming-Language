@@ -51,7 +51,7 @@ private:
     std::unordered_map<std::string, LocalId> m_scope;
     std::optional<LocalId> m_closureEnvLocal;
     std::string m_currentClassName;
-    SourceLoc m_currentLoc;
+    SourceLocation m_currentLoc;
 
     LocalId newLocal(CoreTyPtr ty, const std::string& name = "", bool mut = false);
     BlockId newBlock();
@@ -66,6 +66,11 @@ private:
 
     LocalId lowerPlace(const HirExpr& expr);
     LocalId unitLocal();
+    // Throwaway destination for statements that produce no value, such as a
+    // global store. Allocated at most once per body, so a function with many
+    // global assignments does not burn one of the 256 registers on each.
+    std::optional<LocalId> m_scratchLocal;
+    LocalId scratchLocal();
     bool lowerFinalizersTo(size_t depth);
 };
 

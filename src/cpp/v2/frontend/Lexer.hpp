@@ -7,7 +7,11 @@ namespace loxis::v2 {
 
 class Lexer {
 public:
-    Lexer(std::string source, std::string filename);
+    // `start` lets a fragment be lexed as if it sat at that position in the
+    // original file, so diagnostics point at real line/column numbers instead of
+    // restarting at 1:1. It is used by string templates, which lex the text
+    // inside `${...}` on its own. When unset the stream starts at 1:1.
+    Lexer(std::string source, std::string filename, SourceLocation start = {});
     std::vector<Token> tokenize();
 private:
     std::string src, file;
@@ -17,7 +21,7 @@ private:
     bool atEnd() const;
     char peek(size_t off = 0) const;
     char advance();
-    SourceLoc loc() const;
+    SourceLocation loc() const;
 
     void skipSpace();
     bool match(char c);

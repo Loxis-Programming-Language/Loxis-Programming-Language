@@ -89,9 +89,44 @@ $cases = @(
         Out = "literal maps: 2, 2`n"
     },
     @{
+        Name = "array index assignment"
+        File = "src\test\array_index_assign.lx"
+        Out = "index assignment ok`n"
+    },
+    @{
+        Name = "string templates"
+        File = "src\test\string_template.lx"
+        Out = "sum 7`ntrue false`nhi loxis!`nline1`nline2`nliteral `$ here`ncost `$5 and lone `$ sign`n100% done`nnested smaller`nbool true`nreeval 3 3 11`n"
+    },
+    @{
+        Name = "mutable global var"
+        File = "src\test\mutable_global.lx"
+        Out = "0 start`n12`ndone`n"
+    },
+    @{
+        Name = "enum exhaustive when"
+        File = "src\test\enum_exhaustive_when.lx"
+        Out = "12 9 0`nsized`npoint`npoint!`n"
+    },
+    @{
+        Name = "stdlib kotlin-style list hof"
+        File = "src\test\stdlib_list_kotlin_hof.lx"
+        Out = "map 1,4,9,16,25`nmapIndexed 1,12,23,34,45`nfilter 1,3,5`nfilterIndexed 1,3,5`nflatMap 1,-1,2,-2,3,-3,4,-4,5,-5`nchunked 3 1,2 5`ntakeLast 4,5`ndropLast 1,2,3`ndrop 4,5`ntakeWhile 1,2`ndropWhile 3,4,5`ndistinct 1,2,3`ndistinctBy 1,2`nindexOfFirst 1`nindexOfLast 3`nnone true`nreduce 15`nlastOrNull 5`nlastOrNull empty -1`nmirrors 1,3,5,7,9`nlistReduce 120`nlistNone true`nflatten 1,2,3,4,5`nforEachIndexed`n0:1`n1:2`n2:3`n3:4`n4:5`ndone`n"
+    },
+    @{
+        Name = "stdlib str and list extras"
+        File = "src\test\stdlib_str_list_extras.lx"
+        Out = "ababab`n|`ntrue`nfalse`ntrue`na,b`ntrue`ntrue false`n"
+    },
+    @{
         Name = "for range"
         File = "src\test\for_range.lx"
         Out = "10`n"
+    },
+    @{
+        Name = "for continue and labels"
+        File = "src\test\for_continue_label.lx"
+        Out = "continue`n0`n1`n3`n4`nbreak`n0`n1`n2`ncontinue array`n1`n2`n4`ncontinue size/get`n0`n14`n21`nnested labeled`n0`n2`n10`n12`ncontinue outer`n0`n10`n20`nempty range`ndone`n"
     },
     @{
         Name = "stdlib core wrappers"
@@ -156,7 +191,7 @@ $cases = @(
     @{
         Name = "stdlib option result"
         File = "src\test\stdlib_option_result.lx"
-        Out = "4`n7`n40`n1`n1`n11`n5`n12`n1`n1`n"
+        Out = "4`n7`n40`ntrue`ntrue`n11`n5`n12`ntrue`ntrue`n"
     },
     @{
         Name = "capturing closure"
@@ -231,7 +266,7 @@ $cases = @(
     @{
         Name = "operator eq"
         File = "src\test\operator_eq.lx"
-        Out = "1`n"
+        Out = "true`n"
     },
     @{
         Name = "stdlib io"

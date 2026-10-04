@@ -7,7 +7,7 @@
 
 namespace loxis::v2 {
 
-struct SourceLoc {
+struct SourceLocation {
     std::string file;
     uint32_t line = 0, col = 0;
     std::string fmt() const { return file + ":" + std::to_string(line) + ":" + std::to_string(col); }
@@ -17,8 +17,8 @@ enum class DiagnosticSeverity { Error, Warning };
 enum class DiagnosticKind { Syntax, Type, Compiler };
 
 struct SourceSpan {
-    SourceLoc start;
-    SourceLoc end;
+    SourceLocation start;
+    SourceLocation end;
 };
 
 struct LabeledSpan {
@@ -77,9 +77,9 @@ enum class Tk : uint16_t {
 struct Token {
     Tk kind;
     std::string lex;
-    SourceLoc loc;
+    SourceLocation loc;
     Token() : kind(Tk::Eof) {}
-    Token(Tk k, std::string l, SourceLoc s) : kind(k), lex(std::move(l)), loc(std::move(s)) {}
+    Token(Tk k, std::string l, SourceLocation s) : kind(k), lex(std::move(l)), loc(std::move(s)) {}
 };
 
 inline const char* tkName(Tk k) {

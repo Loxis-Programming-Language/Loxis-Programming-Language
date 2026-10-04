@@ -1,0 +1,14 @@
+// A '(' that opens a new source line starts a statement of its own.
+//
+// The parser drops every Newline token, so before it learned to compare line
+// numbers this gluing happened: `twice(3)` on the line above absorbed the
+// parenthesised expression below it, producing `twice(3)(a)` -- a call on an
+// int. The program below must print 6.
+fun twice(n: int) -> int { return n * 2 }
+
+fun main() -> int {
+    val a = twice(3)
+    (a)
+    print(a)
+    return 0
+}

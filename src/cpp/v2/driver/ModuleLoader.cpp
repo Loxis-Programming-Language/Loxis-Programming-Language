@@ -215,6 +215,8 @@ void ModuleLoader::appendModule(
 
     loading.erase(canonical);
     loaded.insert(canonical);
+    m_loadOrder.push_back(canonical);
+    if (m_trace) m_trace->module(canonical.string());
 }
 
 Module ModuleLoader::load() {

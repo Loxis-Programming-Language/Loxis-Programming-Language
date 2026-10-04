@@ -30,7 +30,24 @@ Use `listWithCapacity<T>(capacity)` only when preallocated storage matters.
 Methods: `size`,
 `capacity`, `isEmpty`, `get`, `set`, `push`, `insert`, `removeAt`, `pop`, `clear`.
 Algorithms are methods too: `map`, `filter`, `fold`, `forEach`, `count`, `any`,
-`all`, `find`, `first`, `sortBy`, `take`, `append`, `reverse`, and `reversed`.
+`all`, `contains`, `find`, `first`, `lastOrNull`, `sortBy`, `take`, `append`,
+`reverse`, and `reversed`. `contains(value)` compares with `==` and needs no
+callback, unlike `any`.
+
+The Kotlin-style helpers are `mapIndexed`, `filterIndexed`, `forEachIndexed`
+(position first: `{ i, value -> ... }`), `flatMap`, `distinct`, `distinctBy`,
+`indexOfFirst`, `indexOfLast`, `none`, `reduce`, and the slicing set `drop`,
+`dropLast`, `takeLast`, `takeWhile`, `dropWhile`. Out-of-range slice counts
+clamp rather than fail; `reduce` on an empty list fails, so use `fold` there.
+Each has a free-function mirror (`listMapIndexed`, `listDrop`, ...).
+`joinToString(items, separator, render)` renders as it joins.
+`flatten(items)` and `chunked(items, size)` are free functions because their
+signatures mention `list<list<...>>`, which a method cannot express today.
+
+These call the lambda directly rather than from inside another closure: calling
+a function-typed parameter from within a closure currently returns 0, and
+assigning to a captured local from a closure is a silent no-op, so accumulate
+with `fold` or an explicit loop instead of mutating a captured variable.
 `get/set/removeAt` require `0 <= index < size`; `insert` also accepts `size`.
 `pop` returns `Optional<T>`. Negative or unrepresentable capacities fail.
 Clearing/removing elements releases their stored references.
@@ -83,7 +100,13 @@ out of bounds. `chr` creates one byte. `fromCodePoint` encodes a Unicode scalar;
 
 `split` preserves empty fields; `split/replace` reject an empty separator.
 `join`, `trim` (ASCII whitespace), `startsWith`, `endsWith`, `contains`, `indexOf`,
-`concat` and integer `toString` are available in `loxis.text`.
+`concat`, `repeat` and `toString` are available in `loxis.text`.
+`repeat(value, count)` and `text.repeat(n)` build by doubling, so they stay
+linear rather than copying the accumulator once per repetition.
+`toString` has `int`, `double` and `bool` overloads; `bool.toString()` yields
+`"true"`/`"false"`. A bool carries no VM tag of its own, so both `print(bool)`
+and `"${flag}"` select that text statically rather than stringifying by tag;
+`print(flag)` says `true`, not `1`.
 Prefer value-oriented calls such as `text.split(" ")`, `text.replace(old, new)`,
 `text.length()`, `text.codePoints()`, and `number.toString()`.
 `text.words()` splits ordinary text on ASCII whitespace without exposing numeric

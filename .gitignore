@@ -44,3 +44,4 @@ cmake-build-debug/
 build_err.txt
 build_errors.txt
 build_out.txt
+ast.txt

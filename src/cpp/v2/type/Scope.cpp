@@ -135,7 +135,15 @@ void ScopeBuilder::declareItem(ItemPtr item, Scope* scope) {
         } else if constexpr (std::is_same_v<T, ItemVar>) {
             scope->declare(n.name, SymbolKind::Value,
                 const_cast<void*>(static_cast<const void*>(&n)), nullptr);
-            if (auto* sym = scope->lookupLocal(n.name)) sym->isTopLevelProperty = true;
+            if (auto* sym = scope->lookupLocal(n.name)) {
+                sym->isTopLevelProperty = true;
+                sym->isMutable = true;
+                // Give it a real global slot. Reads go through GLoad instead of
+                // the `__var_` getter, and the initializer is emitted into
+                // globalInitializers so the slot is set before main runs.
+                sym->globalSlot = m_nextGlobalSlot++;
+                n.globalSlot = sym->globalSlot;
+            }
         } else if constexpr (std::is_same_v<T, ItemConst>) {
             scope->declare(n.name, SymbolKind::Value,
                 const_cast<void*>(static_cast<const void*>(&n)), nullptr);
@@ -225,6 +233,9 @@ void ScopeBuilder::resolveClass(ItemClass& cls, Scope* scope) {
         fi.isVal = fd.isVal;
         def->fields.push_back(fi);
         cs->declare(fd.name, SymbolKind::Value, nullptr, nullptr);
+        // A plain `field = x` inside a method assigns through `this`, so the
+        // field symbol has to carry its own mutability for assignment checking.
+        if (auto* fieldSym = cs->lookupLocal(fd.name)) fieldSym->isMutable = !fd.isVal;
         fieldOffset += 9;
     }
 

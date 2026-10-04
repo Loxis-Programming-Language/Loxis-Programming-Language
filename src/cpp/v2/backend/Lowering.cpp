@@ -1,8 +1,29 @@
 #include "Lowering.hpp"
+#include "../common.hpp"
 #include <cassert>
 #include <stdexcept>
 
 namespace loxis::v2 {
+
+namespace {
+// Maps a compound assignment operator onto the binary operator it applies.
+// MirAssignOp::Set has no binary counterpart and falls back to Add.
+MirBinOp binOpForAssign(MirAssignOp op) {
+    switch (op) {
+        case MirAssignOp::AddEq:  return MirBinOp::Add;
+        case MirAssignOp::SubEq:  return MirBinOp::Sub;
+        case MirAssignOp::MulEq:  return MirBinOp::Mul;
+        case MirAssignOp::DivEq:  return MirBinOp::Div;
+        case MirAssignOp::RemEq:  return MirBinOp::Rem;
+        case MirAssignOp::AmpEq:  return MirBinOp::BitAnd;
+        case MirAssignOp::PipeEq: return MirBinOp::BitOr;
+        case MirAssignOp::CaretEq:return MirBinOp::BitXor;
+        case MirAssignOp::ShlEq:  return MirBinOp::Shl;
+        case MirAssignOp::ShrEq:  return MirBinOp::Shr;
+        default:                  return MirBinOp::Add;
+    }
+}
+} // namespace
 
 bool Lowering::lowerFinalizersTo(size_t depth) {
     if (depth > m_finallyStack.size()) depth = m_finallyStack.size();
@@ -31,6 +52,12 @@ LoweringOutput Lowering::lower(const HirModule& hir) {
             using T = std::decay_t<decltype(i)>;
             if constexpr (std::is_same_v<T, HirFn>) {
                 output.bodies.push_back(lowerFn(i));
+                // A top-level `var` initializer also fills its global slot. The
+                // runtime calls the body and stores its result, the same way it
+                // seeds singleton objects.
+                if (i.globalSlot != ~0u) {
+                    output.globalInitializers.push_back({i.globalSlot, i.name});
+                }
             } else if constexpr (std::is_same_v<T, HirClass>) {
                 output.bodies.push_back(lowerClassCtor(i));
                 if (i.isSingleton && i.globalSlot != ~0u) {
@@ -62,6 +89,7 @@ MirBody Lowering::lowerClassCtor(const HirClass& cls) {
     body.locals.push_back({body.ret_ty, "_return", false});
 
     m_scope.clear();
+    m_scratchLocal.reset();
     m_closureEnvLocal.reset();
     for (const auto& pd : cls.ctorParams) {
         LocalId lid = static_cast<LocalId>(body.locals.size());
@@ -139,6 +167,7 @@ MirBody Lowering::lowerMethod(const HirClass& cls, const HirFn& method) {
     body.locals.push_back({body.ret_ty, "_return", false});
 
     m_scope.clear();
+    m_scratchLocal.reset();
     m_closureEnvLocal.reset();
     LocalId selfLid = static_cast<LocalId>(body.locals.size());
     body.locals.push_back({mkInt(), "self", false});
@@ -185,6 +214,7 @@ MirBody Lowering::lowerFn(const HirFn& fn) {
     body.locals.push_back({body.ret_ty, "_return", false});
 
     m_scope.clear();
+    m_scratchLocal.reset();
     m_closureEnvLocal.reset();
     if (fn.closureEnvTypeId != ~0u) {
         LocalId envLid = static_cast<LocalId>(body.locals.size());
@@ -254,6 +284,11 @@ LocalId Lowering::unitLocal() {
     return tmp;
 }
 
+LocalId Lowering::scratchLocal() {
+    if (!m_scratchLocal) m_scratchLocal = newLocal(mkUnit(), "_scratch");
+    return *m_scratchLocal;
+}
+
 LocalId Lowering::lowerPlace(const HirExpr& expr) {
     return std::visit([&](const auto& e) -> LocalId {
         using T = std::decay_t<decltype(e)>;
@@ -267,7 +302,12 @@ LocalId Lowering::lowerPlace(const HirExpr& expr) {
             if (e.op == MirUnaryOp::Deref) return lowerExpr(*e.operand);
             return lowerExpr(expr);
         } else {
-            return lowerExpr(expr);
+            // There is no place here, only a value. Falling back to lowerExpr would
+            // hand back a discarded temporary and turn every assignment into a silent
+            // no-op -- that is how `a[i] = x` went unnoticed. The type checker's
+            // isMutablePlace admits only Path/Deref/Field/Index as assignment targets,
+            // so anything else arriving here is a compiler bug, not user input.
+            panic("lowering was asked for the place of a non-place expression");
         }
     }, expr);
 }
@@ -275,7 +315,7 @@ LocalId Lowering::lowerPlace(const HirExpr& expr) {
 LocalId Lowering::lowerExpr(const HirExpr& expr) {
     if (m_blockTerminated) return unitLocal();
 
-    SourceLoc previousLoc = m_currentLoc;
+    SourceLocation previousLoc = m_currentLoc;
     m_currentLoc = expr.loc;
     LocalId lowered = std::visit([&](const auto& e) -> LocalId {
         using T = std::decay_t<decltype(e)>;
@@ -452,7 +492,24 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
         } else if constexpr (std::is_same_v<T, HirAssign>) {
             // Check if LHS is a field access (needs HStore instead of StAssign)
             bool isField = (e.lhs && std::holds_alternative<HirField>(*e.lhs));
-            if (isField) {
+            bool isIndex = (e.lhs && std::holds_alternative<HirIndex>(*e.lhs));
+            uint32_t globalSlot = ~0u;
+            if (e.lhs) {
+                if (auto* path = std::get_if<HirPath>(e.lhs.get())) globalSlot = path->globalSlot;
+            }
+            if (globalSlot != ~0u) {
+                // Top-level `var`: the binding lives in a VM global, so this is a
+                // GStore rather than an assignment to a register.
+                LocalId rhs = lowerExpr(*e.rhs);
+                if (e.op != MirAssignOp::Set) {
+                    LocalId oldVal = newLocal(e.ty, "glob_rd");
+                    emit(StAssign{oldVal, RvGlobalLoad{globalSlot}});
+                    LocalId newVal = newLocal(e.ty, "glob_wr");
+                    emit(StAssign{newVal, RvBinary{binOpForAssign(e.op), OpCopy{oldVal}, OpCopy{rhs}}});
+                    rhs = newVal;
+                }
+                emit(StAssign{scratchLocal(), RvGlobalStore{globalSlot, OpCopy{rhs}}});
+            } else if (isField) {
                 auto& f = std::get<HirField>(*e.lhs);
                 LocalId obj = lowerExpr(*f.obj);
                 LocalId rhs = lowerExpr(*e.rhs);
@@ -479,6 +536,21 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
                     LocalId newVal = newLocal(f.ty, "fld_wr");
                     emit(StAssign{newVal, RvBinary{bop, OpCopy{oldVal}, OpCopy{rhs}}});
                     emit(StAssign{obj, RvHStore{f.fieldOffset, OpCopy{newVal}}});
+                }
+            } else if (isIndex) {
+                auto& ix = std::get<HirIndex>(*e.lhs);
+                LocalId obj = lowerExpr(*ix.obj);
+                LocalId idx = lowerExpr(*ix.idx);
+                LocalId rhs = lowerExpr(*e.rhs);
+                if (e.op == MirAssignOp::Set) {
+                    emit(StAssign{obj, RvIndexStore{OpCopy{idx}, OpCopy{rhs}}});
+                } else {
+                    // Compound assignment: read the element, compute, write back
+                    LocalId oldVal = newLocal(ix.ty, "elt_rd");
+                    emit(StAssign{oldVal, RvIndex{obj, OpCopy{idx}}});
+                    LocalId newVal = newLocal(ix.ty, "elt_wr");
+                    emit(StAssign{newVal, RvBinary{binOpForAssign(e.op), OpCopy{oldVal}, OpCopy{rhs}}});
+                    emit(StAssign{obj, RvIndexStore{OpCopy{idx}, OpCopy{newVal}}});
                 }
             } else {
                 LocalId rhs = lowerExpr(*e.rhs);

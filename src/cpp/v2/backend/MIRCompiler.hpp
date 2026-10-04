@@ -40,7 +40,7 @@ private:
         return reg < 240 ? reg : static_cast<uint16_t>(reg + 16);
     }
     uint32_t getLabelOffset(const std::string& name) const;
-    void recordSource(const SourceLoc& loc);
+    void recordSource(const SourceLocation& loc);
     std::string blockLabel(const std::string& prefix, BlockId id) const {
         return prefix + "_b" + std::to_string(id);
     }

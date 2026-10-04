@@ -1,0 +1,11 @@
+// A '[' that opens a new source line starts a statement too, for the same
+// reason as parser_newline_paren.lx: without the line-number guard the array
+// literal below was read as an index into `id(5)`.
+fun id(n: int) -> int { return n }
+
+fun main() -> int {
+    val a = id(5)
+    [a, a]
+    print(a)
+    return 0
+}

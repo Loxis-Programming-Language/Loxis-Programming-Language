@@ -9,6 +9,52 @@
 
 namespace loxis::v2 {
 
+namespace {
+
+// Resolves the escape sequences in a string literal body. Shared by ordinary
+// string literals and by the literal chunks of a string template -- the
+// template path used to hand its raw text straight to the AST, so `$"a\nb"`
+// carried a literal backslash-n into the output.
+std::string unescapeString(const std::string& s) {
+    std::string out;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] != '\\' || i + 1 >= s.size()) { out.push_back(s[i]); continue; }
+        char c = s[++i];
+        switch (c) {
+            case 'n': out.push_back('\n'); break;
+            case 't': out.push_back('\t'); break;
+            case 'r': out.push_back('\r'); break;
+            case '0': out.push_back('\0'); break;
+            case '\\': out.push_back('\\'); break;
+            case '"': out.push_back('"'); break;
+            case '\'': out.push_back('\''); break;
+            case '$': out.push_back('$'); break;
+            case 'x': {
+                if (i + 2 < s.size()) {
+                    out.push_back(static_cast<char>(std::stoi(s.substr(i + 1, 2), nullptr, 16)));
+                    i += 2;
+                }
+                break;
+            }
+            default: out.push_back(c); break;
+        }
+    }
+    return out;
+}
+
+// Walks `count` characters of `text` forward from `loc`, so a fragment lexed on
+// its own can start at a meaningful position. Treats both \n and \r as line
+// breaks, matching Lexer::advance.
+SourceLocation advanceLoc(SourceLocation loc, const std::string& text, size_t count) {
+    for (size_t i = 0; i < count && i < text.size(); ++i) {
+        if (text[i] == '\n' || text[i] == '\r') { loc.line++; loc.col = 1; }
+        else loc.col++;
+    }
+    return loc;
+}
+
+} // namespace
+
 // ---------- token helpers ----------
 Token& Parser::peek(size_t off) { return toks[pos + off]; }
 bool Parser::check(Tk k) { return pos < toks.size() && peek().kind == k; }
@@ -24,7 +70,7 @@ Token& Parser::expect(Tk k) {
 }
 bool Parser::atEnd() { return check(Tk::Eof); }
 void Parser::advance() { if (!atEnd()) ++pos; }
-SourceLoc Parser::curloc() { return peek().loc; }
+SourceLocation Parser::curloc() { return peek().loc; }
 
 // ---------- basic helpers ----------
 std::string Parser::expectIdent() {
@@ -63,7 +109,7 @@ void Parser::skipToBoundary() {
 void Parser::error(const std::string& msg) {
     if (!m_quietErrors) {
         const Token& found = peek();
-        SourceLoc end = found.loc;
+        SourceLocation end = found.loc;
         end.col += static_cast<uint32_t>(std::max<size_t>(1, found.lex.size()));
         std::string label = msg;
         if (found.kind != Tk::Eof && !found.lex.empty()) label += ", found `" + found.lex + "`";
@@ -74,13 +120,29 @@ void Parser::error(const std::string& msg) {
     }
 }
 
+// Thrown instead of letting the recursion run out of native stack, which would
+// abort the process with STATUS_STACK_OVERFLOW (0xC00000FD) and no output.
+// Deliberately not routed through error(): that is a no-op while a speculative
+// parse is running, and this has to unwind unconditionally.
+[[noreturn]] void Parser::reportNestingTooDeep() {
+    const Token& found = peek();
+    SourceLocation end = found.loc;
+    end.col += static_cast<uint32_t>(std::max<size_t>(1, found.lex.size()));
+    throw FrontendError(Diagnostic{
+        DiagnosticSeverity::Error, DiagnosticKind::Syntax,
+        "expression is nested too deeply to parse",
+        LabeledSpan{SourceSpan{found.loc, end},
+            "stack overflow guard: nesting limit reached"}
+    });
+}
+
 // ---------- constructor / entry ----------
 Parser::Parser(std::vector<Token> tokens) {
     for (auto& t : tokens) {
         if (t.kind != Tk::Newline) toks.push_back(std::move(t));
     }
     if (toks.empty() || toks.back().kind != Tk::Eof)
-        toks.emplace_back(Tk::Eof, "", SourceLoc{});
+        toks.emplace_back(Tk::Eof, "", SourceLocation{});
 }
 
 Module Parser::parseFile(const std::string& path) {
@@ -875,7 +937,8 @@ StmtPtr Parser::parseItemStmt() {
 
 // ---------- expressions ----------
 ExprPtr Parser::parseExpr() {
-    SourceLoc start = curloc();
+    DepthGuard guard(*this);
+    SourceLocation start = curloc();
     ExprPtr expr = parseAssign();
     if (expr && expr->loc.file.empty()) {
         expr->loc = std::move(start);
@@ -890,6 +953,7 @@ ExprPtr Parser::parseExpr() {
 }
 
 ExprPtr Parser::parseAssign() {
+    DepthGuard guard(*this);
     ExprPtr lhs = parseElvis();
     ExprAssign::Op op = ExprAssign::Set;
     bool ok = false;
@@ -1093,6 +1157,9 @@ ExprPtr Parser::parsePrefix() {
 bool Parser::tryAttachGenericArgs(ExprPtr& expr) {
     if (!expr || !std::holds_alternative<ExprPath>(*expr)) return false;
     if (!check(Tk::Lt)) return false;
+    // A '<' that opens a new line is not a generic argument list; attaching it
+    // would swallow the start of the next statement.
+    if (atLineStart()) return false;
 
     size_t save = pos;
     m_quietErrors = true;
@@ -1108,13 +1175,37 @@ bool Parser::tryAttachGenericArgs(ExprPtr& expr) {
     return true;
 }
 
+bool Parser::atLineStart() const {
+    if (pos == 0 || pos >= toks.size()) return false;
+    const uint32_t here = toks[pos].loc.line;
+    const uint32_t previous = toks[pos - 1].loc.line;
+    if (here == 0 || previous == 0) return false;   // synthetic token, no line
+    return here != previous;
+}
+
 ExprPtr Parser::parsePostfix() {
+    // Anchor a postfix node on the token that actually names it. Without this
+    // the node inherits whatever parseExpr stamped on the whole chain -- the
+    // receiver's position -- so "field 'forEach' not found" pointed at the
+    // receiver instead of at `forEach`.
+    auto stamp = [](ExprPtr node, const SourceLocation& loc, size_t lexLen) -> ExprPtr {
+        node->loc = loc;
+        node->endLoc = loc;
+        node->endLoc.col += static_cast<uint32_t>(std::max<size_t>(1, lexLen));
+        return node;
+    };
+
     ExprPtr expr = parsePrimary();
     while (true) {
         if (tryAttachGenericArgs(expr)) {
             continue;
         }
-        if (check(Tk::LParen)) {
+        // A '(' that opens a new source line begins a new statement rather than
+        // an argument list (Kotlin reads it the same way). Without this guard
+        // `val x = f()` followed by a line starting with '(' parsed as `f()(…)`
+        // -- and the receiver of whatever followed the parens became f's type.
+        if (check(Tk::LParen) && !atLineStart()) {
+            const SourceLocation parenLoc = peek().loc;
             std::vector<ExprPtr> args;
             std::vector<std::optional<std::string>> argNames;
             advance();
@@ -1131,9 +1222,10 @@ ExprPtr Parser::parsePostfix() {
             expect(Tk::RParen);
             auto call = ExprCall{expr, std::move(args)};
             call.argNames = std::move(argNames);
-            expr = std::make_shared<Expr>(std::move(call));
+            expr = stamp(std::make_shared<Expr>(std::move(call)), parenLoc, 1);
         } else if (match(Tk::Dot)) {
             if (check(Tk::Ident)) {
+                const SourceLocation nameLoc = peek().loc;
                 std::string name = peek().lex;
                 advance();
                 std::vector<TypePtr> methodTypeArgs;
@@ -1142,10 +1234,10 @@ ExprPtr Parser::parsePostfix() {
                     m_quietErrors = true;
                     auto parsedArgs = parseGenericArgs();
                     m_quietErrors = false;
-                    if (!parsedArgs.empty() && check(Tk::LParen)) methodTypeArgs = std::move(parsedArgs);
+                    if (!parsedArgs.empty() && check(Tk::LParen) && !atLineStart()) methodTypeArgs = std::move(parsedArgs);
                     else pos = genericSave;
                 }
-                if (check(Tk::LParen)) {
+                if (check(Tk::LParen) && !atLineStart()) {
                     std::vector<ExprPtr> args;
                     std::vector<std::optional<std::string>> argNames;
                     advance();
@@ -1163,10 +1255,10 @@ ExprPtr Parser::parsePostfix() {
                     auto call = ExprMethodCall{expr, name, std::move(args)};
                     call.typeArgs = std::move(methodTypeArgs);
                     call.argNames = std::move(argNames);
-                    expr = std::make_shared<Expr>(std::move(call));
+                    expr = stamp(std::make_shared<Expr>(std::move(call)), nameLoc, name.size());
                 } else {
                     if (!methodTypeArgs.empty()) error("generic member arguments require a method call");
-                    expr = std::make_shared<Expr>(ExprField{expr, name});
+                    expr = stamp(std::make_shared<Expr>(ExprField{expr, name}), nameLoc, name.size());
                 }
             } else {
                 error("expected identifier after '.'");
@@ -1176,9 +1268,10 @@ ExprPtr Parser::parsePostfix() {
             // ?. safe call/field, or ?? (elvis is ?: handled in parseElvis)
             if (match(Tk::Dot)) {
                 if (check(Tk::Ident)) {
+                    const SourceLocation nameLoc = peek().loc;
                     std::string name = peek().lex;
                     advance();
-                    if (check(Tk::LParen)) {
+                    if (check(Tk::LParen) && !atLineStart()) {
                         std::vector<ExprPtr> args;
                         advance();
                         while (!check(Tk::RParen) && !atEnd()) {
@@ -1186,9 +1279,11 @@ ExprPtr Parser::parsePostfix() {
                             if (!match(Tk::Comma)) break;
                         }
                         expect(Tk::RParen);
-                        expr = std::make_shared<Expr>(ExprSafeCall{expr, name, std::move(args)});
+                        expr = stamp(std::make_shared<Expr>(ExprSafeCall{expr, name, std::move(args)}),
+                                     nameLoc, name.size());
                     } else {
-                        expr = std::make_shared<Expr>(ExprSafeField{expr, name});
+                        expr = stamp(std::make_shared<Expr>(ExprSafeField{expr, name}),
+                                     nameLoc, name.size());
                     }
                 } else {
                     error("expected identifier after '?.'");
@@ -1206,16 +1301,17 @@ ExprPtr Parser::parsePostfix() {
             }
             // !! force unwrap — second ! follows
             if (match(Tk::Bang)) {
-                expr = std::make_shared<Expr>(ExprForceUnwrap{expr});
+                expr = stamp(std::make_shared<Expr>(ExprForceUnwrap{expr}), toks[pos - 1].loc, 2);
             } else {
                 error("expected '!!' for force unwrap");
                 break;
             }
-        } else if (check(Tk::LBracket)) {
+        } else if (check(Tk::LBracket) && !atLineStart()) {
+            const SourceLocation bracketLoc = peek().loc;
             advance();
             ExprPtr idx = parseExpr();
             expect(Tk::RBracket);
-            expr = std::make_shared<Expr>(ExprIndex{expr, idx});
+            expr = stamp(std::make_shared<Expr>(ExprIndex{expr, idx}), bracketLoc, 1);
         } else {
             break;
         }
@@ -1229,6 +1325,19 @@ ExprPtr Parser::parsePrimary() {
         return parseLiteral();
 
     if (match(Tk::KwNull)) return parseNull();
+
+    // Labeled loop, `name: for ...`. The label comes *before* the keyword, so
+    // this has to run before the plain-identifier branch below -- testing for an
+    // identifier once the loop keyword is already known to be next can never
+    // match, which is why labels used to be unparseable.
+    if (check(Tk::Ident) && check(Tk::Colon, 1) &&
+        (check(Tk::KwWhile, 2) || check(Tk::KwFor, 2) || check(Tk::KwLoop, 2))) {
+        std::string label = peek().lex;
+        pos += 2;
+        if (match(Tk::KwWhile)) return parseWhile(label);
+        if (match(Tk::KwFor)) return parseFor(label);
+        if (match(Tk::KwLoop)) return parseLoop(label);
+    }
 
     if (check(Tk::Ident)) {
         Path path = parsePath();
@@ -1270,14 +1379,9 @@ ExprPtr Parser::parsePrimary() {
     }
 
     if (check(Tk::KwWhile) || check(Tk::KwFor) || check(Tk::KwLoop)) {
-        std::optional<std::string> label;
-        if (check(Tk::Ident) && check(Tk::Colon, 1)) {
-            label = peek().lex;
-            pos += 2;
-        }
-        if (match(Tk::KwWhile)) return parseWhile(label);
-        if (match(Tk::KwFor)) return parseFor(label);
-        if (match(Tk::KwLoop)) return parseLoop(label);
+        if (match(Tk::KwWhile)) return parseWhile(std::nullopt);
+        if (match(Tk::KwFor)) return parseFor(std::nullopt);
+        if (match(Tk::KwLoop)) return parseLoop(std::nullopt);
     }
 
     if (match(Tk::KwIf)) return parseIf();
@@ -1288,55 +1392,14 @@ ExprPtr Parser::parsePrimary() {
     if (match(Tk::KwBreak)) return parseBreak();
     if (match(Tk::KwContinue)) return parseContinue();
     // string template: $"hello $name"
+    // `$"..."` is the old spelling. Every string interpolates now, so point
+    // anyone still writing the prefix at the plain form.
     if (match(Tk::Dollar)) {
         if (check(Tk::StringLit)) {
-            // simple string with $ interpolation
-            std::string s = peek().lex;
-            advance();
-            // parse as string template
-            ExprStringTemplate tmpl;
-            std::string content = s.substr(1, s.size() - 2); // remove quotes
-            size_t i = 0;
-            std::string lit;
-            while (i < content.size()) {
-                if (content[i] == '$' && i + 1 < content.size()) {
-                    if (content[i+1] == '{') {
-                        // ${expr}
-                        if (!lit.empty()) { tmpl.parts.push_back(lit); lit.clear(); }
-                        size_t j = i + 2;
-                        int braceDepth = 1;
-                        size_t exprStart = j;
-                        while (j < content.size() && braceDepth > 0) {
-                            if (content[j] == '{') braceDepth++;
-                            else if (content[j] == '}') braceDepth--;
-                            j++;
-                        }
-                        std::string exprStr = content.substr(exprStart, j - exprStart - 1);
-                        // Create an expression path for the variable/expression
-                        auto varExpr = std::make_shared<Expr>(ExprPath{Path{{exprStr}, {}}});
-                        tmpl.parts.push_back(varExpr);
-                        i = j;
-                        continue;
-                    } else if (std::isalpha(static_cast<unsigned char>(content[i+1])) || content[i+1] == '_') {
-                        if (!lit.empty()) { tmpl.parts.push_back(lit); lit.clear(); }
-                        size_t j = i + 1;
-                        while (j < content.size() && (std::isalnum(static_cast<unsigned char>(content[j])) || content[j] == '_')) j++;
-                        std::string varName = content.substr(i + 1, j - i - 1);
-                        auto varExpr = std::make_shared<Expr>(ExprPath{Path{{varName}, {}}});
-                        tmpl.parts.push_back(varExpr);
-                        i = j;
-                        continue;
-                    }
-                }
-                lit += content[i];
-                i++;
-            }
-            if (!lit.empty()) tmpl.parts.push_back(lit);
-            if (tmpl.parts.size() == 1 && std::holds_alternative<std::string>(tmpl.parts[0]))
-                return std::make_shared<Expr>(ExprLit{std::get<std::string>(tmpl.parts[0])});
-            return std::make_shared<Expr>(tmpl);
+            error("remove the '$' before this string; every string interpolates now");
+        } else {
+            error("unexpected '$'");
         }
-        error("expected string literal after '$'");
         return std::make_shared<Expr>(ExprLit{std::string("")});
     }
 
@@ -1673,35 +1736,11 @@ ExprPtr Parser::parseLiteral() {
             double v = std::stod(s);
             return std::make_shared<Expr>(ExprLit{v});
         }
-        case Tk::StringLit: {
-            std::string s = t.lex.substr(1, t.lex.size()-2);
-            std::string out;
-            for (size_t i = 0; i < s.size(); ++i) {
-                if (s[i] == '\\' && i+1 < s.size()) {
-                    char c = s[++i];
-                    switch (c) {
-                        case 'n': out.push_back('\n'); break;
-                        case 't': out.push_back('\t'); break;
-                        case 'r': out.push_back('\r'); break;
-                        case '0': out.push_back('\0'); break;
-                        case '\\': out.push_back('\\'); break;
-                        case '"': out.push_back('"'); break;
-                        case 'x': {
-                            if (i+2 < s.size()) {
-                                std::string hex = s.substr(i+1, 2);
-                                out.push_back(static_cast<char>(std::stoi(hex, nullptr, 16)));
-                                i += 2;
-                            }
-                            break;
-                        }
-                        default: out.push_back(c); break;
-                    }
-                } else {
-                    out.push_back(s[i]);
-                }
-            }
-            return std::make_shared<Expr>(ExprLit{std::move(out)});
-        }
+        case Tk::StringLit:
+            // Interpolation is a property of the content, not a separate literal
+            // syntax: any string may carry `$name` / `${expr}`.
+            if (t.lex.find('$') != std::string::npos) return parseStringTemplate(t);
+            return std::make_shared<Expr>(ExprLit{unescapeString(t.lex.substr(1, t.lex.size()-2))});
         case Tk::CharLit: {
             std::string s = t.lex.substr(1, t.lex.size()-2);
             char c = 0;
@@ -1737,8 +1776,107 @@ ExprPtr Parser::parseNull() {
     return std::make_shared<Expr>(ExprNull{});
 }
 
+ExprPtr Parser::parseEmbeddedExpr() {
+    ExprPtr e = parseExpr();
+    // A fragment that does not lex down to a single expression is a mistake in
+    // the template, not something to silently truncate.
+    if (!atEnd()) error("unexpected token after interpolation expression");
+    return e;
+}
+
+// Turns `$"..."` into ExprStringTemplate. The parts that are plain text become
+// strings; everything else is parsed as a real expression, so `${a + b}` means
+// addition rather than a variable literally named "a + b".
+ExprPtr Parser::parseStringTemplate(const Token& tok) {
+    // tok.lex is the raw lexeme: quotes included, escapes not yet resolved --
+    // the same form parseLiteral consumes.
+    std::string raw = tok.lex.substr(1, tok.lex.size() - 2);
+    ExprStringTemplate tmpl;
+    std::string lit;
+
+    // The body starts one column to the right of the opening quote.
+    SourceLocation contentStart = tok.loc;
+    contentStart.col += 1;
+
+    auto flushLit = [&]() {
+        if (!lit.empty()) { tmpl.parts.push_back(unescapeString(lit)); lit.clear(); }
+    };
+    auto embedded = [&](const std::string& src, size_t offset) -> ExprPtr {
+        SourceLocation start = advanceLoc(contentStart, raw, offset);
+        Lexer subLexer(src, start.file, start);
+        Parser subParser(subLexer.tokenize());
+        // A template can be reached while speculatively parsing, and a fresh
+        // parser is not quiet by default; without this it would throw out of a
+        // parse the caller intends to back out of.
+        subParser.m_quietErrors = m_quietErrors;
+        return subParser.parseEmbeddedExpr();
+    };
+
+    size_t i = 0;
+    while (i < raw.size()) {
+        if (raw[i] != '$') { lit.push_back(raw[i]); ++i; continue; }
+        if (i + 1 >= raw.size()) { lit.push_back('$'); ++i; continue; }
+
+        char next = raw[i + 1];
+        if (next == '$') { lit.push_back('$'); i += 2; continue; }  // `$$` is a literal `$`
+
+        if (next == '{') {
+            // Scan to the matching brace. Nested braces and nested string
+            // literals both have to be stepped over, or the first `}` or `"`
+            // inside them would end the fragment early.
+            size_t j = i + 2;
+            int depth = 1;
+            while (j < raw.size() && depth > 0) {
+                char c = raw[j];
+                if (c == '\\') { j += 2; continue; }
+                if (c == '"') {
+                    ++j;
+                    while (j < raw.size() && raw[j] != '"') j += (raw[j] == '\\') ? 2 : 1;
+                    ++j;
+                    continue;
+                }
+                if (c == '{') { ++depth; ++j; continue; }
+                if (c == '}') { --depth; if (depth == 0) break; }
+                ++j;
+            }
+            if (depth != 0) {
+                error("unterminated '${' in string template");
+                return std::make_shared<Expr>(ExprLit{std::string("")});
+            }
+            flushLit();
+            tmpl.parts.push_back(embedded(raw.substr(i + 2, j - i - 2), i + 2));
+            i = j + 1;
+            continue;
+        }
+
+        // `$name` shorthand for `${name}`.
+        if (std::isalpha(static_cast<unsigned char>(next)) || next == '_') {
+            size_t j = i + 1;
+            while (j < raw.size() &&
+                   (std::isalnum(static_cast<unsigned char>(raw[j])) || raw[j] == '_')) ++j;
+            flushLit();
+            auto path = std::make_shared<Expr>(ExprPath{Path{{raw.substr(i + 1, j - i - 1)}, {}}});
+            path->loc = advanceLoc(contentStart, raw, i + 1);
+            path->endLoc = path->loc;
+            tmpl.parts.push_back(path);
+            i = j;
+            continue;
+        }
+
+        lit.push_back('$');
+        ++i;
+    }
+    flushLit();
+
+    if (tmpl.parts.empty()) return std::make_shared<Expr>(ExprLit{std::string("")});
+    if (tmpl.parts.size() == 1 && std::holds_alternative<std::string>(tmpl.parts[0]))
+        return std::make_shared<Expr>(ExprLit{std::get<std::string>(tmpl.parts[0])});
+    return std::make_shared<Expr>(tmpl);
+}
+
 // ---------- patterns ----------
 PatPtr Parser::parsePat() {
+    DepthGuard guard(*this);
     if (match(Tk::Underscore)) return std::make_shared<Pat>(PatWild{});
     if (match(Tk::Amp)) {
         PatPtr sub = parsePat();
@@ -1807,6 +1945,7 @@ PatPtr Parser::parsePat() {
 
 // ---------- types ----------
 TypePtr Parser::parseType() {
+    DepthGuard guard(*this);
     TypePtr base = nullptr;
 
     // fn type: fun(params) -> ret

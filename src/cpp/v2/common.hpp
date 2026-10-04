@@ -9,7 +9,7 @@
 namespace loxis::v2 {
 
 struct CompileError {
-    SourceLoc loc;
+    SourceLocation loc;
     std::string msg;
     std::string fmt() const { return loc.fmt() + ": error: " + msg; }
 };
@@ -17,7 +17,7 @@ struct CompileError {
 class ErrorReporter {
     std::vector<CompileError> errs;
 public:
-    void error(const SourceLoc& loc, const std::string& msg) {
+    void error(const SourceLocation& loc, const std::string& msg) {
         errs.push_back({loc, msg});
     }
     void error(const std::string& msg) {
@@ -31,7 +31,7 @@ public:
     const std::vector<CompileError>& errors() const { return errs; }
 };
 
-inline void panic(const std::string& msg) {
+[[noreturn]] inline void panic(const std::string& msg) {
     std::cerr << "PANIC: " << msg << "\n";
     throw std::runtime_error(msg);
 }

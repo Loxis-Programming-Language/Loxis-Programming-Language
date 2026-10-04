@@ -1,8 +1,10 @@
 #pragma once
 #include "../AST.hpp"
+#include "../dump/Trace.hpp"
 #include <filesystem>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace loxis::v2 {
 
@@ -12,10 +14,16 @@ public:
 
     Module load();
 
+    // --trace: record every module appended, in dependency order.
+    void setTrace(const Trace* trace) { m_trace = trace; }
+    const std::vector<std::filesystem::path>& loadOrder() const { return m_loadOrder; }
+
 private:
     std::filesystem::path m_entryFile;
     std::filesystem::path m_entryDir;
     std::filesystem::path m_stdlibRoot;
+    const Trace* m_trace = nullptr;
+    std::vector<std::filesystem::path> m_loadOrder;
 
     std::filesystem::path findStdlibRoot() const;
     std::filesystem::path resolveStdlibModule(const Path& module) const;

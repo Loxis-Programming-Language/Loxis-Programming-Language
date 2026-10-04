@@ -1,0 +1,17 @@
+// The shape that exposed both parser bugs at once.
+//
+// Before the line-number guard this was one expression,
+// `val demo = Demo()(0..6).forEach { ... }`, so the receiver of `forEach`
+// resolved to Demo and the error pointed at `Demo()` on line 13. The error is
+// still an error -- Loxis has no Range.forEach -- but it must name the member
+// and point at line 14.
+class Demo {
+    fun test() -> unit { }
+}
+
+fun main() -> unit {
+    val demo = Demo()
+    (0..6).forEach {
+        demo.test()
+    }
+}

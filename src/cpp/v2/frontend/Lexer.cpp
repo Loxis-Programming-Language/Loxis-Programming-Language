@@ -5,8 +5,11 @@
 
 namespace loxis::v2 {
 
-Lexer::Lexer(std::string source, std::string filename)
-    : src(std::move(source)), file(std::move(filename)) {}
+Lexer::Lexer(std::string source, std::string filename, SourceLocation start)
+    : src(std::move(source)), file(std::move(filename)) {
+    // A default-constructed SourceLocation has line == 0; that means "no base given".
+    if (start.line != 0) { line = start.line; col = start.col; }
+}
 
 bool Lexer::atEnd() const { return pos >= src.size(); }
 char Lexer::peek(size_t off) const { return pos + off < src.size() ? src[pos + off] : '\0'; }
@@ -17,7 +20,7 @@ char Lexer::advance() {
     return c;
 }
 
-SourceLoc Lexer::loc() const { return {file, line, col}; }
+SourceLocation Lexer::loc() const { return {file, line, col}; }
 
 void Lexer::skipSpace() {
     while (!atEnd() && (peek() == ' ' || peek() == '\t')) advance();
@@ -53,25 +56,43 @@ Tk Lexer::keyword(const std::string& s) const {
     return it != kw.end() ? it->second : Tk::Ident;
 }
 
+// Scans a string lexeme. It cannot simply stop at the first `"`, because
+// `${...}` may contain real expressions -- including string literals and braces
+// of their own -- that must not terminate the outer string. Every string is
+// scanned this way; whether the result actually interpolates is for the parser
+// to decide, since only it knows how to parse the code parts.
 std::string Lexer::literalStr() {
     size_t start = pos;
-    SourceLoc startLoc = loc();
+    SourceLocation startLoc = loc();
     advance(); // opening "
-    while (!atEnd() && peek() != '"') {
-        if (peek() == '\\') { advance(); if (!atEnd()) advance(); }
-        else advance();
+    while (!atEnd()) {
+        char c = peek();
+        if (c == '\\') { advance(); if (!atEnd()) advance(); continue; }
+        if (c == '"') { advance(); return src.substr(start, pos - start); }
+        if (c == '$' && peek(1) == '{') {
+            advance(); advance();  // "$" and "{"
+            int depth = 1;
+            while (!atEnd() && depth > 0) {
+                char d = peek();
+                if (d == '{') { ++depth; advance(); continue; }
+                if (d == '}') { --depth; advance(); continue; }
+                // Nested string literals are skipped whole, so a brace or quote
+                // inside one cannot throw off the depth count.
+                if (d == '"') { advance(); while (!atEnd() && peek() != '"') { if (peek() == '\\') advance(); if (!atEnd()) advance(); } if (!atEnd()) advance(); continue; }
+                if (d == '\\') { advance(); if (!atEnd()) advance(); continue; }
+                advance();
+            }
+            continue;
+        }
+        advance();
     }
-    if (atEnd()) {
-        throw FrontendError(Diagnostic{DiagnosticSeverity::Error, DiagnosticKind::Syntax,
-            "unterminated string literal", {{startLoc, loc()}, "string starts here"}});
-    }
-    advance(); // closing "
-    return src.substr(start, pos - start);
+    throw FrontendError(Diagnostic{DiagnosticSeverity::Error, DiagnosticKind::Syntax,
+        "unterminated string literal", {{startLoc, loc()}, "string starts here"}});
 }
 
 std::string Lexer::literalChar() {
     size_t start = pos;
-    SourceLoc startLoc = loc();
+    SourceLocation startLoc = loc();
     advance(); // opening '
     if (!atEnd() && peek() == '\\') { advance(); if (!atEnd()) advance(); }
     else if (!atEnd() && peek() != '\'' && peek() != '\n' && peek() != '\r') advance();
@@ -95,7 +116,7 @@ std::vector<Token> Lexer::tokenize() {
     while (!atEnd()) {
         skipSpace();
         if (atEnd()) break;
-        SourceLoc l = loc();
+        SourceLocation l = loc();
         size_t start = pos;
         char c = peek();
         // newlines
@@ -235,13 +256,13 @@ std::vector<Token> Lexer::tokenize() {
             case '@': emit1(Tk::At); break;
             case '?': emit1(Tk::Question); break;
             default:
-                SourceLoc end = l;
+                SourceLocation end = l;
                 ++end.col;
                 throw FrontendError(Diagnostic{DiagnosticSeverity::Error, DiagnosticKind::Syntax,
                     "unexpected character `" + std::string(1, c) + "`", {{l, end}, "unexpected token"}});
         }
     }
-    out.emplace_back(Tk::Eof, "", SourceLoc{file, line, col});
+    out.emplace_back(Tk::Eof, "", SourceLocation{file, line, col});
     return out;
 }
 

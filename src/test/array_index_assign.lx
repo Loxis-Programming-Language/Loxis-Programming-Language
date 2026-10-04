@@ -1,0 +1,30 @@
+// Index assignment on built-in arrays: `a[i] = x` and `a[i] op= x`.
+//
+// Regression: the type checker treats an index as a mutable place, but lowering
+// had no store path for it, so these assignments were lowered into a write to a
+// temporary and silently left the array unchanged.
+import loxis.text
+
+fun main() -> int {
+    val a = [1, 2, 3]
+    a[0] = 42
+    require(a[0] == 42, "set element")
+
+    var b = [1, 2, 3]
+    b[1] += 10
+    require(b[1] == 12, "compound assign on element")
+    require(b[0] == 1 && b[2] == 3, "untouched elements preserved")
+
+    // Element reached through an outer element.
+    val nested = [[1, 2], [3, 4]]
+    nested[1][0] = 99
+    require(nested[1][0] == 99, "nested element")
+
+    // The stored value is itself a reference, so this exercises the write barrier.
+    val refs = [[1], [2]]
+    refs[0][0] = 7
+    require(refs[0][0] == 7, "reference element")
+
+    print("index assignment ok")
+    return 0
+}

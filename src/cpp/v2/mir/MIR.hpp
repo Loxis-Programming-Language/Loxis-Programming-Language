@@ -51,6 +51,9 @@ struct RvAggregate { enum Kind { Tuple, Array, Adt } kind; uint32_t variant = 0;
 struct RvField { LocalId local; uint32_t field; };
 struct RvHStore { uint32_t offset; Operand value; };
 struct RvIndex { LocalId local; Operand idx; };
+// Writes `value` to element `idx`. Like RvHStore, the array being written to is
+// the destination local of the enclosing StAssign, not an operand here.
+struct RvIndexStore { Operand idx; Operand value; };
 struct RvLen { LocalId local; };
 struct RvDiscriminant { LocalId local; };
 struct RvAlloc { uint32_t size; uint32_t typeId; };
@@ -60,12 +63,13 @@ struct RvVTableSlot { LocalId obj; uint32_t slot; };
 struct RvTypeId { LocalId obj; };
 struct RvIsCheck { LocalId obj; uint32_t targetTypeId; };
 struct RvGlobalLoad { uint32_t slot; };
+struct RvGlobalStore { uint32_t slot; Operand value; };
 
 struct Rvalue : std::variant<
     RvUse, RvRef, RvPtr, RvBinary, RvUnary, RvCast,
-    RvAggregate, RvField, RvHStore, RvIndex, RvLen, RvDiscriminant,
+    RvAggregate, RvField, RvHStore, RvIndex, RvIndexStore, RvLen, RvDiscriminant,
     RvAlloc, RvClosure, RvClosureGet, RvVTableSlot, RvTypeId, RvIsCheck,
-    RvGlobalLoad
+    RvGlobalLoad, RvGlobalStore
 > {
     using variant::variant;
 };
@@ -90,7 +94,7 @@ struct Terminator : std::variant<
     TmVirtualCall, TmInterfaceCall
 > {
     using variant::variant;
-    SourceLoc loc;
+    SourceLocation loc;
 };
 
 // ============================================================
@@ -113,7 +117,7 @@ struct Statement : std::variant<
     StPush, StPop, StGlobalStore, StTryPush, StTryPop, StThrow
 > {
     using variant::variant;
-    SourceLoc loc;
+    SourceLocation loc;
 };
 
 // ============================================================

@@ -1,0 +1,28 @@
+// Mutable top-level `var`.
+//
+// Regression: a global `var` type-checked as an assignable place but lowering
+// had no store for it, so assignment either did nothing or tripped an internal
+// panic. Globals now live in VM global slots.
+import loxis.text
+
+var counter = 0
+var label = "start"
+
+fun bump() -> unit {
+    counter = counter + 1
+}
+
+fun relabel(value: str) -> unit {
+    label = value
+}
+
+fun main() -> int {
+    print("$counter $label")
+    bump()
+    bump()
+    counter += 10
+    print("$counter")
+    relabel("done")
+    print("$label")
+    return 0
+}

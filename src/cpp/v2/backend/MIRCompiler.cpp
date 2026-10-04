@@ -6,7 +6,7 @@
 
 using namespace loxis::v2;
 
-void MIRCompiler::recordSource(const SourceLoc& loc) {
+void MIRCompiler::recordSource(const SourceLocation& loc) {
     if (loc.file.empty() || loc.line == 0) return;
     uint32_t offset = static_cast<uint32_t>(m_chunk.offset());
     if (!m_chunk.sourceMap.empty() && m_chunk.sourceMap.back().offset == offset)
@@ -920,6 +920,25 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
             emitReg(baseReg);
             emitReg(offReg);
             emitReg(placeReg);
+        } else if constexpr (std::is_same_v<T, RvIndexStore>) {
+            uint16_t baseReg = localToReg(place);
+            uint16_t idxReg = 250;
+            uint16_t offReg = 251;
+            uint16_t nineReg = 252;
+            uint16_t valReg = 253;
+            emitOperandToReg(v.idx, idxReg);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+            emitReg(nineReg);
+            emitImm(9);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Mul));
+            emitReg(idxReg);
+            emitReg(nineReg);
+            emitReg(offReg);
+            emitOperandToReg(v.value, valReg);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::HStore));
+            emitReg(baseReg);
+            emitReg(offReg);
+            emitReg(valReg);
         } else if constexpr (std::is_same_v<T, RvIsCheck>) {
             uint16_t objReg = localToReg(v.obj);
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::IsA));
@@ -930,6 +949,14 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::GLoad));
             emitImm(static_cast<int64_t>(v.slot));
             emitReg(placeReg);
+        } else if constexpr (std::is_same_v<T, RvGlobalStore>) {
+            // The destination local is a scratch; GStore consumes the value and
+            // produces nothing.
+            uint16_t valReg = localToReg(place);
+            emitOperandToReg(v.value, valReg);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::GStore));
+            emitImm(static_cast<int64_t>(v.slot));
+            emitReg(valReg);
         } else if constexpr (std::is_same_v<T, RvTypeId>) {
             // TypeOf obj, result
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::TypeOf));

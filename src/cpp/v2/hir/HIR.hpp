@@ -148,7 +148,7 @@ struct HirExpr : std::variant<
     HirIs, HirIsNot, HirNull, HirClosure, HirEnumCtor
 > {
     using variant::variant;
-    SourceLoc loc;
+    SourceLocation loc;
 };
 
 // ============================================================
@@ -171,6 +171,10 @@ struct HirFn {
     CoreTyPtr ret;
     HirExprPtr body;
     uint32_t closureEnvTypeId = ~0u;
+    // Set when this body is the initializer for a top-level `var`: returning its
+    // value arms the runtime's "store into this global slot" preamble, the same
+    // mechanism singleton objects use.
+    uint32_t globalSlot = ~0u;
 };
 
 struct HirCtorParam {

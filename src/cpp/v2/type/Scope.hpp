@@ -16,6 +16,10 @@ struct Symbol {
     void* node;
     TyPtr ty;
     bool isTopLevelProperty = false;
+    // True for a `var` binding, false for `val`/`const`/parameters/`this`.
+    // Assignment targets are validated against this, so `val x = 1; x = 2` is
+    // rejected instead of silently rebinding.
+    bool isMutable = false;
     uint32_t globalSlot = ~0u;
     std::vector<std::pair<void*, TyPtr>> overloads;
 };

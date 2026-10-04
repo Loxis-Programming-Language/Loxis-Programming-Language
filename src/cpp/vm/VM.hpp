@@ -110,8 +110,6 @@ private:
 
 	bool tryBuildJit();
 
-	bool decodeOperandAt(uint32_t &ip, JitOperand &out) const;
-
 	bool resolveJitTarget(uint32_t byteOffset, size_t &target) const;
 
 	int runJit(int maxExecuteCount);

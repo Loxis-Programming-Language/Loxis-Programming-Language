@@ -130,6 +130,22 @@ fun replace(value: str, needle: str, replacement: str) -> str {
     return join(splitText(value, needle), replacement)
 }
 
+// Repeats `value` `count` times. Built by doubling rather than appending one
+// copy at a time: `out + value` copies the whole accumulator, so the naive loop
+// is quadratic in the result length while this stays linear.
+fun repeat(value: str, count: int) -> str {
+    require(count >= 0, "repeat count must not be negative")
+    var out = ""
+    var chunk = value
+    var n = count
+    while n > 0 {
+        if n % 2 == 1 { out = out + chunk }
+        n = n / 2
+        if n > 0 { chunk = chunk + chunk }
+    }
+    return out
+}
+
 // Encodes one Unicode scalar as UTF-8. chr itself is a byte operation.
 fun encodeCodePoint(code: int) -> str {
     require(code >= 0 && code <= 1114111 && (code < 55296 || code > 57343), "invalid Unicode scalar")
@@ -184,11 +200,34 @@ fun str.endsWith(suffix: str) -> bool { return endsWith(this, suffix) }
 fun str.contains(needle: str) -> bool { return contains(this, needle) }
 fun str.indexOf(needle: str) -> int { return indexOf(this, needle) }
 fun str.slice(start: int, count: int) -> str { return slice(this, start, count) }
+fun str.repeat(count: int) -> str { return repeat(this, count) }
+
+// Kotlin's joinToString: like join, but renders each element on the way.
+// It lives here rather than with the list methods because it needs `join`, and
+// list.lx cannot import text.lx -- text.lx already imports list.lx.
+fun joinToString<T>(items: list<T>, separator: str, render: fun(T) -> str) -> str {
+    val parts = list<str>()
+    var i = 0
+    while i < items.size() {
+        parts.push(render(items.get(i)))
+        i += 1
+    }
+    return join(parts, separator)
+}
 fun str.codePoints() -> Result<list<int>, str> { return decodeCodePoints(this) }
 fun str.toIntResult() -> Result<int, str> { return tryParseInt(this) }
 fun str.toDoubleResult() -> Result<double, str> { return tryParseDouble(this) }
 fun int.toString() -> str { return intToString(this) }
 fun double.toString() -> str { return doubleToString(this) }
+// print accepts a bool directly, but there was no bool toString -- free or
+// method -- so building a string out of one (`"x" + toString(flag)`) did not
+// compile, while `if`/`when` conditions and the like worked fine.
+fun boolToString(value: bool) -> str {
+    if (value) { return "true" }
+    return "false"
+}
+fun toString(value: bool) -> str { return boolToString(value) }
+fun bool.toString() -> str { return boolToString(this) }
 
 // Splits on ASCII whitespace and discards empty fields.
 fun str.words() -> list<str> {

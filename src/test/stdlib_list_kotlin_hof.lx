@@ -1,0 +1,65 @@
+// Kotlin-flavoured higher-order helpers on list<T>.
+//
+// These call the lambda directly from a while loop rather than from inside
+// another closure: invoking a function-typed parameter from within a closure
+// currently yields 0, and writing to a captured local from a closure is a
+// silent no-op, so the accumulate-into-a-captured-variable style that reads
+// naturally in Kotlin does not work here yet.
+import loxis.text
+import loxis.collections.list
+
+fun show(items: list<int>) -> str {
+    return joinToString(items, ",", { v -> toString(v) })
+}
+
+fun main() -> int {
+    val xs = list<int>()
+    var i = 1
+    while i <= 5 { xs.push(i); i += 1 }
+
+    print("map " + show(xs.map({ x -> x * x })))
+    print("mapIndexed " + show(xs.mapIndexed({ i, x -> i * 10 + x })))
+    print("filter " + show(xs.filter({ x -> x % 2 == 1 })))
+    print("filterIndexed " + show(xs.filterIndexed({ i, x -> i % 2 == 0 })))
+    print("flatMap " + show(xs.flatMap({ x -> val p = list<int>(); p.push(x); p.push(-x); p })))
+
+    // chunked is a free function: the same signature as a method makes the
+    // compiler hang (see the note in list.lx).
+    val chunks = chunked(xs, 2)
+    print("chunked " + toString(chunks.size()) + " " + show(chunks.get(0)) + " " + show(chunks.get(2)))
+
+    print("takeLast " + show(xs.takeLast(2)))
+    print("dropLast " + show(xs.dropLast(2)))
+    print("drop " + show(xs.drop(3)))
+    print("takeWhile " + show(xs.takeWhile({ x -> x < 3 })))
+    print("dropWhile " + show(xs.dropWhile({ x -> x < 3 })))
+
+    val dup = list<int>()
+    dup.push(1) ; dup.push(2) ; dup.push(1) ; dup.push(3) ; dup.push(2)
+    print("distinct " + show(dup.distinct()))
+    print("distinctBy " + show(dup.distinctBy({ x -> x % 2 })))
+
+    print("indexOfFirst " + toString(xs.indexOfFirst({ x -> x % 2 == 0 })))
+    print("indexOfLast " + toString(xs.indexOfLast({ x -> x % 2 == 0 })))
+    print("none " + toString(xs.none({ x -> x > 99 })))
+    print("reduce " + toString(xs.reduce({ a, b -> a + b })))
+    print("lastOrNull " + toString(xs.lastOrNull().getOrElse(0)))
+    print("lastOrNull empty " + toString(list<int>().lastOrNull().getOrElse(-1)))
+
+    // free-function mirrors
+    print("mirrors " + show(listMapIndexed(xs, { i, x -> i + x })))
+    print("listReduce " + toString(listReduce(xs, { a, b -> a * b })))
+    print("listNone " + toString(listNone(xs, { x -> x < 0 })))
+
+    // flatten over a list of lists
+    val nested = list<list<int>>()
+    val pieces = chunked(xs, 2)
+    var c = 0
+    while c < pieces.size() { nested.push(pieces.get(c)); c += 1 }
+    print("flatten " + show(flatten(nested)))
+
+    print("forEachIndexed")
+    xs.forEachIndexed({ i, x -> print(toString(i) + ":" + toString(x)) })
+    print("done")
+    return 0
+}

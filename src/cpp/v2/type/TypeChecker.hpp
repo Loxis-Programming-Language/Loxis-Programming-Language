@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include "../AST.hpp"
+#include "../dump/Trace.hpp"
 #include "Scope.hpp"
 #include "Type.hpp"
 
@@ -15,13 +16,17 @@ public:
     bool checkModule(Module& mod);
     const std::vector<Diagnostic>& getErrors() const { return errors; }
     Scope* getScope() const { return rootScope; }
+
+    // --trace: per-declaration and per-lookup logging. Null means off.
+    void setTrace(const Trace* trace) { m_trace = trace; }
 private:
+    const Trace* m_trace = nullptr;
     std::unique_ptr<Scope> rootOwner;
     Scope* rootScope = nullptr;
     uint32_t inferCounter = 0;
     std::vector<Diagnostic> errors;
-    SourceLoc currentLoc;
-    SourceLoc currentEndLoc;
+    SourceLocation currentLoc;
+    SourceLocation currentEndLoc;
     TyPtr currentRetTy = nullptr;
     uint32_t closureCounter = 0;
     uint32_t closureEnvTypeCounter = 0;
@@ -69,6 +74,26 @@ private:
     bool isSubtype(TyPtr a, TyPtr b);
     bool isPrimitiveCastable(TyPtr from, TyPtr to);
     bool isMutablePlace(ExprPtr e, Scope* sc);
+    // Addressable, ignoring whether the binding itself is reassignable. Used for
+    // the base of a field/index assignment, where reference semantics mean a
+    // `val` binding can still have its referent mutated.
+    bool isPlace(ExprPtr e, Scope* sc);
+
+    // Every stage after the parser recurses over the expression tree, and the
+    // parser builds some trees iteratively -- a long binary chain is arbitrarily
+    // deep without ever recursing. Past this limit checkExpr stops descending and
+    // returns an error type, so the recursion unwinds instead of walking off the
+    // end of the native stack (which aborts with 0xC00000FD and no diagnostic).
+    static constexpr size_t kMaxExprDepth = 1024;
+    size_t m_checkDepth = 0;
+    bool m_depthErrorReported = false;
+
+    // Non-zero while checking an expression that stands alone as a statement.
+    // Such an expression discards its value, so a `when` there is allowed to be
+    // non-exhaustive the way Kotlin allows it; anywhere else the value is
+    // consumed, and an unhandled variant would return whatever the arm left
+    // behind instead of being reported.
+    size_t m_stmtExprDepth = 0;
 
     // Class/interface helpers
     const MethodInfo* lookupMethod(TyPtr recv, const std::string& name, size_t arity);

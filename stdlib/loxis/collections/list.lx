@@ -136,6 +136,17 @@ class list<T>() {
         return true
     }
 
+    // Worth having separately from `any`: it needs no closure allocation, and
+    // it is the operation every hand-rolled sequence scan in a demo reaches for.
+    fun contains(value: T) -> bool {
+        var i = 0
+        while i < this.len {
+            if this.get(i) == value { return true }
+            i += 1
+        }
+        return false
+    }
+
     fun find(pred: fun(T) -> bool) -> Optional<T> {
         var i = 0
         while i < this.len {
@@ -151,8 +162,181 @@ class list<T>() {
         return optionalValue<T>(this.get(0))
     }
 
+    fun lastOrNull() -> Optional<T> {
+        if this.len == 0 { return optionalEmpty<T>() }
+        return optionalValue<T>(this.get(this.len - 1))
+    }
+
     fun sortBy(before: fun(T, T) -> bool) -> unit {
         listSortBy<T>(this, before)
+    }
+
+    // ---- index-aware forms ----
+    //
+    // `mapIndexed`/`filterIndexed`/`forEachIndexed` pass the position first, as
+    // in Kotlin: `{ i, value -> ... }`.
+
+    fun forEachIndexed(f: fun(int, T) -> unit) -> unit {
+        var i = 0
+        while i < this.len { f(i, this.get(i)); i += 1 }
+    }
+
+    fun mapIndexed<U>(f: fun(int, T) -> U) -> list<U> {
+        val out = listWithCapacity<U>(this.len)
+        var i = 0
+        while i < this.len { out.push(f(i, this.get(i))); i += 1 }
+        return out
+    }
+
+    fun filterIndexed(pred: fun(int, T) -> bool) -> list<T> {
+        val out = listWithCapacity<T>(this.len)
+        var i = 0
+        while i < this.len {
+            val value = this.get(i)
+            if pred(i, value) { out.push(value) }
+            i += 1
+        }
+        return out
+    }
+
+    // ---- reshaping ----
+
+    fun flatMap<U>(f: fun(T) -> list<U>) -> list<U> {
+        val out = list<U>()
+        var i = 0
+        while i < this.len {
+            val inner = f(this.get(i))
+            var j = 0
+            while j < inner.size() {
+                out.push(inner.get(j))
+                j += 1
+            }
+            i += 1
+        }
+        return out
+    }
+
+
+    // ---- selection ----
+    //
+    // Both are quadratic: they scan what they have kept so far. Fine for the
+    // sizes this runs at, and it keeps them closure-free.
+
+    fun distinct() -> list<T> {
+        val out = list<T>()
+        var i = 0
+        while i < this.len {
+            val value = this.get(i)
+            var seen = false
+            var j = 0
+            while j < out.size() {
+                if out.get(j) == value { seen = true }
+                j += 1
+            }
+            if !seen { out.push(value) }
+            i += 1
+        }
+        return out
+    }
+
+    fun distinctBy<K>(f: fun(T) -> K) -> list<T> {
+        val keys = list<K>()
+        val out = list<T>()
+        var i = 0
+        while i < this.len {
+            val value = this.get(i)
+            val key = f(value)
+            var seen = false
+            var j = 0
+            while j < keys.size() {
+                if keys.get(j) == key { seen = true }
+                j += 1
+            }
+            if !seen {
+                keys.push(key)
+                out.push(value)
+            }
+            i += 1
+        }
+        return out
+    }
+
+    // ---- search ----
+
+    // -1 when nothing matches, like indexOf.
+    fun indexOfFirst(pred: fun(T) -> bool) -> int {
+        var i = 0
+        while i < this.len {
+            if pred(this.get(i)) { return i }
+            i += 1
+        }
+        return -1
+    }
+
+    fun indexOfLast(pred: fun(T) -> bool) -> int {
+        var i = this.len - 1
+        while i >= 0 {
+            if pred(this.get(i)) { return i }
+            i -= 1
+        }
+        return -1
+    }
+
+    fun none(pred: fun(T) -> bool) -> bool {
+        return !this.any(pred)
+    }
+
+    // Unlike `fold` there is no initial value, so an empty list has no answer
+    // to give; use fold for that case.
+    fun reduce(f: fun(T, T) -> T) -> T {
+        require(this.len > 0, "reduce on an empty list")
+        var acc = this.get(0)
+        var i = 1
+        while i < this.len { acc = f(acc, this.get(i)); i += 1 }
+        return acc
+    }
+
+    // ---- slicing ----
+    //
+    // Out-of-range counts clamp rather than fail, as in Kotlin.
+
+    fun drop(count: int) -> list<T> {
+        require(count >= 0, "negative drop count")
+        val start = min(count, this.len)
+        val out = listWithCapacity<T>(this.len - start)
+        var i = start
+        while i < this.len { out.push(this.get(i)); i += 1 }
+        return out
+    }
+
+    fun dropLast(count: int) -> list<T> {
+        require(count >= 0, "negative drop count")
+        return this.take(max(0, this.len - count))
+    }
+
+    fun takeLast(count: int) -> list<T> {
+        require(count >= 0, "negative take count")
+        return this.drop(max(0, this.len - count))
+    }
+
+    fun takeWhile(pred: fun(T) -> bool) -> list<T> {
+        val out = list<T>()
+        var i = 0
+        while i < this.len {
+            if !pred(this.get(i)) { return out }
+            out.push(this.get(i))
+            i += 1
+        }
+        return out
+    }
+
+    fun dropWhile(pred: fun(T) -> bool) -> list<T> {
+        var i = 0
+        while i < this.len {
+            if !pred(this.get(i)) { break }
+            i += 1
+        }
+        return this.drop(i)
     }
 
     fun take(count: int) -> list<T> {
@@ -349,4 +533,113 @@ fun listFind<T>(items: list<T>, pred: fun(T) -> bool) -> Optional<T> {
         i += 1
     }
     return optionalEmpty<T>()
+}
+
+// A trailing shorter chunk is kept, matching Kotlin.
+//
+// This is a free function rather than a list method on purpose: a method on a
+// generic class whose signature nests the class's own parameter inside another
+// generic -- `fun chunked() -> list<list<T>>` -- makes monomorphization recurse
+// without bound, and the compiler hangs. The same signature as a free function
+// is fine.
+fun chunked<T>(items: list<T>, size: int) -> list<list<T>> {
+    require(size > 0, "chunk size must be positive")
+    val out = list<list<T>>()
+    var i = 0
+    while i < items.size() {
+        val chunk = list<T>()
+        var j = i
+        while j < items.size() && j < i + size {
+            chunk.push(items.get(j))
+            j += 1
+        }
+        out.push(chunk)
+        i += size
+    }
+    return out
+}
+
+// Free-function mirrors of the list methods above, matching the rest of this
+// file. Each just forwards so a call reads either way.
+
+fun listForEachIndexed<T>(items: list<T>, f: fun(int, T) -> unit) -> unit {
+    items.forEachIndexed(f)
+}
+
+fun listMapIndexed<T, U>(items: list<T>, f: fun(int, T) -> U) -> list<U> {
+    return items.mapIndexed(f)
+}
+
+fun listFilterIndexed<T>(items: list<T>, pred: fun(int, T) -> bool) -> list<T> {
+    return items.filterIndexed(pred)
+}
+
+fun listFlatMap<T, U>(items: list<T>, f: fun(T) -> list<U>) -> list<U> {
+    return items.flatMap(f)
+}
+
+
+fun listDistinct<T>(items: list<T>) -> list<T> {
+    return items.distinct()
+}
+
+fun listDistinctBy<T, K>(items: list<T>, f: fun(T) -> K) -> list<T> {
+    return items.distinctBy(f)
+}
+
+fun listIndexOfFirst<T>(items: list<T>, pred: fun(T) -> bool) -> int {
+    return items.indexOfFirst(pred)
+}
+
+fun listIndexOfLast<T>(items: list<T>, pred: fun(T) -> bool) -> int {
+    return items.indexOfLast(pred)
+}
+
+fun listLastOrNull<T>(items: list<T>) -> Optional<T> {
+    return items.lastOrNull()
+}
+
+fun listNone<T>(items: list<T>, pred: fun(T) -> bool) -> bool {
+    return items.none(pred)
+}
+
+fun listReduce<T>(items: list<T>, f: fun(T, T) -> T) -> T {
+    return items.reduce(f)
+}
+
+fun listDrop<T>(items: list<T>, count: int) -> list<T> {
+    return items.drop(count)
+}
+
+fun listDropLast<T>(items: list<T>, count: int) -> list<T> {
+    return items.dropLast(count)
+}
+
+fun listTakeLast<T>(items: list<T>, count: int) -> list<T> {
+    return items.takeLast(count)
+}
+
+fun listTakeWhile<T>(items: list<T>, pred: fun(T) -> bool) -> list<T> {
+    return items.takeWhile(pred)
+}
+
+fun listDropWhile<T>(items: list<T>, pred: fun(T) -> bool) -> list<T> {
+    return items.dropWhile(pred)
+}
+
+// Cannot be a method: `this` would have to be `list<list<U>>`, and there is no
+// way to declare a method on one particular instantiation.
+fun flatten<U>(items: list<list<U>>) -> list<U> {
+    val out = list<U>()
+    var i = 0
+    while i < items.size() {
+        val inner = items.get(i)
+        var j = 0
+        while j < inner.size() {
+            out.push(inner.get(j))
+            j += 1
+        }
+        i += 1
+    }
+    return out
 }

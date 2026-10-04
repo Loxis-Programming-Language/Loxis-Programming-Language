@@ -1,0 +1,208 @@
+// Snake.
+//
+// Input is blocking and has no key-repeat, so the snake advances one cell per
+// keypress rather than on a timer: press w/a/s/d (or an arrow key) to take a
+// step, q to quit. Eating food grows the snake by one and scores a point.
+//
+// The first argument is the instruction budget, the second (after `--`) seeds the
+// game: `snake.lx 50000000 -- 12345`. The default budget of 1,000,000 runs out
+// after roughly 450 steps and reports "instruction limit exceeded", so pass a
+// bigger one for a long game.
+//
+// Needs a real console: the board is drawn in place with ANSI escapes, and the
+// driver only turns on virtual-terminal processing for stdout when it is a tty.
+import loxis.io
+import loxis.text
+import loxis.time
+import loxis.system
+import loxis.collections.list
+
+val W = 24
+val H = 16
+
+// MINSTD. A mutable global, so the state can just be updated in place.
+var rngState = 1
+
+fun randNext(bound: int) -> int {
+    var s = rngState * 48271 % 2147483647
+    if s <= 0 { s = 1 }
+    rngState = s
+    return s % bound
+}
+
+fun spawn(body: list<int>) -> int {
+    while true {
+        val p = randNext(W * H)
+        if !body.contains(p) { return p }
+    }
+}
+
+// Cursor to board cell (x, y). The frame is one row above and one column left of
+// the playfield, and ANSI rows and columns are 1-based.
+fun at(x: int, y: int) -> str {
+    return "\x1b[${y + 2};${x + 2}H"
+}
+
+fun scoreLine(score: int) -> str {
+    return "\x1b[${H + 2};1Hscore $score   w/a/s/d or arrows, q quits\x1b[K"
+}
+
+// Full repaint of the board. Only used once, to set the screen up.
+//
+// Building the frame as one string per row and concatenating ~20 of them keeps
+// the cost linear-ish: `join` is `out = out + item`, so joining one big list of
+// cells would copy the whole string once per cell.
+fun drawBoard(body: list<int>, food: int, score: int) -> str {
+    val border = "+" + "-".repeat(W) + "+\n"
+    val blank = "|" + " ".repeat(W) + "|\n"
+    var frame = "\x1b[2J\x1b[H" + border
+    var y = 0
+    while y < H {
+        // Deciding row by row which ones carry anything keeps the empty ones
+        // free: they are the bulk of the board and cost one append each.
+        var occupied = food / W == y
+        var i = 0
+        while i < body.size() {
+            if body.get(i) / W == y { occupied = true }
+            i = i + 1
+        }
+
+        if !occupied {
+            frame = frame + blank
+        } else {
+            val row = list<str>()
+            row.push("|")
+            var x = 0
+            while x < W {
+                val pos = y * W + x
+                if pos == food {
+                    row.push("*")
+                } else if body.contains(pos) {
+                    row.push("#")
+                } else {
+                    row.push(" ")
+                }
+                x = x + 1
+            }
+            row.push("|\n")
+            frame = frame + join(row, "")
+        }
+        y = y + 1
+    }
+    frame = frame + border
+    frame = frame + scoreLine(score)
+    return frame
+}
+
+// Blocks for one keypress and returns the direction it asks for, or -1 to quit.
+// Turning straight back onto yourself is ignored rather than fatal.
+fun readDirection(current: int) -> int {
+    while true {
+        val c = readChar()
+        if c < 0 { return -1 }
+        if c == 10 || c == 13 { continue }
+        if c == 113 || c == 81 { return -1 }
+
+        var want = -1
+        if c == 119 || c == 87 { want = 0 }
+        else if c == 100 || c == 68 { want = 1 }
+        else if c == 115 || c == 83 { want = 2 }
+        else if c == 97 || c == 65 { want = 3 }
+        else if c == 27 {
+            // arrow keys arrive as ESC [ A/B/C/D
+            val second = readChar()
+            val third = readChar()
+            if second == 91 {
+                if third == 65 { want = 0 }
+                else if third == 67 { want = 1 }
+                else if third == 66 { want = 2 }
+                else if third == 68 { want = 3 }
+            }
+        }
+
+        if want < 0 { continue }
+        if want == (current + 2) % 4 { continue }
+        return want
+    }
+}
+
+fun main() -> int {
+    // An optional seed argument makes a game reproducible: `snake.lx 12345`.
+    val args = arguments()
+    var seed = 2147483646 - (unixMillis() % 2147483645)
+    if args.size() > 0 { seed = s2i(args.get(0)) }
+
+    rngState = seed
+
+    val body = list<int>()
+    body.push(8 * W + 6)
+    body.push(8 * W + 5)
+    body.push(8 * W + 4)
+
+    var dir = 1
+    var score = 0
+    var food = spawn(body)
+
+    write(drawBoard(body, food, score))
+
+    var running = true
+    while running {
+        val next = readDirection(dir)
+        if next < 0 {
+            running = false
+        } else {
+            dir = next
+            val head = body.get(0)
+            var hx = head % W
+            var hy = head / W
+            if dir == 0 { hy = hy - 1 }
+            else if dir == 1 { hx = hx + 1 }
+            else if dir == 2 { hy = hy + 1 }
+            else { hx = hx - 1 }
+
+            if hx < 0 || hx >= W || hy < 0 || hy >= H {
+                running = false
+            } else {
+                val np = hy * W + hx
+                val growing = np == food
+
+                // Unless we are growing, the tail vacates its cell on this step,
+                // so moving into it is legal.
+                var limit = body.size() - 1
+                if growing { limit = body.size() }
+
+                var i = 0
+                var hit = false
+                while i < limit {
+                    if body.get(i) == np { hit = true }
+                    i = i + 1
+                }
+
+                if hit {
+                    running = false
+                } else {
+                    body.insert(0, np)
+                    write(at(hx, hy) + "#")
+
+                    if growing {
+                        score = score + 1
+                        food = spawn(body)
+                        write(at(food % W, food / W) + "*")
+                        // Only on a score change: this string is the most
+                        // expensive one to build, and it rarely changes.
+                        write(scoreLine(score))
+                    }
+
+                    if !growing {
+                        val tail = body.removeAt(body.size() - 1)
+                        write(at(tail % W, tail / W) + " ")
+                    }
+                }
+            }
+        }
+    }
+
+    write("\x1b[2J\x1b[H")
+    print("Game over. Score: $score")
+    return 0
+}

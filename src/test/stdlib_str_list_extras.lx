@@ -1,0 +1,30 @@
+// str.repeat, list.contains and bool toString.
+//
+// These were the primitives Snake had to hand-roll (repeatChar, contains); the
+// bool overload was missing even though `print` was documented to accept a bool.
+//
+// A bool has no VM tag, so print and string templates both special-case it
+// statically. Printing a bool directly and via toString must therefore agree.
+import loxis.text
+import loxis.collections.list
+
+fun main() -> int {
+    print("ab".repeat(3))
+    print("-".repeat(0) + "|")
+
+    val xs = list<int>()
+    xs.push(1)
+    xs.push(2)
+    print(xs.contains(2))
+    print(xs.contains(9))
+    print(toString(xs.contains(2)))
+
+    val names = list<str>()
+    names.push("a")
+    names.push("b")
+    print(join(names, ","))
+
+    print(toString(1 < 2))
+    print("${1 < 2} ${2 < 1}")
+    return 0
+}

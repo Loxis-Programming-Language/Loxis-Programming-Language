@@ -4,6 +4,42 @@
 
 namespace loxis::v2 {
 
+namespace {
+// HirExpr is a bare variant and almost every alternative carries its own `ty`
+// rather than a shared field, so reading the type of an arbitrary node means
+// visiting. Alternatives without one (break, continue, ...) answer null.
+CoreTyPtr typeOfHirExpr(const HirExprPtr& e) {
+    if (!e) return nullptr;
+    return std::visit([](auto&& n) -> CoreTyPtr {
+        using T = std::decay_t<decltype(n)>;
+        if constexpr (requires { n.ty; }) return n.ty;
+        else return nullptr;
+    }, *e);
+}
+
+bool isBoolTyped(const HirExprPtr& e) {
+    CoreTyPtr t = typeOfHirExpr(e);
+    return t && t->kind() == TyKind::Bool;
+}
+
+// A bool has no runtime tag of its own -- it is an int 0/1 -- so anything that
+// stringifies by tag (the ToStr opcode, print) renders `true` as "1". Pick the
+// text statically instead. Caller must have checked isBoolTyped.
+HirExprPtr boolAsText(const HirExprPtr& e) {
+    return std::make_shared<HirExpr>(HirIf{
+        e,
+        std::make_shared<HirExpr>(HirLit{mkStr(), std::string("true")}),
+        std::make_shared<HirExpr>(HirLit{mkStr(), std::string("false")}),
+        mkStr()
+    });
+}
+
+// The builtins that stringify their argument by runtime tag.
+bool isValuePrintingBuiltin(const std::string& name) {
+    return name == "print" || name == "println" || name == "write" || name == "error";
+}
+} // namespace
+
 void HirBuilder::pushGenerics(const std::vector<GenericParam>& params) {
     size_t n = params.size();
     for (const auto& g : params) {
@@ -341,8 +377,16 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
                 }
             }
             if (typeArgs.empty()) typeArgs = e.resolvedTypeArgs;
+            const bool printsByTag = staticName && isValuePrintingBuiltin(*staticName);
             std::vector<HirExprPtr> args;
-            for (const auto& a : e.args) args.push_back(buildExpr(a));
+            for (const auto& a : e.args) {
+                HirExprPtr arg = buildExpr(a);
+                // print/println/write/error take any printable type and render it
+                // by its runtime tag, which loses a bool's identity. Hand them the
+                // text instead so `print(flag)` says true rather than 1.
+                if (printsByTag && isBoolTyped(arg)) arg = boolAsText(arg);
+                args.push_back(std::move(arg));
+            }
             return std::make_shared<HirExpr>(HirCall{
                 buildExpr(e.func), staticName, e.ctorLabel, std::move(args),
                 std::move(typeArgs), e.resolvedTy ? e.resolvedTy : mkInt()
@@ -550,9 +594,13 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
                     });
                 } else {
                     auto expr = buildExpr(std::get<ExprPtr>(part));
-                    partExpr = std::make_shared<HirExpr>(HirUnary{
-                        MirUnaryOp::ToStr, expr, mkStr()
-                    });
+                    if (isBoolTyped(expr)) {
+                        partExpr = boolAsText(expr);
+                    } else {
+                        partExpr = std::make_shared<HirExpr>(HirUnary{
+                            MirUnaryOp::ToStr, expr, mkStr()
+                        });
+                    }
                 }
                 if (!result) {
                     result = partExpr;
@@ -616,6 +664,38 @@ HirExprPtr HirBuilder::makeBlockWithTail(HirExprPtr first, HirExprPtr tail) {
     return std::make_shared<HirExpr>(HirBlock{std::move(stmts), std::move(tail), mkUnit()});
 }
 
+HirExprPtr HirBuilder::makeSeqBlock(std::vector<HirExprPtr> stmts, HirExprPtr tail) {
+    std::vector<HirStmtPtr> out;
+    out.reserve(stmts.size());
+    for (auto& s : stmts) {
+        if (s) out.push_back(std::make_shared<HirStmt>(HirStmtExpr{std::move(s)}));
+    }
+    return std::make_shared<HirExpr>(HirBlock{std::move(out), std::move(tail), mkUnit()});
+}
+
+HirExprPtr HirBuilder::makeBreakIf(HirExprPtr cond) {
+    // Unlabelled on purpose: this leaves the loop being built, whatever it is
+    // nested in.
+    return std::make_shared<HirExpr>(HirIf{
+        std::move(cond),
+        std::make_shared<HirExpr>(HirBreak{std::nullopt, nullptr, mkUnit()}),
+        nullptr, mkUnit()});
+}
+
+HirExprPtr HirBuilder::makeForLoopBody(HirExprPtr idxPath, HirExprPtr incIdx, HirExprPtr exitCond,
+                                       const PatPtr& pat, HirExprPtr elem, HirExprPtr body,
+                                       const std::optional<std::string>& label) {
+    // The index is stepped at the TOP of the body, not in the tail. `continue`
+    // jumps back to the loop head, which is now the step, so it advances like a
+    // normal iteration; with the step in the tail, `continue` skipped it and the
+    // index never moved, so the loop ran until the instruction budget stopped it.
+    // Callers therefore start the index one below the first element.
+    (void)idxPath;
+    HirExprPtr loopBody = makeSeqBlock({std::move(incIdx), makeBreakIf(std::move(exitCond))},
+                                       wrapWithPat(pat, std::move(elem), std::move(body)));
+    return std::make_shared<HirExpr>(HirLoop{std::move(loopBody), label, mkUnit()});
+}
+
 HirExprPtr HirBuilder::wrapWithPat(const PatPtr& pat, HirExprPtr elem, HirExprPtr body) {
     if (!pat) return body;
     return std::visit([&](const auto& p) -> HirExprPtr {
@@ -646,31 +726,36 @@ HirExprPtr HirBuilder::desugarFor(const ExprFor& e) {
         const auto& range = std::get<ExprRange>(*e.iter);
         HirExprPtr lo = buildExpr(range.start);
         HirExprPtr hi = buildExpr(range.end);
-        MirBinOp cmp = e.iterKind == ExprFor::IterKind::IntRangeInclusive
-            ? MirBinOp::Le : MirBinOp::Lt;
-        HirExprPtr cond = makeBin(cmp, idxPath, hi);
-        HirExprPtr loopBody = wrapWithPat(e.pat, idxPath, makeBlockWithTail(body, incIdx()));
-        return makeLet("__for_i", lo, makeWhile(cond, loopBody, e.label));
+        // Leave once the index is past the end, so the lower bound is not
+        // re-tested: `0..5` steps out at 5, `0..=3` at 4.
+        MirBinOp exitOp = e.iterKind == ExprFor::IterKind::IntRangeInclusive
+            ? MirBinOp::Gt : MirBinOp::Ge;
+        HirExprPtr exitCond = makeBin(exitOp, idxPath, hi);
+        HirExprPtr loop = makeForLoopBody(idxPath, incIdx(), exitCond, e.pat, idxPath, body, e.label);
+        // One below `lo`, so the step at the top of the body lands on `lo` first.
+        HirExprPtr init = makeBin(MirBinOp::Sub, lo, one);
+        return makeLet("__for_i", init, loop);
     }
 
     if (e.iterKind == ExprFor::IterKind::Array) {
         HirExprPtr lenLit = makeIntLit(static_cast<int64_t>(e.arrayLen));
         HirExprPtr arrPath = std::make_shared<HirExpr>(HirPath{"__for_arr", {}, mkInt()});
         HirExprPtr elem = makeIndex(arrPath, idxPath);
-        HirExprPtr cond = makeBin(MirBinOp::Lt, idxPath, lenLit);
-        HirExprPtr loopBody = wrapWithPat(e.pat, elem, makeBlockWithTail(body, incIdx()));
-        HirExprPtr withIdx = makeLet("__for_i", makeIntLit(0), makeWhile(cond, loopBody, e.label));
+        HirExprPtr exitCond = makeBin(MirBinOp::Ge, idxPath, lenLit);
+        HirExprPtr loop = makeForLoopBody(idxPath, incIdx(), exitCond, e.pat, elem, body, e.label);
+        HirExprPtr withIdx = makeLet("__for_i", makeIntLit(-1), loop);
         return makeLet("__for_arr", iterExpr, withIdx);
     }
 
     if (e.iterKind == ExprFor::IterKind::Iterable) {
         HirExprPtr itPath = std::make_shared<HirExpr>(HirPath{"__for_it", {}, iterTy});
         std::string qn = e.iterClassName.empty() ? "size" : e.iterClassName + ".size";
+        // Re-evaluated each pass, as it was when this was the while condition.
         HirExprPtr sizeCall = makeMethodCall(itPath, qn, {});
         HirExprPtr elem = makeMethodCall(itPath, e.iterClassName + ".get", {idxPath});
-        HirExprPtr cond = makeBin(MirBinOp::Lt, idxPath, sizeCall);
-        HirExprPtr loopBody = wrapWithPat(e.pat, elem, makeBlockWithTail(body, incIdx()));
-        HirExprPtr withIdx = makeLet("__for_i", makeIntLit(0), makeWhile(cond, loopBody, e.label));
+        HirExprPtr exitCond = makeBin(MirBinOp::Ge, idxPath, sizeCall);
+        HirExprPtr loop = makeForLoopBody(idxPath, incIdx(), exitCond, e.pat, elem, body, e.label);
+        HirExprPtr withIdx = makeLet("__for_i", makeIntLit(-1), loop);
         return makeLet("__for_it", iterExpr, withIdx, iterTy);
     }
 
@@ -880,11 +965,17 @@ HirModule HirBuilder::build(const Module& mod) {
                 }
             } else if constexpr (std::is_same_v<T, ItemVar>) {
                 if (i.init) {
-                    HirFn getter;
-                    getter.name = "__var_" + i.name;
-                    getter.ret = i.ty ? astType(i.ty) : mkInt();
-                    getter.body = buildExpr(i.init);
-                    m_generatedFns.push_back(std::move(getter));
+                    HirFn init;
+                    init.name = "__var_" + i.name;
+                    init.ret = i.ty ? astType(i.ty) : mkInt();
+                    init.body = buildExpr(i.init);
+                    // A top-level `var` owns a global slot. Its initializer runs
+                    // once at startup and the result is stored into that slot;
+                    // reads and writes then go through GLoad/GStore rather than
+                    // re-evaluating the initializer the way the `__var_` getter
+                    // used to.
+                    if (i.globalSlot != ~0u) init.globalSlot = i.globalSlot;
+                    m_generatedFns.push_back(std::move(init));
                 }
             } else if constexpr (std::is_same_v<T, ItemConst>) {
                 if (i.init) {

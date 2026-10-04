@@ -262,8 +262,8 @@ struct Expr : std::variant<
     ExprIs, ExprIsNot, ExprNull, ExprStringTemplate
 > {
     using variant::variant;
-    SourceLoc loc;
-    SourceLoc endLoc;
+    SourceLocation loc;
+    SourceLocation endLoc;
 };
 
 // ============================================================
@@ -417,6 +417,9 @@ struct ItemVar {
     Visibility visibility = Visibility::Public;
     TypePtr ty;
     ExprPtr init;
+    // VM global slot, assigned by ScopeBuilder in pass 1. A top-level `var`
+    // lives in a real global so assignments to it have somewhere to go.
+    uint32_t globalSlot = ~0u;
 };
 
 struct ItemConst {
@@ -446,7 +449,7 @@ struct Module {
     std::string name;
     std::optional<Path> packageName;
     std::vector<ItemPtr> items;
-    SourceLoc loc;
+    SourceLocation loc;
 };
 
 } // namespace

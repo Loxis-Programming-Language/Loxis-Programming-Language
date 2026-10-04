@@ -94,7 +94,7 @@ bool TypeChecker::arrangeArguments(
     return true;
 }
 void TypeChecker::error(const std::string& msg) {
-    SourceLoc end = currentEndLoc;
+    SourceLocation end = currentEndLoc;
     if (end.file.empty() || end.line != currentLoc.line || end.col <= currentLoc.col) {
         end = currentLoc;
         ++end.col;
@@ -106,7 +106,7 @@ void TypeChecker::error(const std::string& msg) {
 }
 
 void TypeChecker::error(const std::string& msg, std::string primaryLabel, std::string help) {
-    SourceLoc end = currentEndLoc;
+    SourceLocation end = currentEndLoc;
     if (end.file.empty() || end.line != currentLoc.line || end.col <= currentLoc.col) {
         end = currentLoc;
         ++end.col;
@@ -301,6 +301,33 @@ bool TypeChecker::isPrimitiveCastable(TyPtr from, TyPtr to) {
 // ============================================================
 // Class/Interface helpers
 // ============================================================
+namespace {
+
+// Every member name reachable on `ty`, walking the class's super chain. Only
+// built when --trace is on: this is what turns "not found on type X" into
+// something you can act on.
+std::vector<std::string> memberNamesOf(const Ty& ty, bool wantMethods) {
+    std::vector<std::string> names;
+    if (ty.kind() == TyKind::Class_) {
+        const auto& cls = std::get<TyClass>(ty);
+        for (auto def = cls.def; def; def = def->superDef) {
+            if (wantMethods) {
+                for (const auto& m : def->methods) names.push_back(m.name);
+            } else {
+                for (const auto& f : def->fields) names.push_back(f.name);
+            }
+        }
+    } else if (ty.kind() == TyKind::Interface_) {
+        const auto& iface = std::get<TyInterface>(ty);
+        if (wantMethods) {
+            for (const auto& m : iface.def->methods) names.push_back(m.name);
+        }
+    }
+    return names;
+}
+
+} // namespace
+
 const MethodInfo* TypeChecker::lookupMethod(TyPtr recv, const std::string& name, size_t arity) {
     if (!recv) return nullptr;
     // Strip nullable for lookup
@@ -308,14 +335,27 @@ const MethodInfo* TypeChecker::lookupMethod(TyPtr recv, const std::string& name,
     if (inner->kind() == TyKind::Class_) {
         auto& cls = std::get<TyClass>(*inner);
         for (const auto& m : cls.def->methods) {
-            if (m.name == name && m.arity == arity) return &m;
+            if (m.name == name && m.arity == arity) {
+                if (m_trace)
+                    m_trace->lookup("method " + name + "/" + std::to_string(arity),
+                                    inner->toString(), memberNamesOf(*inner, true), true);
+                return &m;
+            }
         }
     } else if (inner->kind() == TyKind::Interface_) {
         auto& iface = std::get<TyInterface>(*inner);
         for (const auto& m : iface.def->methods) {
-            if (m.name == name && m.arity == arity) return &m;
+            if (m.name == name && m.arity == arity) {
+                if (m_trace)
+                    m_trace->lookup("method " + name + "/" + std::to_string(arity),
+                                    inner->toString(), memberNamesOf(*inner, true), true);
+                return &m;
+            }
         }
     }
+    if (m_trace)
+        m_trace->lookup("method " + name + "/" + std::to_string(arity),
+                        inner->toString(), memberNamesOf(*inner, true), false);
     return nullptr;
 }
 
@@ -325,15 +365,29 @@ const FieldInfo* TypeChecker::lookupField(TyPtr recv, const std::string& name) {
     if (inner->kind() == TyKind::Class_) {
         auto& cls = std::get<TyClass>(*inner);
         for (const auto& f : cls.def->fields) {
-            if (f.name == name && f.type) return &f;
+            if (f.name == name && f.type) {
+                if (m_trace)
+                    m_trace->lookup("field " + name, inner->toString(),
+                                    memberNamesOf(*inner, false), true);
+                return &f;
+            }
         }
         auto super = cls.def->superDef;
         while (super) {
-            for (const auto& f : super->fields)
-                if (f.name == name && f.type) return &f;
+            for (const auto& f : super->fields) {
+                if (f.name == name && f.type) {
+                    if (m_trace)
+                        m_trace->lookup("field " + name, inner->toString(),
+                                        memberNamesOf(*inner, false), true);
+                    return &f;
+                }
+            }
             super = super->superDef;
         }
     }
+    if (m_trace)
+        m_trace->lookup("field " + name, inner->toString(),
+                        memberNamesOf(*inner, false), false);
     return nullptr;
 }
 
@@ -342,16 +396,43 @@ bool TypeChecker::isMutablePlace(ExprPtr e, Scope* sc) {
     return std::visit([&](auto&& n) -> bool {
         using T = std::decay_t<decltype(n)>;
         if constexpr (std::is_same_v<T, ExprPath>) {
-            return true;
+            // A bare name is assignable only if it is bound by `var`. Returning
+            // true unconditionally is what let `val x = 1; x = 2` compile and
+            // silently rebind; it also let top-level `var` assignments reach
+            // lowering, which had no store for them.
+            if (n.path.segs.size() != 1 || !n.path.args.empty()) return false;
+            const Symbol* sym = sc->lookup(n.path.segs[0]);
+            return sym && sym->isMutable;
         } else if constexpr (std::is_same_v<T, ExprDeref>) {
             TyPtr t = checkExpr(n.expr, sc);
             if (t->kind() == TyKind::Ref) return std::get<TyRef>(*t).mut;
             if (t->kind() == TyKind::RawPtr) return std::get<TyRawPtr>(*t).mut;
             return false;
         } else if constexpr (std::is_same_v<T, ExprField>) {
-            return isMutablePlace(n.obj, sc);
+            // `val` only makes the binding immutable, not the object it refers
+            // to: `val o = Foo(); o.field = 1` and `val a = [1]; a[0] = 2` stay
+            // legal. So the base has to be a *place*, but need not be mutable.
+            return isPlace(n.obj, sc);
         } else if constexpr (std::is_same_v<T, ExprIndex>) {
-            return isMutablePlace(n.obj, sc);
+            return isPlace(n.obj, sc);
+        } else {
+            return false;
+        }
+    }, *e);
+}
+
+bool TypeChecker::isPlace(ExprPtr e, Scope* sc) {
+    if (!e) return false;
+    return std::visit([&](auto&& n) -> bool {
+        using T = std::decay_t<decltype(n)>;
+        if constexpr (std::is_same_v<T, ExprPath>) {
+            return n.path.segs.size() == 1 && n.path.args.empty();
+        } else if constexpr (std::is_same_v<T, ExprField>) {
+            return isPlace(n.obj, sc);
+        } else if constexpr (std::is_same_v<T, ExprIndex>) {
+            return isPlace(n.obj, sc);
+        } else if constexpr (std::is_same_v<T, ExprDeref>) {
+            return true;
         } else {
             return false;
         }
@@ -460,6 +541,9 @@ TyPtr TypeChecker::checkPat(PatPtr p, TyPtr expected, Scope* sc) {
         } else if constexpr (std::is_same_v<T, PatBind>) {
             TyPtr t = expected ? expected : freshInfer();
             sc->declare(n.name, SymbolKind::Value, nullptr, t);
+            // `n.mut` is set by the parser for `var`, so this is what makes a
+            // `var` binding assignable and a `val` binding not.
+            if (auto* sym = sc->lookupLocal(n.name)) sym->isMutable = n.mut;
             return t;
         } else if constexpr (std::is_same_v<T, PatTuple>) {
             std::vector<TyPtr> elemTys;
@@ -708,8 +792,20 @@ bool TypeChecker::inferCall(TyFn& signature, const std::vector<std::string>& nam
 
 TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
     if (!e) { error("null expression"); return mkError(); }
-    SourceLoc previousLoc = currentLoc;
-    SourceLoc previousEndLoc = currentEndLoc;
+    if (m_checkDepth >= kMaxExprDepth) {
+        if (!m_depthErrorReported) {
+            m_depthErrorReported = true;
+            error("expression is nested too deeply to type-check");
+        }
+        return mkError();
+    }
+    struct DepthGuard {
+        size_t& depth;
+        explicit DepthGuard(size_t& d) : depth(d) { ++depth; }
+        ~DepthGuard() { --depth; }
+    } depthGuard(m_checkDepth);
+    SourceLocation previousLoc = currentLoc;
+    SourceLocation previousEndLoc = currentEndLoc;
     if (!e->loc.file.empty()) currentLoc = e->loc;
     if (!e->endLoc.file.empty()) currentEndLoc = e->endLoc;
     TyPtr result = std::visit([&](auto&& n) -> TyPtr {
@@ -869,8 +965,10 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
                 }
                 n.isStaticFunction = sym->node && ty->kind() == TyKind::Fn;
                 if (sym->globalSlot != ~0u) n.globalSlot = sym->globalSlot;
-                // Check if this is a top-level val/var/const reference
-                if (sym->isTopLevelProperty && !n.isStaticFunction) {
+                // Check if this is a top-level val/var/const reference. A var with
+                // a global slot is excluded: it is read with GLoad, not re-run
+                // through its initializer.
+                if (sym->isTopLevelProperty && !n.isStaticFunction && n.globalSlot == ~0u) {
                     n.isTopLevelVal = true;
                     n.topLevelGetter = "__val_" + n.path.segs[0];
                     // Note: could distinguish val/var/const prefix but they all
@@ -1755,6 +1853,20 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
         } else if constexpr (std::is_same_v<T, ExprWhen>) {
             TyPtr scrut = n.scrut ? checkExpr(n.scrut, sc) : nullptr;
             TyPtr result = nullptr;
+
+            // Enum exhaustiveness. A `when` produces `result`, so an arm that is
+            // missing simply falls off the end and hands back whatever the last
+            // matched arm left behind -- how a function declared to return `str`
+            // quietly returned 0. Only enforced where the value is consumed, so
+            // `when` keeps working as an ordinary statement.
+            const TyClass* scrutEnum = (scrut && scrut->kind() == TyKind::Class_)
+                ? &std::get<TyClass>(*scrut) : nullptr;
+            const bool isEnumScrut = scrutEnum && scrutEnum->def && scrutEnum->def->isEnum &&
+                                     !scrutEnum->def->variants.empty();
+            const bool valuePosition = expectedTy != nullptr || m_stmtExprDepth == 0;
+            bool coversEverything = false;
+            std::vector<bool> covered(isEnumScrut ? scrutEnum->def->variants.size() : 0, false);
+
             for (const auto& arm : n.arms) {
                 Scope armScope(sc);
                 if (auto* cond = std::get_if<ExprPtr>(&arm.condition)) {
@@ -1769,8 +1881,21 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
                 } else if (auto* pat = std::get_if<PatPtr>(&arm.condition)) {
                     if (*pat) {
                         checkPat(*pat, scrut, &armScope);
+                        // checkPat has filled in variantIndex by now.
+                        if (isEnumScrut) {
+                            std::visit([&](auto&& p) {
+                                using P = std::decay_t<decltype(p)>;
+                                if constexpr (std::is_same_v<P, PatWild> || std::is_same_v<P, PatBind>) {
+                                    coversEverything = true;
+                                } else if constexpr (std::is_same_v<P, PatEnum> || std::is_same_v<P, PatStruct>) {
+                                    if (p.variantIndex < covered.size()) covered[p.variantIndex] = true;
+                                }
+                            }, **pat);
+                        }
                     }
                 }
+                if (arm.isElse) coversEverything = true;
+
                 TyPtr armTy = arm.body ? checkExpr(arm.body, &armScope, expectedTy) : mkUnit();
                 if (!result) result = armTy;
                 else if (!sameType(result, armTy)) {
@@ -1781,6 +1906,20 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
                     } else {
                         error("when arm type mismatch: " + result->toString() + " and " + armTy->toString());
                     }
+                }
+            }
+
+            if (isEnumScrut && valuePosition && !coversEverything) {
+                std::string missing;
+                for (size_t i = 0; i < covered.size(); ++i) {
+                    if (covered[i]) continue;
+                    if (!missing.empty()) missing += ", ";
+                    missing += scrutEnum->def->variants[i].name;
+                }
+                if (!missing.empty()) {
+                    error("when is not exhaustive: `" + scrut->toString() + "` has no arm for " + missing,
+                          "missing arm(s): " + missing,
+                          "add the missing arm(s) or an `else` branch");
                 }
             }
             return result ? result : mkError();
@@ -1958,6 +2097,25 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
             return mkNull();
 
         } else if constexpr (std::is_same_v<T, ExprStringTemplate>) {
+            // Each interpolated part is an ordinary expression and has to be
+            // checked as one. Returning mkStr() without descending is what let
+            // an unresolved name inside `$"...${...}"` compile and print a zero.
+            for (const auto& part : n.parts) {
+                const auto* sub = std::get_if<ExprPtr>(&part);
+                if (!sub || !*sub) continue;
+                TyPtr partTy = checkExpr(*sub, sc);
+                if (!partTy || partTy->kind() == TyKind::Error) continue;  // already reported
+                const TyKind kind = partTy->kind();
+                const bool convertible = !partTy->nullable &&
+                    (kind == TyKind::Int || kind == TyKind::Long || kind == TyKind::Bool ||
+                     kind == TyKind::Char || kind == TyKind::Str);
+                if (!convertible) {
+                    const std::string typeName = partTy->toString();
+                    error("cannot interpolate `" + typeName + "` into a string",
+                          "`" + typeName + "` cannot be interpolated",
+                          "convert it to `str` first");
+                }
+            }
             return mkStr();
 
         } else {
@@ -1990,6 +2148,13 @@ void TypeChecker::checkStmt(StmtPtr s, Scope* sc) {
             n.resolvedTy = patTy;
             checkPat(n.pat, patTy, sc);
         } else if constexpr (std::is_same_v<T, StmtExpr>) {
+            // The value is discarded here, which is what makes a non-exhaustive
+            // `when` acceptable in statement position.
+            struct StmtGuard {
+                size_t& d;
+                explicit StmtGuard(size_t& depth) : d(depth) { ++d; }
+                ~StmtGuard() { --d; }
+            } stmtGuard(m_stmtExprDepth);
             checkExpr(n.expr, sc);
         } else if constexpr (std::is_same_v<T, StmtItem>) {
             checkItem(n.item, sc);
@@ -2004,6 +2169,23 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
     if (!i) return;
     std::visit([&](auto&& n) {
         using T = std::decay_t<decltype(n)>;
+
+        // if constexpr, not a runtime test: ItemImport is the one item without a
+        // `name` member, so the body must not be instantiated for it.
+        if constexpr (!std::is_same_v<T, ItemImport>) {
+            if (m_trace) {
+                const char* kind =
+                    std::is_same_v<T, ItemFun>       ? "fun" :
+                    std::is_same_v<T, ItemClass>     ? "class" :
+                    std::is_same_v<T, ItemEnumClass> ? "enum" :
+                    std::is_same_v<T, ItemInterface> ? "interface" :
+                    std::is_same_v<T, ItemObject>    ? "object" :
+                    std::is_same_v<T, ItemVal>       ? "val" :
+                    std::is_same_v<T, ItemVar>       ? "var" :
+                    std::is_same_v<T, ItemConst>     ? "const" : "typealias";
+                m_trace->decl(kind, n.name);
+            }
+        }
 
         if constexpr (std::is_same_v<T, ItemFun>) {
             Scope fnScope(sc);

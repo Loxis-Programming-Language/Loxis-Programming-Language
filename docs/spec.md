@@ -187,9 +187,28 @@ fun str.isLong() -> bool = length > 10
 - Literals, paths, blocks `{ stmts... expr }`
 - Array literals: `[1, 2, 3]`
 - Map literals: `{"one": 1, "two": 2}` or `{1: "one", 2: "two"}`; keys currently support `str` and `int`
-- String templates: `"Hello, $name"`, `"${expr}"`
+- String templates: every string interpolates, so there is no separate template
+  syntax. `$name` interpolates a name and `${expr}` an arbitrary expression,
+  e.g. `"Hello, $name"`, `"total ${a + b}"`. A `$` only starts an interpolation
+  when `{` or an identifier follows it, so `"cost $5"`, `"100%"` and a lone `$`
+  stay literal without escaping; `$$` is an explicit literal `$`. Escape
+  sequences (`\n`, `\t`, `\x1b`, ...) resolve as usual, and `${...}` may contain
+  nested braces and string literals.
 - Operators: arithmetic, comparison, logical, elvis (`?:`), safe call (`?.`), force unwrap (`!!`)
 - Control flow: `if`, `when`, `while`, `for`, `loop`, `break`, `continue`, `return`, `throw`, `try/catch/finally`
+- Loops: `for pat in iterable`, where the iterable is a range (`0..5`, upper
+  bound excluded; `0..=5` inclusive), an array literal, or anything with
+  `size()`/`get(i)`. A loop may be labelled with `name:` before the keyword, and
+  `break name` / `continue name` then apply to that loop rather than the
+  innermost one:
+  ```
+  outer: for i in 0..3 {
+      for j in 0..3 {
+          if j == 1 { continue }
+          if i == 2 { break outer }
+      }
+  }
+  ```
 - Closures: `{ x: int -> x * 2 }`
 - Cast: `expr as Type`
 - Type check: `expr is Type`, `expr !is Type`
@@ -243,6 +262,11 @@ when {
     else -> "zero"
 }
 ```
+When the scrutinee is an enum class and the result is used as a value, the arms
+must cover every variant, either by listing them or with an `else`/wildcard arm.
+An unhandled variant would otherwise fall off the end and yield whatever the
+last matched arm left behind. A `when` whose value is discarded — a bare
+statement — is exempt, as in Kotlin.
 
 ## Patterns
 - `_` wildcard
@@ -257,6 +281,20 @@ when {
 - `&T` = shared reference
 - `&mut T` = exclusive reference
 - `*T` / `*mut T` = raw pointers (unsafe)
+
+Assigning to a `val` is a compile error. Immutability applies to the binding,
+not the referent: `val a = [1, 2]; a[0] = 3` and `val o = Foo(); o.field = 1` are
+allowed, because the array or object the binding points at is itself mutable.
+
+A top-level `var` is a real global. Its initializer runs once at startup into a
+VM global slot, and reads and writes go through that slot rather than
+re-evaluating the initializer, so a global can hold mutable state:
+
+```
+var counter = 0
+fun bump() -> unit { counter = counter + 1 }
+```
+
 
 ## Packages & Modules
 
