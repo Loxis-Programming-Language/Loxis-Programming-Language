@@ -90,6 +90,8 @@ if(Python3_Interpreter_FOUND)
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_cli.py --exe $<TARGET_FILE:Loxis>)
     add_test(NAME loxis_distribution
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_distribution.py --exe $<TARGET_FILE:Loxis>)
+    add_test(NAME loxis_todo_cli
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_todo_cli.py --exe $<TARGET_FILE:Loxis>)
 endif()
 
 add_executable(LSPTest

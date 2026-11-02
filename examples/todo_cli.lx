@@ -1,0 +1,79 @@
+import loxis.collections.list
+import loxis.text
+import loxis.fileio
+import loxis.system
+
+fun loadTasks(path: str) -> list<str> {
+    val tasks = list<str>()
+    if !File.exists(path) { return tasks }
+    val content = File.readText(path).getOrElseGet({ reason: str -> error(reason) })
+    for line in content.split("\n") {
+        if line.length() > 0 { tasks.push(line) }
+    }
+    return tasks
+}
+
+fun saveTasks(path: str, tasks: list<str>) {
+    var content = ""
+    if !tasks.isEmpty() { content = Text.join(tasks, "\n") + "\n" }
+    File.writeText(path, content).getOrElseGet({ reason: str -> error(reason) })
+}
+
+fun taskText(record: str) -> str {
+    require(record.length() >= 2, "corrupt task record")
+    return record.slice(2, record.length() - 2)
+}
+
+fun main() -> int {
+    val args = System.arguments()
+    require(args.size() >= 2, "usage: todo <database> <add|list|done|clear> [value]")
+    val path = args.get(0)
+    val command = args.get(1)
+
+    if command == "add" {
+        require(args.size() == 3, "usage: todo <database> add <text>")
+        val text = args.get(2).trim()
+        require(text.length() > 0, "task text must not be empty")
+        File.appendText(path, "0|" + text + "\n")
+            .getOrElseGet({ reason: str -> error(reason) })
+        print("Added: " + text)
+        return 0
+    }
+
+    val tasks = loadTasks(path)
+    if command == "list" {
+        if tasks.isEmpty() {
+            print("No tasks.")
+            return 0
+        }
+        var index = 0
+        while index < tasks.size() {
+            val record = tasks.get(index)
+            val mark = if record.startsWith("1|") { "x" } else { " " }
+            print((index + 1).toString() + ". [" + mark + "] " + taskText(record))
+            index += 1
+        }
+        return 0
+    }
+
+    if command == "done" {
+        require(args.size() == 3, "usage: todo <database> done <number>")
+        val number = args.get(2).toIntResult()
+            .getOrElseGet({ reason: str -> error(reason) })
+        require(number >= 1 && number <= tasks.size(), "task number out of range")
+        val record = tasks.get(number - 1)
+        tasks.set(number - 1, "1|" + taskText(record))
+        saveTasks(path, tasks)
+        print("Completed: " + taskText(record))
+        return 0
+    }
+
+    if command == "clear" {
+        require(args.size() == 2, "usage: todo <database> clear")
+        saveTasks(path, list<str>())
+        print("Cleared.")
+        return 0
+    }
+
+    error("unknown command: " + command)
+}

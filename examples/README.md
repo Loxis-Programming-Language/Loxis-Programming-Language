@@ -34,6 +34,10 @@ and code-point counts do not depend on argument encoding.
 
 Other examples:
 
+- `todo_cli.lx`: a persistent command-line task list that exercises repeated
+  process invocation, application arguments, text parsing and file updates.
+  Try `Loxis run examples/todo_cli.lx -- tasks.txt add "Buy milk"`, followed by
+  `... list`, `... done 1`, or `... clear`.
 - `call_arguments_demo.lx`: an editable checkout playground for generic `*rest`
   and `**options` parameters, named arguments, `*array` / `**map` expansion,
   methods and forwarding.
