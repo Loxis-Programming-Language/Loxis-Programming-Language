@@ -34,7 +34,7 @@ silently change the result of valid programs.
 - Named arguments, `*args`, `**kwargs`, array/map spreading and trailing lambdas.
 - The public collection, text, JSON, file, path, system, time and random APIs
   documented in [stdlib.md](stdlib.md).
-- `Loxis run`, `Loxis check`, `Loxis test`, `Loxis version`, and direct `Loxis file.lx`
+- `Loxis init`, `Loxis run`, `Loxis check`, `Loxis test`, `Loxis version`, and direct `Loxis file.lx`
   compatibility invocation.
 
 ## Experimental

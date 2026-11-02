@@ -97,6 +97,29 @@ def main() -> int:
         require(failed_suite.returncode != 0, "test command ignored a failing test")
         require("1 passed, 1 failed, 2 total" in failed_suite.stdout, "wrong failure summary")
 
+    with tempfile.TemporaryDirectory(prefix="loxis-init-") as directory:
+        project = Path(directory) / "sample"
+        initialized = invoke(exe, "init", str(project))
+        require(initialized.returncode == 0, f"init failed: {initialized.stderr}")
+        main_file = project / "main.lx"
+        test_file = project / "tests" / "main_test.lx"
+        require(main_file.is_file(), "init did not create main.lx")
+        require(test_file.is_file(), "init did not create tests/main_test.lx")
+
+        initialized_run = invoke(exe, "run", str(main_file))
+        require(initialized_run.returncode == 0, f"initialized program failed: {initialized_run.stderr}")
+        require(initialized_run.stdout == "Hello, Loxis!\n", "initialized program output changed")
+
+        initialized_test = invoke(exe, "test", str(project / "tests"))
+        require(initialized_test.returncode == 0, f"initialized test failed: {initialized_test.stderr}")
+        require("1 passed, 0 failed, 1 total" in initialized_test.stdout, "initialized test summary changed")
+
+        before = main_file.read_bytes()
+        repeated = invoke(exe, "init", str(project))
+        require(repeated.returncode != 0, "init overwrote an existing project")
+        require("Refusing to overwrite" in repeated.stderr, "init overwrite diagnostic regressed")
+        require(main_file.read_bytes() == before, "failed init changed an existing file")
+
     print("CLI run/check/version regressions passed")
     return 0
 

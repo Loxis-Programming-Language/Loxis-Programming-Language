@@ -3,6 +3,7 @@
 #include <charconv>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -25,6 +26,7 @@ const char* kUsage =
     "  %s run <file.lx> [options] [-- program args]\n"
     "  %s check <file.lx> [options]\n"
     "  %s test [path] [options] [-- test args]\n"
+    "  %s init <directory>\n"
     "  %s <file.lx> [max_instructions] [options] [-- program args]\n"
     "  %s version\n"
     "\n"
@@ -51,7 +53,7 @@ const char* kUsage =
     "The legacy positional forms still work: `file.lx 100000 verbose`.\n";
 
 void printUsage(const char* program) {
-    std::printf(kUsage, program, program, program, program, program);
+    std::printf(kUsage, program, program, program, program, program, program);
 }
 
 bool selectDumpStage(const std::string& stage, loxis::v2::DumpOptions& dumps) {
@@ -259,6 +261,61 @@ int runTests(
     return failed == 0 ? 0 : 1;
 }
 
+int initializeProject(const std::vector<std::string>& args) {
+    namespace fs = std::filesystem;
+    if (args.size() != 2) {
+        std::cerr << "Usage: Loxis init <directory>\n";
+        return 1;
+    }
+
+    std::error_code ec;
+    const fs::path root = fs::absolute(args[1], ec).lexically_normal();
+    if (ec) {
+        std::cerr << "Invalid project directory: " << args[1] << "\n";
+        return 1;
+    }
+    const fs::path mainFile = root / "main.lx";
+    const fs::path testFile = root / "tests" / "main_test.lx";
+    if (fs::exists(mainFile) || fs::exists(testFile)) {
+        std::cerr << "Refusing to overwrite an existing Loxis project in: "
+                  << root.string() << "\n";
+        return 1;
+    }
+
+    fs::create_directories(root / "tests", ec);
+    if (ec) {
+        std::cerr << "Could not create project directory " << root.string()
+                  << ": " << ec.message() << "\n";
+        return 1;
+    }
+
+    {
+        std::ofstream output(mainFile, std::ios::binary);
+        if (!output) {
+            std::cerr << "Could not create: " << mainFile.string() << "\n";
+            return 1;
+        }
+        output << "fun main() {\n"
+                  "    print(\"Hello, Loxis!\")\n"
+                  "}\n";
+    }
+    {
+        std::ofstream output(testFile, std::ios::binary);
+        if (!output) {
+            std::cerr << "Could not create: " << testFile.string() << "\n";
+            return 1;
+        }
+        output << "fun main() {\n"
+                  "    require(2 + 2 == 4, \"arithmetic\")\n"
+                  "}\n";
+    }
+
+    std::cout << "Created Loxis project in " << root.string() << "\n"
+              << "  Run:  Loxis run " << mainFile.string() << "\n"
+              << "  Test: Loxis test " << (root / "tests").string() << "\n";
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -284,6 +341,9 @@ int main(int argc, char* argv[]) {
 
         if (args[0] == "test") {
             return runTests(args, argv[0]);
+        }
+        if (args[0] == "init") {
+            return initializeProject(args);
         }
 
         const bool hasCommand = args[0] == "run" || args[0] == "check";

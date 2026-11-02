@@ -64,6 +64,16 @@ Use `Loxis check file.lx` to compile and type-check without running the
 program, and `Loxis version` to print the installed version. Direct
 `Loxis file.lx` invocation remains supported for compatibility.
 
+Create a minimal project with a runnable program and test:
+
+```powershell
+.\build\Debug\Loxis.exe init .\hello-loxis
+.\build\Debug\Loxis.exe run .\hello-loxis\main.lx
+.\build\Debug\Loxis.exe test .\hello-loxis\tests
+```
+
+`init` never overwrites an existing `main.lx` or generated test file.
+
 Run every `.lx` file below a project test directory with:
 
 ```powershell
