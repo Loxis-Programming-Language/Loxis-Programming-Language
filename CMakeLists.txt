@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.26)
 project(Loxis VERSION 0.1.0 LANGUAGES CXX)
-set(LOXIS_VERSION "${PROJECT_VERSION}-alpha.2")
+set(LOXIS_VERSION "${PROJECT_VERSION}-alpha.3-dev")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -57,6 +57,7 @@ add_executable(Loxis
 
 target_link_libraries(Loxis PRIVATE loxis_v2)
 target_compile_definitions(Loxis PRIVATE LOXIS_VERSION="${LOXIS_VERSION}")
+set_target_properties(Loxis PROPERTIES OUTPUT_NAME loxis)
 
 # Recursive-descent parsing and the AST walkers that follow all run on the native
 # stack. The default 1 MB reserve is what the nesting limits below are sized
@@ -105,7 +106,7 @@ add_executable(bench_gc
 
 target_link_libraries(bench_gc PRIVATE loxis_v2)
 
-# A release archive is deliberately flat: Loxis.exe sits beside stdlib/, so it
+# A release archive is deliberately flat: loxis.exe sits beside stdlib/, so it
 # can discover the bundled library regardless of the caller's working directory.
 install(TARGETS Loxis RUNTIME DESTINATION .)
 install(DIRECTORY stdlib DESTINATION .)

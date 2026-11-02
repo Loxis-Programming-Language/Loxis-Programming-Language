@@ -1,5 +1,5 @@
 param(
-    [string]$Exe = ".\build\Debug\Loxis.exe"
+    [string]$Exe = ".\build\Debug\loxis.exe"
 )
 
 $ErrorActionPreference = "Continue"

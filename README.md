@@ -51,25 +51,25 @@ cmake --build build
 For a Visual Studio build:
 
 ```powershell
-.\build\Debug\Loxis.exe run .\examples\hello_world.lx
+.\build\Debug\loxis.exe run .\examples\hello_world.lx
 ```
 
 For a single-configuration build:
 
 ```powershell
-.\build\Loxis.exe run .\examples\hello_world.lx
+.\build\loxis.exe run .\examples\hello_world.lx
 ```
 
-Use `Loxis check file.lx` to compile and type-check without running the
-program, and `Loxis version` to print the installed version. Direct
-`Loxis file.lx` invocation remains supported for compatibility.
+Use `loxis check file.lx` to compile and type-check without running the
+program, and `loxis version` to print the installed version. Direct
+`loxis file.lx` invocation remains supported for compatibility.
 
 Create a minimal project with a runnable program and test:
 
 ```powershell
-.\build\Debug\Loxis.exe init .\hello-loxis
-.\build\Debug\Loxis.exe run .\hello-loxis\main.lx
-.\build\Debug\Loxis.exe test .\hello-loxis\tests
+.\build\Debug\loxis.exe init .\hello-loxis
+.\build\Debug\loxis.exe run .\hello-loxis\main.lx
+.\build\Debug\loxis.exe test .\hello-loxis\tests
 ```
 
 `init` never overwrites an existing `main.lx` or generated test file.
@@ -77,7 +77,7 @@ Create a minimal project with a runnable program and test:
 Run every `.lx` file below a project test directory with:
 
 ```powershell
-.\build\Debug\Loxis.exe test .\tests
+.\build\Debug\loxis.exe test .\tests
 ```
 
 Each test is a normal Loxis program: exit normally to pass, or produce a
@@ -92,8 +92,8 @@ After a Release build, create a relocatable Windows ZIP with:
 cpack --config .\build\CPackConfig.cmake -C Release
 ```
 
-The archive contains `Loxis.exe`, the standard library, runnable examples,
-documentation and the license. Keep `Loxis.exe` beside the bundled `stdlib` directory; the executable
+The archive contains `loxis.exe`, the standard library, runnable examples,
+documentation and the license. Keep `loxis.exe` beside the bundled `stdlib` directory; the executable
 discovers that directory even when invoked from another working directory. The
 generated archive is written to `build/packages`.
 
@@ -106,7 +106,7 @@ The v2 smoke suite exercises the compiler and VM end to end:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tests\run_smoke.ps1 `
-  -Exe .\build\Debug\Loxis.exe
+  -Exe .\build\Debug\loxis.exe
 ```
 
 It is also registered with CTest as `loxis_smoke`:

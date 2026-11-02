@@ -72,14 +72,14 @@ full v2 spec.
 The regression entry point is:
 
 ```powershell
-.\tests\run_smoke.ps1 -Exe .\build\Debug\Loxis.exe
+.\tests\run_smoke.ps1 -Exe .\build\Debug\loxis.exe
 ```
 
 CTest also exposes the same baseline as `loxis_smoke`.
 
 ## Standard-library regression coverage
 
-`tests/run_stdlib.py --exe build-stdlib/Loxis.exe` (also CTest's `loxis_stdlib`)
+`tests/run_stdlib.py --exe build-stdlib/loxis.exe` (also CTest's `loxis_stdlib`)
 checks list bounds and reference cleanup, Optional/Result helpers, strict numeric
 parsing, Unicode code points, double math, hash maps/sets, queues, lazy iterators,
 filesystem and binary I/O, stdin, arguments/environment, clocks, seeded random,

@@ -20,7 +20,7 @@ namespace {
 #endif
 
 const char* kUsage =
-    "Loxis - a statically typed language with a register-based VM\n"
+    "loxis - the Loxis language compiler and runtime\n"
     "\n"
     "Usage:\n"
     "  %s run <file.lx> [options] [-- program args]\n"
@@ -236,7 +236,7 @@ int runTests(
     configureBundledStdlib(base, argv0);
     if (!parseOptions(args, optionStart, base, argv0)) return 1;
     if (base.dumps.any()) {
-        std::cerr << "Dump options are not supported by 'Loxis test'\n";
+        std::cerr << "Dump options are not supported by 'loxis test'\n";
         return 1;
     }
 
@@ -264,7 +264,7 @@ int runTests(
 int initializeProject(const std::vector<std::string>& args) {
     namespace fs = std::filesystem;
     if (args.size() != 2) {
-        std::cerr << "Usage: Loxis init <directory>\n";
+        std::cerr << "Usage: loxis init <directory>\n";
         return 1;
     }
 
@@ -311,8 +311,8 @@ int initializeProject(const std::vector<std::string>& args) {
     }
 
     std::cout << "Created Loxis project in " << root.string() << "\n"
-              << "  Run:  Loxis run " << mainFile.string() << "\n"
-              << "  Test: Loxis test " << (root / "tests").string() << "\n";
+              << "  Run:  loxis run " << mainFile.string() << "\n"
+              << "  Test: loxis test " << (root / "tests").string() << "\n";
     return 0;
 }
 

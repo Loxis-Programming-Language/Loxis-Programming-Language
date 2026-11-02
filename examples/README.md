@@ -4,7 +4,7 @@ Run these commands in the repository root with the existing Ninja build:
 
 ```powershell
 $env:LOXIS_STDLIB = "$PWD\stdlib"
-.\build-stdlib\Loxis.exe .\examples\stdlib_demo.lx 10000000
+.\build-stdlib\loxis.exe .\examples\stdlib_demo.lx 10000000
 ```
 
 `stdlib_demo.lx` runs without input. It counts words, filters and sorts lists,
@@ -19,7 +19,7 @@ occur twice each. (The remaining words occur once.)
 Supply your own text and output path after `--`:
 
 ```powershell
-.\build-stdlib\Loxis.exe .\examples\stdlib_demo.lx 10000000 -- "cat cat code loxis" .\my-report.json
+.\build-stdlib\loxis.exe .\examples\stdlib_demo.lx 10000000 -- "cat cat code loxis" .\my-report.json
 Get-Content .\my-report.json -Encoding utf8
 ```
 
@@ -36,14 +36,14 @@ Other examples:
 
 - `todo_cli.lx`: a persistent command-line task list that exercises repeated
   process invocation, application arguments, text parsing and file updates.
-  Try `Loxis run examples/todo_cli.lx -- tasks.txt add "Buy milk"`, followed by
+  Try `loxis run examples/todo_cli.lx -- tasks.txt add "Buy milk"`, followed by
   `... list`, `... done 1`, or `... clear`.
 - `call_arguments_demo.lx`: an editable checkout playground for generic `*rest`
   and `**options` parameters, named arguments, `*array` / `**map` expansion,
   methods and forwarding.
-  Run `./build-stdlib/Loxis.exe ./examples/call_arguments_demo.lx`, or customize
+  Run `./build-stdlib/loxis.exe ./examples/call_arguments_demo.lx`, or customize
   customer, quantity and discount with
-  `./build-stdlib/Loxis.exe ./examples/call_arguments_demo.lx -- Alex 3 8`.
+  `./build-stdlib/loxis.exe ./examples/call_arguments_demo.lx -- Alex 3 8`.
   It prints results and does not write files. Commented-out calls at the bottom
   demonstrate invalid types and duplicate arguments.
 - `snake.lx`: a playable game, and the only example that needs a real console —

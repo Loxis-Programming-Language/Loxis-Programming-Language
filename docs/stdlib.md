@@ -225,8 +225,8 @@ and output serialization in one executable program.
 ```powershell
 cmake -S . -B build-stdlib -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build-stdlib --target Loxis
-python tests/run_stdlib.py --exe build-stdlib/Loxis.exe
-powershell -ExecutionPolicy Bypass -File tests/run_smoke.ps1 -Exe build-stdlib/Loxis.exe
+python tests/run_stdlib.py --exe build-stdlib/loxis.exe
+powershell -ExecutionPolicy Bypass -File tests/run_smoke.ps1 -Exe build-stdlib/loxis.exe
 ```
 
 The stdlib harness runs in isolated temporary directories with stdin fixtures,

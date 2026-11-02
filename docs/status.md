@@ -1,6 +1,7 @@
 # Loxis 0.1 stability contract
 
-The current release is **0.1.0-alpha.2**. The alpha is suitable for language
+The latest tagged release is **0.1.0-alpha.2**; `main` is the
+**0.1.0-alpha.3-dev** development line. The alpha is suitable for language
 experiments and small command-line programs, but it does not promise source or
 binary compatibility between alpha releases.
 
@@ -33,7 +34,7 @@ silently change the result of valid programs.
 - Named arguments, `*args`, `**kwargs`, array/map spreading and trailing lambdas.
 - The public collection, text, JSON, file, path, system, time and random APIs
   documented in [stdlib.md](stdlib.md).
-- `Loxis init`, `Loxis run`, `Loxis check`, `Loxis test`, `Loxis version`, and direct `Loxis file.lx`
+- `loxis init`, `loxis run`, `loxis check`, `loxis test`, `loxis version`, and direct `loxis file.lx`
   compatibility invocation.
 
 ## Experimental
