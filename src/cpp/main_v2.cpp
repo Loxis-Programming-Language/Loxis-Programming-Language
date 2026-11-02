@@ -1,8 +1,13 @@
 #include "v2/driver/Driver.hpp"
 #include <cstdio>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -71,6 +76,22 @@ bool isUnsignedNumber(const std::string& text) {
     return !text.empty() && text.find_first_not_of("0123456789") == std::string::npos;
 }
 
+std::filesystem::path executableDirectory(const char* argv0) {
+#ifdef _WIN32
+    std::wstring buffer(32768, L'\0');
+    const DWORD length = GetModuleFileNameW(
+        nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+    if (length > 0 && length < buffer.size()) {
+        buffer.resize(length);
+        return std::filesystem::path(buffer).parent_path();
+    }
+#endif
+    std::error_code ec;
+    const auto path = std::filesystem::absolute(argv0, ec);
+    if (!ec) return path.parent_path();
+    return {};
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -110,6 +131,10 @@ int main(int argc, char* argv[]) {
         loxis::v2::RunOptions opts;
         opts.file = args[fileIndex];
         opts.compileOnly = hasCommand && args[0] == "check";
+        const auto bundledStdlib = executableDirectory(argv[0]) / "stdlib";
+        if (std::filesystem::exists(bundledStdlib / "loxis" / "prelude.lx")) {
+            opts.stdlibRoot = bundledStdlib.string();
+        }
 
         for (size_t i = fileIndex + 1; i < args.size(); ++i) {
             const std::string& arg = args[i];

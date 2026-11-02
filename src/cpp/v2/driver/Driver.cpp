@@ -143,7 +143,7 @@ int Driver::compileToChunk(const RunOptions& opts, Chunk& out) {
         }
         auto anchor = clock();
 
-        ModuleLoader loader(opts.file);
+        ModuleLoader loader(opts.file, opts.stdlibRoot);
         loader.setTrace(opts.trace ? &trace : nullptr);
         Module mod = loader.load();
 

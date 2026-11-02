@@ -62,6 +62,18 @@ Use `Loxis check file.lx` to compile and type-check without running the
 program, and `Loxis version` to print the installed version. Direct
 `Loxis file.lx` invocation remains supported for compatibility.
 
+## Package
+
+After a Release build, create a relocatable Windows ZIP with:
+
+```powershell
+cpack --config .\build\CPackConfig.cmake -C Release
+```
+
+The archive contains `Loxis.exe`, the standard library, documentation and the
+license. Keep `Loxis.exe` beside the bundled `stdlib` directory; the executable
+discovers that directory even when invoked from another working directory.
+
 The compiler resolves `loxis.*` imports from `stdlib/loxis/`. Set
 `LOXIS_STDLIB` to override the standard-library location.
 

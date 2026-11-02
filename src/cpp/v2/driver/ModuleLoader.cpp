@@ -40,13 +40,19 @@ fs::path pathFromSegments(const fs::path& root, const Path& module) {
 
 } // namespace
 
-ModuleLoader::ModuleLoader(fs::path entryFile)
+ModuleLoader::ModuleLoader(fs::path entryFile, fs::path stdlibRoot)
     : m_entryFile(fs::absolute(std::move(entryFile)).lexically_normal())
     , m_entryDir(m_entryFile.parent_path())
+    , m_configuredStdlibRoot(std::move(stdlibRoot))
     , m_stdlibRoot(findStdlibRoot())
 {}
 
 fs::path ModuleLoader::findStdlibRoot() const {
+    if (!m_configuredStdlibRoot.empty() &&
+        fs::exists(m_configuredStdlibRoot / "loxis" / "prelude.lx")) {
+        return fs::absolute(m_configuredStdlibRoot).lexically_normal();
+    }
+
     if (const char* env = std::getenv("LOXIS_STDLIB")) {
         fs::path fromEnv(env);
         if (fs::exists(fromEnv / "loxis" / "prelude.lx")) {

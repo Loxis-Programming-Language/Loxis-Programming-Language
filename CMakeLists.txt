@@ -88,6 +88,8 @@ if(Python3_Interpreter_FOUND)
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_examples.py --exe $<TARGET_FILE:Loxis>)
     add_test(NAME loxis_cli
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_cli.py --exe $<TARGET_FILE:Loxis>)
+    add_test(NAME loxis_distribution
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_distribution.py --exe $<TARGET_FILE:Loxis>)
 endif()
 
 add_executable(LSPTest
@@ -99,3 +101,16 @@ add_executable(bench_gc
 )
 
 target_link_libraries(bench_gc PRIVATE loxis_v2)
+
+# A release archive is deliberately flat: Loxis.exe sits beside stdlib/, so it
+# can discover the bundled library regardless of the caller's working directory.
+install(TARGETS Loxis RUNTIME DESTINATION .)
+install(DIRECTORY stdlib DESTINATION .)
+install(FILES README.md LICENSE DESTINATION .)
+install(DIRECTORY docs DESTINATION .)
+
+set(CPACK_GENERATOR "ZIP")
+set(CPACK_PACKAGE_NAME "Loxis")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}-alpha.1")
+set(CPACK_PACKAGE_FILE_NAME "Loxis-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+include(CPack)

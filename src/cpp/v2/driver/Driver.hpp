@@ -22,6 +22,7 @@ struct DumpOptions {
 
 struct RunOptions {
     std::string file;
+    std::string stdlibRoot;
     std::vector<std::string> arguments;
     int maxInstr = 1000000;
     bool verbose = false;

@@ -10,7 +10,9 @@ namespace loxis::v2 {
 
 class ModuleLoader {
 public:
-    explicit ModuleLoader(std::filesystem::path entryFile);
+    explicit ModuleLoader(
+        std::filesystem::path entryFile,
+        std::filesystem::path stdlibRoot = {});
 
     Module load();
 
@@ -21,6 +23,7 @@ public:
 private:
     std::filesystem::path m_entryFile;
     std::filesystem::path m_entryDir;
+    std::filesystem::path m_configuredStdlibRoot;
     std::filesystem::path m_stdlibRoot;
     const Trace* m_trace = nullptr;
     std::vector<std::filesystem::path> m_loadOrder;
