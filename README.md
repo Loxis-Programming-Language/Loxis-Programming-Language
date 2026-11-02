@@ -1,5 +1,7 @@
 # The Loxis Programming Language v2
 
+[![CI](https://github.com/Loxis-Programming-Language/Loxis-Programming-Language/actions/workflows/ci.yml/badge.svg)](https://github.com/Loxis-Programming-Language/Loxis-Programming-Language/actions/workflows/ci.yml)
+
 Loxis v2 is a statically typed programming language with a C++20 compiler,
 standard library, and register-based virtual machine.
 
