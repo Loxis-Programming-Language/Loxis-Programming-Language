@@ -1,8 +1,10 @@
 #include "v2/driver/Driver.hpp"
 #include <algorithm>
+#include <charconv>
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -78,6 +80,32 @@ bool isUnsignedNumber(const std::string& text) {
     return !text.empty() && text.find_first_not_of("0123456789") == std::string::npos;
 }
 
+bool parseUnsigned32(const std::string& text, uint32_t& value) {
+    if (text.empty()) return false;
+    const char* begin = text.data();
+    const char* end = begin + text.size();
+    const auto result = std::from_chars(begin, end, value);
+    return result.ec == std::errc{} && result.ptr == end;
+}
+
+bool validateSourceFile(const std::filesystem::path& file) {
+    std::error_code ec;
+    if (!std::filesystem::exists(file, ec) || ec) {
+        std::cerr << "Source file does not exist: " << file.string() << "\n";
+        return false;
+    }
+    if (!std::filesystem::is_regular_file(file, ec) || ec) {
+        std::cerr << "Source path is not a regular file: " << file.string() << "\n";
+        return false;
+    }
+    if (file.extension() != ".lx" && file.extension() != ".lxs") {
+        std::cerr << "Source file must use the .lx or .lxs extension: "
+                  << file.string() << "\n";
+        return false;
+    }
+    return true;
+}
+
 std::filesystem::path executableDirectory(const char* argv0) {
 #ifdef _WIN32
     std::wstring buffer(32768, L'\0');
@@ -125,7 +153,12 @@ bool parseOptions(
                 return false;
             }
         } else if (arg.rfind("--slots=", 0) == 0) {
-            opts.heapSlots = static_cast<uint32_t>(std::stoul(arg.substr(8)));
+            uint32_t slots = 0;
+            if (!parseUnsigned32(arg.substr(8), slots)) {
+                std::cerr << "Invalid heap slot count: " << arg.substr(8) << "\n";
+                return false;
+            }
+            opts.heapSlots = slots;
         } else if (arg.rfind("--dump=", 0) == 0) {
             if (!selectDumpStage(arg.substr(7), opts.dumps)) {
                 std::cerr << "Unknown dump stage: " << arg.substr(7) << "\n";
@@ -139,7 +172,13 @@ bool parseOptions(
         } else if (arg == "verbose" || arg == "true" || arg == "yes" || arg == "1") {
             opts.verbose = true;
         } else if (isUnsignedNumber(arg)) {
-            opts.maxInstr = std::stoi(arg);
+            uint32_t limit = 0;
+            if (!parseUnsigned32(arg, limit) ||
+                limit > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+                std::cerr << "Invalid instruction limit: " << arg << "\n";
+                return false;
+            }
+            opts.maxInstr = static_cast<int>(limit);
         } else {
             std::cerr << "Unknown argument: " << arg << "\n\n";
             printUsage(program);
@@ -259,6 +298,7 @@ int main(int argc, char* argv[]) {
             printUsage(argv[0]);
             return 1;
         }
+        if (!validateSourceFile(args[fileIndex])) return 1;
 
         loxis::v2::RunOptions opts;
         opts.file = args[fileIndex];

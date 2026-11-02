@@ -50,6 +50,28 @@ def main() -> int:
     require(legacy.returncode == 0, f"legacy invocation failed: {legacy.stderr}")
     require(legacy.stdout == run.stdout, "legacy invocation changed behavior")
 
+    missing = invoke(exe, "check", "does-not-exist.lx")
+    require(missing.returncode != 0, "missing source was accepted")
+    require("Source file does not exist" in missing.stderr, "missing source diagnostic regressed")
+
+    wrong_extension = invoke(exe, "check", str(ROOT / "README.md"))
+    require(wrong_extension.returncode != 0, "non-Loxis source was accepted")
+    require("must use the .lx or .lxs extension" in wrong_extension.stderr, "extension diagnostic regressed")
+
+    bad_slots = invoke(
+        exe, "run", str(ROOT / "examples" / "hello_world.lx"), "--slots=nope"
+    )
+    require(bad_slots.returncode != 0, "invalid slot count was accepted")
+    require("Invalid heap slot count: nope" in bad_slots.stderr, "slot diagnostic regressed")
+    require("Fatal error" not in bad_slots.stderr, "invalid slot count escaped validation")
+
+    huge_limit = invoke(
+        exe, "run", str(ROOT / "examples" / "hello_world.lx"), "999999999999999999999"
+    )
+    require(huge_limit.returncode != 0, "overflowing instruction limit was accepted")
+    require("Invalid instruction limit" in huge_limit.stderr, "limit diagnostic regressed")
+    require("Fatal error" not in huge_limit.stderr, "instruction limit escaped validation")
+
     with tempfile.TemporaryDirectory(prefix="loxis-cli-") as directory:
         invalid = Path(directory) / "invalid.lx"
         invalid.write_text("fun main() { missing() }\n", encoding="utf-8")
