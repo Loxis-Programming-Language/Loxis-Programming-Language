@@ -37,7 +37,8 @@ CASES = {
     ),
     "data_class_unsupported_property": (
         None, None,
-        ["generated data-class members do not support property 'value' of type float",
+        ["data_class_unsupported_property.lx:1:28",
+         "generated data-class members do not support property 'value' of type float",
          "use int, str, bool, char or double"],
         ["Fatal error", "numeric op on non-numeric"],
     ),

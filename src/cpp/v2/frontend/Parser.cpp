@@ -264,7 +264,10 @@ std::vector<ParamDecl> Parser::parseClassParams() {
         } else if (match(Tk::KwVar)) {
             pd.isVar = true;
         }
+        pd.loc = curloc();
         pd.name = expectIdent();
+        pd.endLoc = pd.loc;
+        pd.endLoc.col += static_cast<uint32_t>(std::max<size_t>(1, pd.name.size()));
         expect(Tk::Colon);
         pd.ty = parseType();
         if (match(Tk::Eq)) pd.default_ = parseExpr();

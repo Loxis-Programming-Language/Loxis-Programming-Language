@@ -2515,12 +2515,18 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
                     const bool supported = kind == TyKind::Int || kind == TyKind::Str ||
                         kind == TyKind::Bool || kind == TyKind::Char || kind == TyKind::Double;
                     if (!supported) {
+                        const SourceLocation savedLoc = currentLoc;
+                        const SourceLocation savedEndLoc = currentEndLoc;
+                        currentLoc = property.loc;
+                        currentEndLoc = property.endLoc;
                         error(
                             "generated data-class members do not support property '" +
                                 property.name + "' of type " +
                                 (propertyTy ? propertyTy->toString() : std::string("<unknown>")),
                             "unsupported generated member type",
                             "use int, str, bool, char or double, or declare a regular class");
+                        currentLoc = savedLoc;
+                        currentEndLoc = savedEndLoc;
                         return;
                     }
                 }

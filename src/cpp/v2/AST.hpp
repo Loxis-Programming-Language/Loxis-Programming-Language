@@ -320,6 +320,8 @@ struct ParamDecl {
     bool isVal = false;    // val → property
     bool isVar = false;    // var → mutable property
     ExprPtr default_;
+    SourceLocation loc;
+    SourceLocation endLoc;
 };
 
 // Import
