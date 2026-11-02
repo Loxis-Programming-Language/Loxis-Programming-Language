@@ -55,7 +55,7 @@ add_executable(Loxis
 )
 
 target_link_libraries(Loxis PRIVATE loxis_v2)
-target_compile_definitions(Loxis PRIVATE LOXIS_VERSION="${PROJECT_VERSION}-alpha.1")
+target_compile_definitions(Loxis PRIVATE LOXIS_VERSION="${PROJECT_VERSION}-alpha.2-dev")
 
 # Recursive-descent parsing and the AST walkers that follow all run on the native
 # stack. The default 1 MB reserve is what the nesting limits below are sized
@@ -111,7 +111,7 @@ install(DIRECTORY docs DESTINATION .)
 
 set(CPACK_GENERATOR "ZIP")
 set(CPACK_PACKAGE_NAME "Loxis")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}-alpha.1")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}-alpha.2-dev")
 set(CPACK_PACKAGE_FILE_NAME "Loxis-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/packages")
 include(CPack)

@@ -36,7 +36,7 @@ def main() -> int:
 
     version = invoke(exe, "version")
     require(version.returncode == 0, f"version failed: {version.stderr}")
-    require(version.stdout == "Loxis 0.1.0-alpha.1\n", f"unexpected version: {version.stdout!r}")
+    require(version.stdout == "Loxis 0.1.0-alpha.2-dev\n", f"unexpected version: {version.stdout!r}")
 
     checked = invoke(exe, "check", str(ROOT / "examples" / "hello_world.lx"))
     require(checked.returncode == 0, f"check failed: {checked.stderr}")
@@ -56,6 +56,24 @@ def main() -> int:
         rejected = invoke(exe, "check", str(invalid))
     require(rejected.returncode != 0, "check accepted an invalid program")
     require("missing" in rejected.stderr, "check did not report the invalid symbol")
+
+    with tempfile.TemporaryDirectory(prefix="loxis-test-") as directory:
+        suite = Path(directory)
+        (suite / "passes.lx").write_text(
+            "fun main() { require(2 + 2 == 4, \"math\") }\n",
+            encoding="utf-8",
+        )
+        tested = invoke(exe, "test", str(suite))
+        require(tested.returncode == 0, f"test command failed: {tested.stderr}")
+        require("1 passed, 0 failed, 1 total" in tested.stdout, "missing test summary")
+
+        (suite / "fails.lx").write_text(
+            "fun main() { missing() }\n",
+            encoding="utf-8",
+        )
+        failed_suite = invoke(exe, "test", str(suite))
+        require(failed_suite.returncode != 0, "test command ignored a failing test")
+        require("1 passed, 1 failed, 2 total" in failed_suite.stdout, "wrong failure summary")
 
     print("CLI run/check/version regressions passed")
     return 0

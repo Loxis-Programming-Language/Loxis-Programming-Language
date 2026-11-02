@@ -62,6 +62,16 @@ Use `Loxis check file.lx` to compile and type-check without running the
 program, and `Loxis version` to print the installed version. Direct
 `Loxis file.lx` invocation remains supported for compatibility.
 
+Run every `.lx` file below a project test directory with:
+
+```powershell
+.\build\Debug\Loxis.exe test .\tests
+```
+
+Each test is a normal Loxis program: exit normally to pass, or produce a
+compile/runtime error to fail. Files are discovered recursively and run in
+sorted path order; the command returns a nonzero status if any test fails.
+
 ## Package
 
 After a Release build, create a relocatable Windows ZIP with:

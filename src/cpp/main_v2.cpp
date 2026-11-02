@@ -1,4 +1,5 @@
 #include "v2/driver/Driver.hpp"
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
@@ -21,6 +22,7 @@ const char* kUsage =
     "Usage:\n"
     "  %s run <file.lx> [options] [-- program args]\n"
     "  %s check <file.lx> [options]\n"
+    "  %s test [path] [options] [-- test args]\n"
     "  %s <file.lx> [max_instructions] [options] [-- program args]\n"
     "  %s version\n"
     "\n"
@@ -47,7 +49,7 @@ const char* kUsage =
     "The legacy positional forms still work: `file.lx 100000 verbose`.\n";
 
 void printUsage(const char* program) {
-    std::printf(kUsage, program, program, program, program);
+    std::printf(kUsage, program, program, program, program, program);
 }
 
 bool selectDumpStage(const std::string& stage, loxis::v2::DumpOptions& dumps) {
@@ -92,6 +94,132 @@ std::filesystem::path executableDirectory(const char* argv0) {
     return {};
 }
 
+void configureBundledStdlib(loxis::v2::RunOptions& opts, const char* argv0) {
+    const auto bundledStdlib = executableDirectory(argv0) / "stdlib";
+    if (std::filesystem::exists(bundledStdlib / "loxis" / "prelude.lx")) {
+        opts.stdlibRoot = bundledStdlib.string();
+    }
+}
+
+bool parseOptions(
+    const std::vector<std::string>& args,
+    size_t start,
+    loxis::v2::RunOptions& opts,
+    const char* program)
+{
+    for (size_t i = start; i < args.size(); ++i) {
+        const std::string& arg = args[i];
+        if (arg == "--") {
+            for (++i; i < args.size(); ++i) opts.arguments.emplace_back(args[i]);
+            break;
+        } else if (arg == "-v" || arg == "--verbose") {
+            opts.verbose = true;
+        } else if (arg == "--trace") {
+            opts.trace = true;
+        } else if (arg == "--gc-stats") {
+            opts.gcStats = true;
+        } else if (arg.rfind("--gc=", 0) == 0) {
+            if (!parseGCMode(arg.substr(5), opts.gc)) {
+                std::cerr << "Unknown GC backend: " << arg.substr(5)
+                          << " (expected nogc, arc or aarc)\n";
+                return false;
+            }
+        } else if (arg.rfind("--slots=", 0) == 0) {
+            opts.heapSlots = static_cast<uint32_t>(std::stoul(arg.substr(8)));
+        } else if (arg.rfind("--dump=", 0) == 0) {
+            if (!selectDumpStage(arg.substr(7), opts.dumps)) {
+                std::cerr << "Unknown dump stage: " << arg.substr(7) << "\n";
+                return false;
+            }
+        } else if (arg.rfind("--dump-", 0) == 0) {
+            if (!selectDumpStage(arg.substr(7), opts.dumps)) {
+                std::cerr << "Unknown dump flag: " << arg << "\n";
+                return false;
+            }
+        } else if (arg == "verbose" || arg == "true" || arg == "yes" || arg == "1") {
+            opts.verbose = true;
+        } else if (isUnsignedNumber(arg)) {
+            opts.maxInstr = std::stoi(arg);
+        } else {
+            std::cerr << "Unknown argument: " << arg << "\n\n";
+            printUsage(program);
+            return false;
+        }
+    }
+    return true;
+}
+
+int runTests(
+    const std::vector<std::string>& args,
+    const char* argv0)
+{
+    namespace fs = std::filesystem;
+
+    fs::path target = "tests";
+    size_t optionStart = 1;
+    if (args.size() > 1 && args[1] != "--" && args[1].rfind("-", 0) != 0) {
+        target = args[1];
+        optionStart = 2;
+    }
+
+    std::error_code ec;
+    std::vector<fs::path> files;
+    if (fs::is_regular_file(target, ec)) {
+        if (target.extension() != ".lx") {
+            std::cerr << "Test file must use the .lx extension: " << target.string() << "\n";
+            return 1;
+        }
+        files.push_back(fs::absolute(target));
+    } else if (fs::is_directory(target, ec)) {
+        for (fs::recursive_directory_iterator it(target, ec), end; it != end; it.increment(ec)) {
+            if (ec) break;
+            if (it->is_regular_file() && it->path().extension() == ".lx") {
+                files.push_back(fs::absolute(it->path()));
+            }
+        }
+    } else {
+        std::cerr << "Test path does not exist: " << target.string() << "\n";
+        return 1;
+    }
+    if (ec) {
+        std::cerr << "Could not scan test path " << target.string() << ": " << ec.message() << "\n";
+        return 1;
+    }
+    std::sort(files.begin(), files.end());
+    if (files.empty()) {
+        std::cerr << "No .lx tests found under: " << target.string() << "\n";
+        return 1;
+    }
+
+    loxis::v2::RunOptions base;
+    configureBundledStdlib(base, argv0);
+    if (!parseOptions(args, optionStart, base, argv0)) return 1;
+    if (base.dumps.any()) {
+        std::cerr << "Dump options are not supported by 'Loxis test'\n";
+        return 1;
+    }
+
+    size_t passed = 0;
+    loxis::v2::Driver driver;
+    for (const auto& file : files) {
+        std::cout << "[ RUN  ] " << file.string() << "\n";
+        auto opts = base;
+        opts.file = file.string();
+        const int result = driver.compileAndRun(opts);
+        if (result == 0) {
+            ++passed;
+            std::cout << "[ PASS ] " << file.filename().string() << "\n";
+        } else {
+            std::cout << "[ FAIL ] " << file.filename().string() << "\n";
+        }
+    }
+
+    const size_t failed = files.size() - passed;
+    std::cout << passed << " passed, " << failed << " failed, "
+              << files.size() << " total\n";
+    return failed == 0 ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -115,6 +243,10 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        if (args[0] == "test") {
+            return runTests(args, argv[0]);
+        }
+
         const bool hasCommand = args[0] == "run" || args[0] == "check";
         const size_t fileIndex = hasCommand ? 1 : 0;
         if (fileIndex >= args.size()) {
@@ -131,53 +263,8 @@ int main(int argc, char* argv[]) {
         loxis::v2::RunOptions opts;
         opts.file = args[fileIndex];
         opts.compileOnly = hasCommand && args[0] == "check";
-        const auto bundledStdlib = executableDirectory(argv[0]) / "stdlib";
-        if (std::filesystem::exists(bundledStdlib / "loxis" / "prelude.lx")) {
-            opts.stdlibRoot = bundledStdlib.string();
-        }
-
-        for (size_t i = fileIndex + 1; i < args.size(); ++i) {
-            const std::string& arg = args[i];
-            if (arg == "--") {
-                for (++i; i < args.size(); ++i) opts.arguments.emplace_back(args[i]);
-                break;
-            } else if (arg == "-v" || arg == "--verbose") {
-                opts.verbose = true;
-            } else if (arg == "--trace") {
-                opts.trace = true;
-            } else if (arg == "--gc-stats") {
-                opts.gcStats = true;
-            } else if (arg.rfind("--gc=", 0) == 0) {
-                if (!parseGCMode(arg.substr(5), opts.gc)) {
-                    std::cerr << "Unknown GC backend: " << arg.substr(5)
-                              << " (expected nogc, arc or aarc)\n";
-                    return 1;
-                }
-            } else if (arg.rfind("--slots=", 0) == 0) {
-                opts.heapSlots = static_cast<uint32_t>(std::stoul(arg.substr(8)));
-            } else if (arg.rfind("--dump=", 0) == 0) {
-                if (!selectDumpStage(arg.substr(7), opts.dumps)) {
-                    std::cerr << "Unknown dump stage: " << arg.substr(7) << "\n";
-                    return 1;
-                }
-            } else if (arg.rfind("--dump-", 0) == 0) {
-                if (!selectDumpStage(arg.substr(7), opts.dumps)) {
-                    std::cerr << "Unknown dump flag: " << arg << "\n";
-                    return 1;
-                }
-            } else if (arg == "verbose" || arg == "true" || arg == "yes" || arg == "1") {
-                // Legacy positional form: `Loxis demo.lx 100000 verbose`.
-                opts.verbose = true;
-            } else if (isUnsignedNumber(arg)) {
-                opts.maxInstr = std::stoi(arg);
-            } else {
-                // Silently feeding this to stoi is what used to turn a typo into
-                // "Fatal error: stoi".
-                std::cerr << "Unknown argument: " << arg << "\n\n";
-                printUsage(argv[0]);
-                return 1;
-            }
-        }
+        configureBundledStdlib(opts, argv[0]);
+        if (!parseOptions(args, fileIndex + 1, opts, argv[0])) return 1;
 
         loxis::v2::Driver driver;
         return driver.compileAndRun(opts);
