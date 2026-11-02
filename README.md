@@ -123,6 +123,7 @@ and [the executable-subset notes](docs/executable-subset.md) for details.
 
 ## Project status
 
+- [0.1 stability contract](docs/status.md)
 - [Roadmap](ROADMAP.md)
 - [Language specification](docs/spec.md)
 - [Executable subset](docs/executable-subset.md)

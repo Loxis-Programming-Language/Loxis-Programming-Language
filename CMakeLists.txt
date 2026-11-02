@@ -55,7 +55,7 @@ add_executable(Loxis
 )
 
 target_link_libraries(Loxis PRIVATE loxis_v2)
-target_compile_definitions(Loxis PRIVATE LOXIS_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(Loxis PRIVATE LOXIS_VERSION="${PROJECT_VERSION}-alpha.1")
 
 # Recursive-descent parsing and the AST walkers that follow all run on the native
 # stack. The default 1 MB reserve is what the nesting limits below are sized

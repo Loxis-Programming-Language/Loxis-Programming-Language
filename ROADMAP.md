@@ -136,7 +136,7 @@
 - [x] JSON parsing/serialization and file-processing example
 - [x] Filesystem/path/binary I/O, arguments/environment, clocks and seeded random
 - [x] Strict numeric parsing, Unicode helpers and double math
-- [ ] Networking / HTTP
+- [x] TCP client/server sockets (`loxis.net`); HTTP remains planned
 
 ### Tooling
 - [ ] VS Code extension — publish to marketplace
