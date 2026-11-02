@@ -72,7 +72,8 @@ cpack --config .\build\CPackConfig.cmake -C Release
 
 The archive contains `Loxis.exe`, the standard library, documentation and the
 license. Keep `Loxis.exe` beside the bundled `stdlib` directory; the executable
-discovers that directory even when invoked from another working directory.
+discovers that directory even when invoked from another working directory. The
+generated archive is written to `build/packages`.
 
 The compiler resolves `loxis.*` imports from `stdlib/loxis/`. Set
 `LOXIS_STDLIB` to override the standard-library location.
