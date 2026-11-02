@@ -49,13 +49,13 @@ cmake --build build
 For a Visual Studio build:
 
 ```powershell
-.\build\Debug\Loxis.exe run .\demo.lx
+.\build\Debug\Loxis.exe run .\examples\hello_world.lx
 ```
 
 For a single-configuration build:
 
 ```powershell
-.\build\Loxis.exe run .\demo.lx
+.\build\Loxis.exe run .\examples\hello_world.lx
 ```
 
 Use `Loxis check file.lx` to compile and type-check without running the
@@ -80,8 +80,8 @@ After a Release build, create a relocatable Windows ZIP with:
 cpack --config .\build\CPackConfig.cmake -C Release
 ```
 
-The archive contains `Loxis.exe`, the standard library, documentation and the
-license. Keep `Loxis.exe` beside the bundled `stdlib` directory; the executable
+The archive contains `Loxis.exe`, the standard library, runnable examples,
+documentation and the license. Keep `Loxis.exe` beside the bundled `stdlib` directory; the executable
 discovers that directory even when invoked from another working directory. The
 generated archive is written to `build/packages`.
 

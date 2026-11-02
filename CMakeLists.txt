@@ -108,6 +108,7 @@ target_link_libraries(bench_gc PRIVATE loxis_v2)
 # can discover the bundled library regardless of the caller's working directory.
 install(TARGETS Loxis RUNTIME DESTINATION .)
 install(DIRECTORY stdlib DESTINATION .)
+install(DIRECTORY examples DESTINATION .)
 install(FILES README.md LICENSE DESTINATION .)
 install(DIRECTORY docs DESTINATION .)
 
