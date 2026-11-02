@@ -609,6 +609,19 @@ ItemPtr Parser::parseClass(Visibility vis, ClassModifier mod) {
             ExprPtr value = makePathExpr(property.name);
             const std::string typeName = fieldTypeName(property.ty);
             if (typeName == "str") value = makeCall("strlen", {value});
+            else if (typeName == "char") {
+                value = makeCall("strchar", {
+                    makeCall("chr", {value}),
+                    std::make_shared<Expr>(ExprLit{static_cast<int64_t>(0)})
+                });
+            }
+            else if (typeName == "bool") {
+                value = std::make_shared<Expr>(ExprIf{
+                    value,
+                    std::make_shared<Expr>(ExprLit{static_cast<int64_t>(1)}),
+                    std::make_shared<Expr>(ExprLit{static_cast<int64_t>(0)})
+                });
+            }
             else if (typeName == "float" || typeName == "double") value = makeCall("ftoi", {value});
             ExprPtr multiplied = std::make_shared<Expr>(ExprBinary{
                 ExprBinary::Mul, hash, std::make_shared<Expr>(ExprLit{static_cast<int64_t>(31)})
@@ -626,8 +639,17 @@ ItemPtr Parser::parseClass(Visibility vis, ClassModifier mod) {
             });
             ExprPtr value = makePathExpr(property.name);
             const std::string typeName = fieldTypeName(property.ty);
-            if (typeName != "str") {
-                if (typeName == "float" || typeName == "double") value = makeCall("ftoi", {value});
+            if (typeName == "bool") {
+                value = std::make_shared<Expr>(ExprIf{
+                    value,
+                    std::make_shared<Expr>(ExprLit{std::string("true")}),
+                    std::make_shared<Expr>(ExprLit{std::string("false")})
+                });
+            } else if (typeName == "char") {
+                value = makeCall("chr", {value});
+            } else if (typeName == "float" || typeName == "double") {
+                value = makeCall("nativeDoubleString", {value});
+            } else if (typeName != "str") {
                 value = makeCall("i2s", {value});
             }
             text = std::make_shared<Expr>(ExprBinary{ExprBinary::Add, text, value});

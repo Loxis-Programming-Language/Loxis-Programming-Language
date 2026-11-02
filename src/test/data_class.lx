@@ -1,4 +1,5 @@
 data class User(val id: int, val name: str)
+data class Flags(val enabled: bool, val marker: char, val ratio: double)
 
 fun main() {
     val ada = User(1, "Ada")
@@ -11,4 +12,8 @@ fun main() {
     print(ada == User(1, "Ada"))
     print(ada.hashCode())
     print(ada.toString())
+    val flags = Flags(true, 'A', 1.5)
+    print(flags == Flags(true, 'A', 1.5))
+    print(flags.hashCode())
+    print(flags.toString())
 }

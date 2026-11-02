@@ -22,7 +22,8 @@ silently change the result of valid programs.
 - Singleton objects with persistent fields and methods, and user-defined
   extension functions.
 - Data classes with generated `componentN`, `copy`, `equals`, equality,
-  `hashCode` and `toString` members for baseline primitive properties.
+  `hashCode` and `toString` members for `int`, `str`, `bool`, `char` and
+  `double` properties covered by the baseline.
 - Generic functions and classes with call-site inference and monomorphization.
 - Function values, non-capturing lambdas and capturing closures.
 - Nullable values, `?.`, `?:`, `!!`, `is` and `!is` smart casts.

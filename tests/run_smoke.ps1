@@ -151,7 +151,7 @@ $cases = @(
     @{
         Name = "generated data class members"
         File = "src\test\data_class.lx"
-        Out = "1`nAda`n2`nGrace`ntrue`ntrue`n995`nUser(id=1, name=Ada)`n"
+        Out = "1`nAda`n2`nGrace`ntrue`ntrue`n995`nUser(id=1, name=Ada)`ntrue`n32768`nFlags(enabled=true, marker=A, ratio=1.5)`n"
     },
     @{
         Name = "stdlib generic list"

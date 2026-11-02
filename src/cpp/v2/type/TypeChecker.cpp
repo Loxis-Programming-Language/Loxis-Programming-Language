@@ -2507,6 +2507,25 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
             if (!classScope) classScope = sc;
             auto classDef = classScope->classDef();
 
+            if (n.modifier == ClassModifier::Data) {
+                for (const auto& property : n.primaryCtor) {
+                    if (!property.isVal && !property.isVar) continue;
+                    TyPtr propertyTy = property.ty ? resolveType(*property.ty, classScope) : mkError();
+                    const TyKind kind = propertyTy ? propertyTy->kind() : TyKind::Error;
+                    const bool supported = kind == TyKind::Int || kind == TyKind::Str ||
+                        kind == TyKind::Bool || kind == TyKind::Char || kind == TyKind::Double;
+                    if (!supported) {
+                        error(
+                            "generated data-class members do not support property '" +
+                                property.name + "' of type " +
+                                (propertyTy ? propertyTy->toString() : std::string("<unknown>")),
+                            "unsupported generated member type",
+                            "use int, str, bool, char or double, or declare a regular class");
+                        return;
+                    }
+                }
+            }
+
             for (const auto& pd : n.primaryCtor) {
                 if (!pd.isVal && !pd.isVar) continue;
                 TyPtr paramTy = pd.ty ? resolveType(*pd.ty, classScope) : mkError();

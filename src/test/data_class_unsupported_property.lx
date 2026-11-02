@@ -1,0 +1,5 @@
+data class Measurement(val value: float)
+
+fun main() {
+    print(Measurement(1.0).toString())
+}
