@@ -49,14 +49,18 @@ cmake --build build
 For a Visual Studio build:
 
 ```powershell
-.\build\Debug\Loxis.exe .\demo.lx
+.\build\Debug\Loxis.exe run .\demo.lx
 ```
 
 For a single-configuration build:
 
 ```powershell
-.\build\Loxis.exe .\demo.lx
+.\build\Loxis.exe run .\demo.lx
 ```
+
+Use `Loxis check file.lx` to compile and type-check without running the
+program, and `Loxis version` to print the installed version. Direct
+`Loxis file.lx` invocation remains supported for compatibility.
 
 The compiler resolves `loxis.*` imports from `stdlib/loxis/`. Set
 `LOXIS_STDLIB` to override the standard-library location.

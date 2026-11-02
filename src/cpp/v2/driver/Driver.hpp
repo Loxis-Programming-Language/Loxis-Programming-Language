@@ -26,6 +26,7 @@ struct RunOptions {
     int maxInstr = 1000000;
     bool verbose = false;
     bool trace = false;
+    bool compileOnly = false;
     DumpOptions dumps;
     GCMode gc = GCMode::NoGC;
     bool gcStats = false;

@@ -232,9 +232,9 @@ int Driver::compileAndRun(const RunOptions& opts) {
     Chunk chunk;
     if (compileToChunk(opts, chunk) != 0) return 1;
 
-    // Dumps are compile-only: the VM is never constructed, so IR text and
-    // program output can never interleave on stdout.
-    if (opts.dumps.any()) return 0;
+    // Checks and dumps are compile-only: the VM is never constructed, so IR
+    // text and program output can never interleave on stdout.
+    if (opts.compileOnly || opts.dumps.any()) return 0;
 
     try {
         if (opts.verbose) {

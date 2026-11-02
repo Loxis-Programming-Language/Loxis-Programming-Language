@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.26)
-project(Loxis)
+project(Loxis VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -55,6 +55,7 @@ add_executable(Loxis
 )
 
 target_link_libraries(Loxis PRIVATE loxis_v2)
+target_compile_definitions(Loxis PRIVATE LOXIS_VERSION="${PROJECT_VERSION}")
 
 # Recursive-descent parsing and the AST walkers that follow all run on the native
 # stack. The default 1 MB reserve is what the nesting limits below are sized
@@ -85,6 +86,8 @@ if(Python3_Interpreter_FOUND)
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_api_boundary.py --exe $<TARGET_FILE:Loxis>)
     add_test(NAME loxis_examples
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_examples.py --exe $<TARGET_FILE:Loxis>)
+    add_test(NAME loxis_cli
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_cli.py --exe $<TARGET_FILE:Loxis>)
 endif()
 
 add_executable(LSPTest

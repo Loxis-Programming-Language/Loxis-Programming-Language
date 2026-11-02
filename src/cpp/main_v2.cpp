@@ -6,10 +6,18 @@
 
 namespace {
 
+#ifndef LOXIS_VERSION
+#define LOXIS_VERSION "dev"
+#endif
+
 const char* kUsage =
     "Loxis - a statically typed language with a register-based VM\n"
     "\n"
-    "Usage: %s <file.lx> [max_instructions] [options] [-- program args]\n"
+    "Usage:\n"
+    "  %s run <file.lx> [options] [-- program args]\n"
+    "  %s check <file.lx> [options]\n"
+    "  %s <file.lx> [max_instructions] [options] [-- program args]\n"
+    "  %s version\n"
     "\n"
     "Options:\n"
     "  -v, --verbose        Stage banners, loaded modules and per-stage timings\n"
@@ -26,6 +34,7 @@ const char* kUsage =
     "      --slots=N        Heap slot count (0 = backend default)\n"
     "      --gc-stats       Print GC statistics after the run\n"
     "  -h, --help           Show this help\n"
+    "      --version        Show the Loxis version\n"
     "\n"
     "Any --dump-* flag makes the compiler compile-only: the program is not run,\n"
     "so IR text and program output never interleave.\n"
@@ -33,7 +42,7 @@ const char* kUsage =
     "The legacy positional forms still work: `file.lx 100000 verbose`.\n";
 
 void printUsage(const char* program) {
-    std::printf(kUsage, program);
+    std::printf(kUsage, program, program, program, program);
 }
 
 bool selectDumpStage(const std::string& stage, loxis::v2::DumpOptions& dumps) {
@@ -75,20 +84,34 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        if (args.size() == 1 && (args[0] == "version" || args[0] == "--version")) {
+            std::cout << "Loxis " << LOXIS_VERSION << "\n";
+            return 0;
+        }
+
         if (args.empty()) {
             printUsage(argv[0]);
             return 1;
         }
-        if (args[0].rfind("-", 0) == 0) {
-            std::cerr << "Expected a .lx file as the first argument, got: " << args[0] << "\n\n";
+
+        const bool hasCommand = args[0] == "run" || args[0] == "check";
+        const size_t fileIndex = hasCommand ? 1 : 0;
+        if (fileIndex >= args.size()) {
+            std::cerr << "Missing .lx file after '" << args[0] << "'\n\n";
+            printUsage(argv[0]);
+            return 1;
+        }
+        if (args[fileIndex].rfind("-", 0) == 0) {
+            std::cerr << "Expected a .lx file, got: " << args[fileIndex] << "\n\n";
             printUsage(argv[0]);
             return 1;
         }
 
         loxis::v2::RunOptions opts;
-        opts.file = args[0];
+        opts.file = args[fileIndex];
+        opts.compileOnly = hasCommand && args[0] == "check";
 
-        for (size_t i = 1; i < args.size(); ++i) {
+        for (size_t i = fileIndex + 1; i < args.size(); ++i) {
             const std::string& arg = args[i];
             if (arg == "--") {
                 for (++i; i < args.size(); ++i) opts.arguments.emplace_back(args[i]);
