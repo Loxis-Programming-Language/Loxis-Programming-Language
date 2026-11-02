@@ -345,6 +345,7 @@ struct ItemFun {
     std::optional<size_t> varargIndex;
     std::optional<size_t> kwargsIndex;
     std::vector<TyPtr> resolvedParamTys;
+    bool compilerGenerated = false;
 };
 
 // Class

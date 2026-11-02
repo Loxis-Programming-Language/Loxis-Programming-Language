@@ -25,6 +25,7 @@ private:
     Scope* rootScope = nullptr;
     uint32_t inferCounter = 0;
     std::vector<std::string> intrinsicSources;
+    bool checkingCompilerGenerated = false;
     bool canAccessIntrinsic(const std::string& name);
     std::vector<Diagnostic> errors;
     SourceLocation currentLoc;

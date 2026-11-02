@@ -1,6 +1,0 @@
-data class User(val id: int, val name: str)
-
-fun main() {
-    val user = User(1, "Ada")
-    print(user.id)
-}

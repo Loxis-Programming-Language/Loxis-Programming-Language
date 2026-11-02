@@ -559,6 +559,7 @@ ItemPtr Parser::parseClass(Visibility vis, ClassModifier mod) {
             if (hasMethod(methodName)) return;
             methods.push_back(ItemFun{methodName, Visibility::Public, {}, std::move(params),
                 std::move(ret), {}, std::move(body), false, false, false, "", nullptr, "this"});
+            methods.back().compilerGenerated = true;
         };
         auto fieldTypeName = [](const TypePtr& ty) -> std::string {
             if (!ty) return {};

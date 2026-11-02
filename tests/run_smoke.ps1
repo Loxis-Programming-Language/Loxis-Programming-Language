@@ -149,6 +149,11 @@ $cases = @(
         Out = "41`n42`n42`n"
     },
     @{
+        Name = "generated data class members"
+        File = "src\test\data_class.lx"
+        Out = "1`nAda`n2`nGrace`ntrue`ntrue`n995`nUser(id=1, name=Ada)`n"
+    },
+    @{
         Name = "stdlib generic list"
         File = "src\test\stdlib_list.lx"
         Out = "3`n4`n24`n"

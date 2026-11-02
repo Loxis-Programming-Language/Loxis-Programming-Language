@@ -21,6 +21,8 @@ silently change the result of valid programs.
   combinations exercised by the smoke suite.
 - Singleton objects with persistent fields and methods, and user-defined
   extension functions.
+- Data classes with generated `componentN`, `copy`, `equals`, equality,
+  `hashCode` and `toString` members for baseline primitive properties.
 - Generic functions and classes with call-site inference and monomorphization.
 - Function values, non-capturing lambdas and capturing closures.
 - Nullable values, `?.`, `?:`, `!!`, `is` and `!is` smart casts.
@@ -52,7 +54,6 @@ The parser may recognize some of these constructs so diagnostics and tooling can
 understand future syntax. Recognition is not an execution guarantee.
 
 - Companion-object execution.
-- Generated data-class members.
 - Struct-style and nested enum patterns, and complete exhaustiveness analysis.
 - Default arguments, async/await, coroutines and macros.
 - Stable native/bytecode ABI, separate compilation and third-party packages.
@@ -60,8 +61,6 @@ understand future syntax. Recognition is not an execution guarantee.
 
 Unsupported constructs should fail during compilation with a diagnostic. A
 successful compile followed by a backend failure is a compiler bug.
-`data class` declarations are therefore rejected until their generated-member
-contract is implemented; they are not silently treated as ordinary classes.
 
 ## Alpha release gates
 

@@ -42,6 +42,7 @@
 - [x] Interface default methods and overrides through interface dispatch
 - [x] Singleton objects with persistent fields and method dispatch
 - [x] User-defined extension functions
+- [x] Data classes with generated component/copy/equality/hash/text members
 
 ### Closures
 - [x] Non-capturing lambdas — v2 `{ arg: Type -> expression }` syntax, lowered as synthetic top-level functions
@@ -107,7 +108,6 @@
 ### Language Features (parse + type-check done, execution partial)
 - [ ] **Enum classes — full coverage** — struct-style variants, nested patterns, exhaustiveness checking not yet supported at runtime
 - [ ] **Top-level mutable `var` and compile-time `const` semantics** — immutable `val` getters execute; mutation and constant evaluation need full coverage
-- [ ] **Data classes** — modifier parsed; `equals`/`hashCode`/`toString`/`copy`/`componentN` not generated
 - [ ] **Companion objects** — parsed; not scoped for execution
 - [ ] **String templates** — parsed and lowered (concat chain); edge cases not exhaustively tested
 

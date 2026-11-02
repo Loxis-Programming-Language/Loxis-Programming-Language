@@ -57,6 +57,7 @@ bool TypeChecker::canAccessIntrinsic(const std::string& name) {
     };
     if (name != "Unsafe" && !name.starts_with("__loxis_") && !findNativeBuiltin(name) &&
         std::find(internal.begin(), internal.end(), name) == internal.end()) return true;
+    if (checkingCompilerGenerated) return true;
     if (std::find(intrinsicSources.begin(), intrinsicSources.end(), currentLoc.file) != intrinsicSources.end()) return true;
     error("'" + name + "' is an internal runtime API; use the standard-library methods or explicitly import loxis.unsafe");
     return false;
@@ -2494,17 +2495,13 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
             for (size_t i = 0; i < n.params.size(); ++i)
                 fnScope.declare(n.params[i].first, SymbolKind::Value, nullptr, paramTys[i + (recvTy ? 1 : 0)]);
 
+            const bool savedGenerated = checkingCompilerGenerated;
+            checkingCompilerGenerated = n.compilerGenerated;
             if (n.body) checkExpr(n.body, &fnScope, retTy);
+            checkingCompilerGenerated = savedGenerated;
             currentRetTy = saved;
 
         } else if constexpr (std::is_same_v<T, ItemClass>) {
-            if (n.modifier == ClassModifier::Data) {
-                error(
-                    "data classes are not supported yet",
-                    "the compiler does not generate data-class members",
-                    "use a regular class and define the required methods explicitly");
-                return;
-            }
             // Type-check in class child scope
             Scope* classScope = sc->childMod(n.name);
             if (!classScope) classScope = sc;
