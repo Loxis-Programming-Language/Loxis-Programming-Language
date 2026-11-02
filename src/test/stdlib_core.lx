@@ -1,15 +1,17 @@
+import loxis.unsafe
+import loxis.text
 import loxis.ptr
 
 fun main() -> int {
-    val arr = arrayNew(2)
-    arraySet(arr, 0, 11)
-    arraySet(arr, 1, 22)
-    print(arrayLen(arr))
-    print(arrayGet(arr, 0) + arrayGet(arr, 1))
-    arrayFree(arr)
+    val arr = Unsafe.arrayNew(2)
+    Unsafe.arraySet(arr, 0, 11)
+    Unsafe.arraySet(arr, 1, 22)
+    print(Unsafe.arrayLen(arr))
+    print(Unsafe.arrayGet(arr, 0) + Unsafe.arrayGet(arr, 1))
+    Unsafe.arrayFree(arr)
 
-    print(strlen(strcat("ab", "cd")))
-    print(s2i("123") + 7)
-    print(ftoi(3.0 + 4.0))
+    print(((("ab") + ("cd"))).length())
+    print(("123").toInt() + 7)
+    print((3.0 + 4.0).toInt())
     return 0
 }

@@ -248,6 +248,7 @@ void ScopeBuilder::resolveClass(ItemClass& cls, Scope* scope) {
         for (const auto& generic : m.generics) mi.genericParams.push_back(generic.name);
         for (const auto& param : m.params) mi.paramNames.push_back(param.first);
         mi.varargIndex = m.varargIndex;
+        mi.kwargsIndex = m.kwargsIndex;
         mi.funcType = nullptr; // resolved during type checking
         mi.arity = static_cast<uint32_t>(m.params.size());
         mi.isOpen = m.isOpen;
@@ -499,6 +500,7 @@ void ScopeBuilder::resolveInterface(ItemInterface& iface, Scope* scope) {
         mi.name = m.name;
         for (const auto& param : m.params) mi.paramNames.push_back(param.first);
         mi.varargIndex = m.varargIndex;
+        mi.kwargsIndex = m.kwargsIndex;
         mi.arity = static_cast<uint32_t>(m.params.size());
         mi.isAbstract = !m.defaultBody; // abstract if no default body
 
@@ -562,6 +564,7 @@ void ScopeBuilder::resolveObject(ItemObject& obj, Scope* scope) {
         for (const auto& generic : m.generics) mi.genericParams.push_back(generic.name);
         for (const auto& param : m.params) mi.paramNames.push_back(param.first);
         mi.varargIndex = m.varargIndex;
+        mi.kwargsIndex = m.kwargsIndex;
         mi.funcType = nullptr;
         mi.arity = static_cast<uint32_t>(m.params.size());
         mi.isOpen = m.isOpen;
@@ -657,6 +660,7 @@ void ScopeBuilder::resolveEnumClass(ItemEnumClass& ec, Scope* scope) {
         for (const auto& generic : m.generics) mi.genericParams.push_back(generic.name);
         for (const auto& param : m.params) mi.paramNames.push_back(param.first);
         mi.varargIndex = m.varargIndex;
+        mi.kwargsIndex = m.kwargsIndex;
         mi.funcType = nullptr;
         mi.arity = static_cast<uint32_t>(m.params.size());
         def->methods.push_back(mi);

@@ -14,13 +14,11 @@ package loxis.builtins
 
 // --- Type reflection ---
 
-fun typeof(obj: int) -> int {
-    return syscall(2, obj)
-}
+import loxis.refl
 
 // --- Character conversion ---
-// chr is also available as a compiler builtin (no import needed)
+// Use Text.fromByte or Unicode.fromCodePoint from loxis.text.
 
 // --- Low-level syscall ---
-// syscall is a compiler builtin (no import needed).
+// syscall requires an explicit import of loxis.unsafe in the calling file.
 // This file just documents the available syscall numbers.

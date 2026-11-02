@@ -1,7 +1,7 @@
 import loxis.collections.list
 
 fun main() -> int {
-    val xs = listWithCapacity<int>(4)
+    val xs = Lists.withCapacity<int>(4)
     xs.push(3)
     xs.push(1)
     xs.push(4)
@@ -20,9 +20,5 @@ fun main() -> int {
     val zs = xs.append(ys)
     print(zs.size())
     print(zs.get(0) + zs.get(7))
-
-    listFree<int>(zs)
-    listFree<int>(ys)
-    listFree<int>(xs)
     return 0
 }

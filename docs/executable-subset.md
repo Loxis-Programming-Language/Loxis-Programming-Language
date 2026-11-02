@@ -25,7 +25,7 @@ full v2 spec.
   reference outer local variables through heap-allocated closure
   environments. Non-capturing lambdas continue to work as before.
   Standard-library helpers also include algorithm helpers such as
-  `listAppend`, `listReverse`, `listReversed`, and `listSortBy`.
+  `append`, `reverse`, `reversed`, and `sortBy` methods.
 - Integer math helpers and text helpers can be authored directly in
   standard-library modules, including length, concatenation, integer parsing,
   integer formatting, character-code lookup, slicing, substring search, and
@@ -109,6 +109,9 @@ not imply support for all untested combinations of language features below.
 
 ## Generic argument inference
 
+Calls also support named arguments and typed argument collectors; see
+the calling syntax below.
+
 Calls can omit all generic arguments when argument types determine them:
 `identity(42)`, `Box(42)`, and `xs.map({ x -> x * 2 })`.
 Inference matches nested generic types and function signatures, checks lambda
@@ -124,3 +127,53 @@ without a result annotation, needs explicit type arguments. Conflicting bindings
 are rejected; inference does not choose a common supertype for unrelated inputs.
 Bare `null` alone cannot determine a type parameter. Partial explicit argument
 lists and whole-program inference from later assignments are not supported.
+
+## Named arguments, varargs and kwargs
+
+```text
+import loxis.collections.map
+
+fun total(base: int, *values: int, **options: int) -> int {
+    var result = base + options.get("bonus").getOrElse(0)
+    for value in values { result += value }
+    return result
+}
+
+val values = [2, 3]
+val options = {"bonus": 4}
+total(1, *values, **options) // 10
+total(base = 1, bonus = 4)   // 5
+```
+
+`*values: T` collects extra positional arguments into an array. Its body
+can index it, iterate it, or call `values.size()`. `**options: T` collects
+unmatched keyword arguments into a new `HashMap<str, T>` and requires the map
+module import. Each collector can be empty. A `*` parameter must follow all
+fixed parameters and may only be followed by a `**` parameter; `**` must be last.
+The element/value annotation remains `T`, rather than the packed collection type.
+`vararg` and `kwargs` are ordinary identifiers, not declaration keywords.
+
+Named arguments use `name = value` and can reorder fixed parameters. Positional
+arguments must precede named arguments. `*array` expands into varargs after all
+fixed positional parameters have been supplied. `**map` requires a `**` parameter and
+accepts a non-null `HashMap<str, T>`; it can also supply otherwise missing fixed
+parameters, which are consumed before the remaining map is passed to kwargs.
+Spreading copies entries and leaves the source map unchanged. Duplicate keywords,
+including collisions with explicitly supplied fixed parameters, fail rather than
+overwrite values; dynamic collisions and missing map keys fail at runtime.
+
+Calls evaluate the receiver/callee first and each source argument exactly once,
+from left to right, before binding arguments to parameters. Binding works for
+functions, ordinary methods, extension methods, interface dispatch, and function
+values retaining their declaration's parameter metadata. Constructors support
+named fixed arguments. Generic inference includes collector element/value types;
+an empty collector alone cannot determine a generic type parameter.
+
+Compiler intrinsics and enum variant constructors accept positional arguments.
+Named/spread arguments on `?.` calls require unwrapping the receiver first.
+Explicit function-type annotations retain the packed ABI but do not declare
+parameter names or collector metadata. Default function arguments are not part
+of this calling syntax.
+
+`loxis_call_arguments` runs positive and negative regressions with NoGC, ARC and
+AARC, including heap cleanup checks for successful ARC/AARC programs.

@@ -24,6 +24,8 @@ private:
     std::unique_ptr<Scope> rootOwner;
     Scope* rootScope = nullptr;
     uint32_t inferCounter = 0;
+    std::vector<std::string> intrinsicSources;
+    bool canAccessIntrinsic(const std::string& name);
     std::vector<Diagnostic> errors;
     SourceLocation currentLoc;
     SourceLocation currentEndLoc;
@@ -53,11 +55,13 @@ private:
                    const std::vector<ExprPtr>& args, Scope* sc,
                    std::vector<TyPtr>& typeArgs, TyPtr expectedTy = nullptr,
                    size_t offset = 0);
-    bool arrangeArguments(const std::vector<ExprPtr>& args,
-                          const std::vector<std::optional<std::string>>& argNames,
-                          const std::vector<std::string>& paramNames,
-                          std::optional<size_t> varargIndex,
-                          std::vector<ExprPtr>& arranged, bool diagnose = false);
+    bool bindArguments(const std::vector<ExprPtr>& args,
+                       const std::vector<std::optional<std::string>>& argNames,
+                       const std::vector<std::string>& paramNames,
+                       std::optional<size_t> varargIndex, std::optional<size_t> kwargsIndex,
+                       std::vector<ExprPtr>& arranged, bool diagnose = false);
+    TyPtr parameterType(TyPtr type, size_t index, std::optional<size_t> varargIndex,
+                        std::optional<size_t> kwargsIndex, Scope* sc);
     TyPtr checkClosure(ExprClosure& n, Scope* sc, TyPtr expectedFn = nullptr);
     void checkStmt(StmtPtr s, Scope* sc);
     void checkItem(ItemPtr i, Scope* sc);

@@ -2,7 +2,7 @@ import loxis.collections.list
 import loxis.collections.stream
 
 fun main() -> int {
-    var xs = listWithCapacity<int>(4)
+    var xs = Lists.withCapacity<int>(4)
     xs.push(10)
     xs.push(20)
     xs.push(30)

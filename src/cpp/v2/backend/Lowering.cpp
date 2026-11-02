@@ -377,6 +377,12 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
                 auto it = m_scope.find(capture.name);
                 if (it != m_scope.end()) {
                     captures.push_back(OpCopy{it->second});
+                } else if (capture.sourceOffset != ~0u && m_closureEnvLocal.has_value()) {
+                    // Nested closure forwarding a variable already held in this
+                    // closure's own environment.
+                    LocalId src = newLocal(capture.ty, "fwd_cap");
+                    emit(StAssign{src, RvClosureGet{*m_closureEnvLocal, capture.sourceOffset}});
+                    captures.push_back(OpCopy{src});
                 }
             }
             LocalId tmp = newLocal(e.ty, "closure");
@@ -494,8 +500,28 @@ LocalId Lowering::lowerExpr(const HirExpr& expr) {
             bool isField = (e.lhs && std::holds_alternative<HirField>(*e.lhs));
             bool isIndex = (e.lhs && std::holds_alternative<HirIndex>(*e.lhs));
             uint32_t globalSlot = ~0u;
+            uint32_t captureOffset = ~0u;
             if (e.lhs) {
-                if (auto* path = std::get_if<HirPath>(e.lhs.get())) globalSlot = path->globalSlot;
+                if (auto* path = std::get_if<HirPath>(e.lhs.get())) {
+                    globalSlot = path->globalSlot;
+                    captureOffset = path->captureOffset;
+                }
+            }
+            if (captureOffset != ~0u && m_closureEnvLocal.has_value()) {
+                // Assigning to a captured variable: write through to the env cell
+                // rather than to a register. Mirrors the field/global write paths.
+                LocalId env = *m_closureEnvLocal;
+                LocalId rhs = lowerExpr(*e.rhs);
+                if (e.op == MirAssignOp::Set) {
+                    emit(StAssign{env, RvClosureSet{captureOffset, OpCopy{rhs}}});
+                } else {
+                    LocalId oldVal = newLocal(e.ty, "cap_rd");
+                    emit(StAssign{oldVal, RvClosureGet{env, captureOffset}});
+                    LocalId newVal = newLocal(e.ty, "cap_wr");
+                    emit(StAssign{newVal, RvBinary{binOpForAssign(e.op), OpCopy{oldVal}, OpCopy{rhs}}});
+                    emit(StAssign{env, RvClosureSet{captureOffset, OpCopy{newVal}}});
+                }
+                return unitLocal();
             }
             if (globalSlot != ~0u) {
                 // Top-level `var`: the binding lives in a VM global, so this is a

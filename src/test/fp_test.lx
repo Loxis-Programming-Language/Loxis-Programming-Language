@@ -1,21 +1,22 @@
+import loxis.text
 fun main(): void {
     // int to float conversion
-    var a = itof(3)
-    var b = itof(4)
+    var a = (3).toDouble()
+    var b = (4).toDouble()
 
     // float operations
-    var c = fadd(a, b)    // 3.0 + 4.0 = 7.0
-    var d = fsub(c, a)    // 7.0 - 3.0 = 4.0
-    var e = fmul(d, a)    // 4.0 * 3.0 = 12.0
-    var f = fdiv(e, b)    // 12.0 / 4.0 = 3.0
+    var c = ((a) + (b))    // 3.0 + 4.0 = 7.0
+    var d = ((c) - (a))    // 7.0 - 3.0 = 4.0
+    var e = ((d) * (a))    // 4.0 * 3.0 = 12.0
+    var f = ((e) / (b))    // 12.0 / 4.0 = 3.0
 
     // back to int
-    print(ftoi(c))        // 7
-    print(ftoi(d))        // 4
-    print(ftoi(e))        // 12
-    print(ftoi(f))        // 3
+    print((c).toInt())        // 7
+    print((d).toInt())        // 4
+    print((e).toInt())        // 12
+    print((f).toInt())        // 3
 
     // negate
-    var g = fneg(a)       // -3.0
-    print(ftoi(g))        // -3
+    var g = (-(a))       // -3.0
+    print((g).toInt())        // -3
 }

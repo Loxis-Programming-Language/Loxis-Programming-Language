@@ -3,44 +3,32 @@ package loxis.text
 import loxis.collections.list
 import loxis.result
 
-fun len(value: str) -> int {
+fun __loxis_len(value: str) -> int {
     return strlen(value)
 }
 
-fun concat(a: str, b: str) -> str {
-    return a + b
-}
 
-fun parseInt(value: str) -> int {
-    return s2i(value)
-}
-
-fun intToString(value: int) -> str {
+fun __loxis_intToString(value: int) -> str {
     return i2s(value)
 }
 
-fun toString(value: int) -> str { return intToString(value) }
 
-fun charCodeAt(value: str, index: int) -> int {
-    return strchar(value, index)
-}
-
-fun slice(value: str, start: int, count: int) -> str {
+fun __loxis_slice(value: str, start: int, count: int) -> str {
     return strslice(value, start, count)
 }
 
-fun indexOf(value: str, needle: str) -> int {
+fun __loxis_indexOf(value: str, needle: str) -> int {
     return strindexof(value, needle)
 }
 
-fun contains(value: str, needle: str) -> bool {
-    return indexOf(value, needle) >= 0
+fun __loxis_contains(value: str, needle: str) -> bool {
+    return __loxis_indexOf(value, needle) >= 0
 }
 
 // Strict signed 64-bit decimal parsing: no whitespace or trailing characters.
-fun tryParseInt(value: str) -> Result<int, str> {
+fun __loxis_tryParseInt(value: str) -> Result<int, str> {
     val n = strlen(value)
-    if n == 0 { return resultFailure<int, str>("empty integer") }
+    if n == 0 { return __loxis_resultFailure<int, str>("empty integer") }
     var i = 0
     var negative = false
     val first = strchar(value, 0)
@@ -48,56 +36,56 @@ fun tryParseInt(value: str) -> Result<int, str> {
         negative = first == 45
         i = 1
     }
-    if i == n { return resultFailure<int, str>("missing digits") }
+    if i == n { return __loxis_resultFailure<int, str>("missing digits") }
     var limit = -9223372036854775807
     if negative { limit -= 1 }
     val threshold = limit / 10
     var total = 0
     while i < n {
         val digit = strchar(value, i) - 48
-        if digit < 0 || digit > 9 { return resultFailure<int, str>("invalid digit") }
-        if total < threshold { return resultFailure<int, str>("integer overflow") }
+        if digit < 0 || digit > 9 { return __loxis_resultFailure<int, str>("invalid digit") }
+        if total < threshold { return __loxis_resultFailure<int, str>("integer overflow") }
         total *= 10
-        if total < limit + digit { return resultFailure<int, str>("integer overflow") }
+        if total < limit + digit { return __loxis_resultFailure<int, str>("integer overflow") }
         total -= digit
         i += 1
     }
-    if negative { return resultSuccess<int, str>(total) }
-    return resultSuccess<int, str>(-total)
+    if negative { return __loxis_resultSuccess<int, str>(total) }
+    return __loxis_resultSuccess<int, str>(-total)
 }
 
-fun tryParseDouble(value: str) -> Result<double, str> {
-    if nativeValidDouble(value) == 0 { return resultFailure<double, str>("invalid floating-point number") }
-    return resultSuccess<double, str>(nativeParseDouble(value))
+fun __loxis_tryParseDouble(value: str) -> Result<double, str> {
+    if nativeValidDouble(value) == 0 { return __loxis_resultFailure<double, str>("invalid floating-point number") }
+    return __loxis_resultSuccess<double, str>(nativeParseDouble(value))
 }
 
-fun doubleToString(value: double) -> str { return nativeDoubleString(value) }
+fun __loxis_doubleToString(value: double) -> str { return nativeDoubleString(value) }
 
-fun startsWith(value: str, prefix: str) -> bool {
+fun __loxis_startsWith(value: str, prefix: str) -> bool {
     return strlen(prefix) <= strlen(value) && strslice(value, 0, strlen(prefix)) == prefix
 }
 
-fun endsWith(value: str, suffix: str) -> bool {
+fun __loxis_endsWith(value: str, suffix: str) -> bool {
     val n = strlen(suffix)
     return n <= strlen(value) && strslice(value, strlen(value) - n, n) == suffix
 }
 
-fun isAsciiWhitespace(code: int) -> bool {
+fun __loxis_isAsciiWhitespace(code: int) -> bool {
     return code == 32 || (code >= 9 && code <= 13)
 }
 
-fun trim(value: str) -> str {
+fun __loxis_trim(value: str) -> str {
     var begin = 0
     var end = strlen(value)
-    while begin < end && isAsciiWhitespace(strchar(value, begin)) { begin += 1 }
-    while end > begin && isAsciiWhitespace(strchar(value, end - 1)) { end -= 1 }
+    while begin < end && __loxis_isAsciiWhitespace(strchar(value, begin)) { begin += 1 }
+    while end > begin && __loxis_isAsciiWhitespace(strchar(value, end - 1)) { end -= 1 }
     return strslice(value, begin, end - begin)
 }
 
 // Preserves empty fields, including a trailing empty field.
-fun splitText(value: str, separator: str) -> list<str> {
+fun __loxis_splitText(value: str, separator: str) -> list<str> {
     require(strlen(separator) > 0, "split separator must not be empty")
-    val out = listWithCapacity<str>(4)
+    val out = __loxis_listWithCapacity<str>(4)
     var begin = 0
     var i = 0
     val n = strlen(value)
@@ -113,9 +101,8 @@ fun splitText(value: str, separator: str) -> list<str> {
     return out
 }
 
-fun split(value: str, separator: str) -> list<str> { return splitText(value, separator) }
 
-fun join(values: list<str>, separator: str) -> str {
+fun __loxis_join(values: list<str>, separator: str) -> str {
     var out = ""
     var i = 0
     while i < values.size() {
@@ -126,14 +113,11 @@ fun join(values: list<str>, separator: str) -> str {
     return out
 }
 
-fun replace(value: str, needle: str, replacement: str) -> str {
-    return join(splitText(value, needle), replacement)
-}
 
 // Repeats `value` `count` times. Built by doubling rather than appending one
 // copy at a time: `out + value` copies the whole accumulator, so the naive loop
 // is quadratic in the result length while this stays linear.
-fun repeat(value: str, count: int) -> str {
+fun __loxis_repeat(value: str, count: int) -> str {
     require(count >= 0, "repeat count must not be negative")
     var out = ""
     var chunk = value
@@ -147,7 +131,7 @@ fun repeat(value: str, count: int) -> str {
 }
 
 // Encodes one Unicode scalar as UTF-8. chr itself is a byte operation.
-fun encodeCodePoint(code: int) -> str {
+fun __loxis_encodeCodePoint(code: int) -> str {
     require(code >= 0 && code <= 1114111 && (code < 55296 || code > 57343), "invalid Unicode scalar")
     if code < 128 { return chr(code) }
     if code < 2048 { return chr(192 + code / 64) + chr(128 + code % 64) }
@@ -157,8 +141,8 @@ fun encodeCodePoint(code: int) -> str {
     return chr(240 + code / 262144) + chr(128 + code / 4096 % 64) + chr(128 + code / 64 % 64) + chr(128 + code % 64)
 }
 
-fun decodeCodePoints(value: str) -> Result<list<int>, str> {
-    val out = listWithCapacity<int>(8)
+fun __loxis_decodeCodePoints(value: str) -> Result<list<int>, str> {
+    val out = __loxis_listWithCapacity<int>(8)
     var i = 0
     val n = strlen(value)
     while i < n {
@@ -169,73 +153,78 @@ fun decodeCodePoints(value: str) -> Result<list<int>, str> {
         if first >= 194 && first <= 223 { width = 2; code = first - 192; minimum = 128 }
         else if first >= 224 && first <= 239 { width = 3; code = first - 224; minimum = 2048 }
         else if first >= 240 && first <= 244 { width = 4; code = first - 240; minimum = 65536 }
-        else if first >= 128 { return resultFailure<list<int>, str>("invalid UTF-8 leading byte") }
-        if i + width > n { return resultFailure<list<int>, str>("truncated UTF-8") }
+        else if first >= 128 { return __loxis_resultFailure<list<int>, str>("invalid UTF-8 leading byte") }
+        if i + width > n { return __loxis_resultFailure<list<int>, str>("truncated UTF-8") }
         var j = 1
         while j < width {
             val b = strchar(value, i + j)
-            if b < 128 || b > 191 { return resultFailure<list<int>, str>("invalid UTF-8 continuation") }
+            if b < 128 || b > 191 { return __loxis_resultFailure<list<int>, str>("invalid UTF-8 continuation") }
             code = code * 64 + b - 128
             j += 1
         }
         if code < minimum || code > 1114111 || (code >= 55296 && code <= 57343) {
-            return resultFailure<list<int>, str>("invalid Unicode scalar")
+            return __loxis_resultFailure<list<int>, str>("invalid Unicode scalar")
         }
         out.push(code)
         i += width
     }
-    return resultSuccess<list<int>, str>(out)
+    return __loxis_resultSuccess<list<int>, str>(out)
 }
 
-fun codePoints(value: str) -> Result<list<int>, str> { return decodeCodePoints(value) }
+fun __loxis_codePoints(value: str) -> Result<list<int>, str> { return __loxis_decodeCodePoints(value) }
 
-fun fromCodePoint(code: int) -> str { return encodeCodePoint(code) }
+fun __loxis_fromCodePoint(code: int) -> str { return __loxis_encodeCodePoint(code) }
 
-fun str.length() -> int { return len(this) }
-fun str.split(separator: str) -> list<str> { return splitText(this, separator) }
-fun str.replace(needle: str, replacement: str) -> str { return join(splitText(this, needle), replacement) }
-fun str.trim() -> str { return trim(this) }
-fun str.startsWith(prefix: str) -> bool { return startsWith(this, prefix) }
-fun str.endsWith(suffix: str) -> bool { return endsWith(this, suffix) }
-fun str.contains(needle: str) -> bool { return contains(this, needle) }
-fun str.indexOf(needle: str) -> int { return indexOf(this, needle) }
-fun str.slice(start: int, count: int) -> str { return slice(this, start, count) }
-fun str.repeat(count: int) -> str { return repeat(this, count) }
+fun str.length() -> int { return __loxis_len(this) }
+fun str.byteAt(index: int) -> int { return strchar(this, index) }
+fun str.toInt() -> int { return s2i(this) }
+fun str.toString() -> str { return this }
+fun int.toDouble() -> double { return itof(this) }
+fun double.toInt() -> int { return ftoi(this) }
+fun str.split(separator: str) -> list<str> { return __loxis_splitText(this, separator) }
+fun str.replace(needle: str, replacement: str) -> str { return __loxis_join(__loxis_splitText(this, needle), replacement) }
+fun str.trim() -> str { return __loxis_trim(this) }
+fun str.startsWith(prefix: str) -> bool { return __loxis_startsWith(this, prefix) }
+fun str.endsWith(suffix: str) -> bool { return __loxis_endsWith(this, suffix) }
+fun str.contains(needle: str) -> bool { return __loxis_contains(this, needle) }
+fun str.indexOf(needle: str) -> int { return __loxis_indexOf(this, needle) }
+fun str.slice(start: int, count: int) -> str { return __loxis_slice(this, start, count) }
+fun str.repeat(count: int) -> str { return __loxis_repeat(this, count) }
 
 // Kotlin's joinToString: like join, but renders each element on the way.
 // It lives here rather than with the list methods because it needs `join`, and
 // list.lx cannot import text.lx -- text.lx already imports list.lx.
-fun joinToString<T>(items: list<T>, separator: str, render: fun(T) -> str) -> str {
+fun __loxis_joinToString<T>(items: list<T>, separator: str, render: fun(T) -> str) -> str {
     val parts = list<str>()
     var i = 0
     while i < items.size() {
         parts.push(render(items.get(i)))
         i += 1
     }
-    return join(parts, separator)
+    return __loxis_join(parts, separator)
 }
-fun str.codePoints() -> Result<list<int>, str> { return decodeCodePoints(this) }
-fun str.toIntResult() -> Result<int, str> { return tryParseInt(this) }
-fun str.toDoubleResult() -> Result<double, str> { return tryParseDouble(this) }
-fun int.toString() -> str { return intToString(this) }
-fun double.toString() -> str { return doubleToString(this) }
+fun str.codePoints() -> Result<list<int>, str> { return __loxis_decodeCodePoints(this) }
+fun str.toIntResult() -> Result<int, str> { return __loxis_tryParseInt(this) }
+fun str.toDoubleResult() -> Result<double, str> { return __loxis_tryParseDouble(this) }
+fun int.toString() -> str { return __loxis_intToString(this) }
+fun double.toString() -> str { return __loxis_doubleToString(this) }
 // print accepts a bool directly, but there was no bool toString -- free or
 // method -- so building a string out of one (`"x" + toString(flag)`) did not
 // compile, while `if`/`when` conditions and the like worked fine.
-fun boolToString(value: bool) -> str {
+fun __loxis_boolToString(value: bool) -> str {
     if (value) { return "true" }
     return "false"
 }
-fun toString(value: bool) -> str { return boolToString(value) }
-fun bool.toString() -> str { return boolToString(this) }
+
+fun bool.toString() -> str { return __loxis_boolToString(this) }
 
 // Splits on ASCII whitespace and discards empty fields.
 fun str.words() -> list<str> {
-    val out = listWithCapacity<str>(8)
+    val out = __loxis_listWithCapacity<str>(8)
     var start = -1
     var i = 0
     while i < strlen(this) {
-        if isAsciiWhitespace(strchar(this, i)) {
+        if __loxis_isAsciiWhitespace(strchar(this, i)) {
             if start >= 0 {
                 out.push(strslice(this, start, i - start))
                 start = -1
@@ -250,5 +239,14 @@ fun str.words() -> list<str> {
 }
 
 object Unicode {
-    fun fromCodePoint(code: int) -> str { return encodeCodePoint(code) }
+    fun fromCodePoint(code: int) -> str { return __loxis_encodeCodePoint(code) }
+}
+
+object Text {
+    fun fromByte(code: int) -> str {
+        require(code >= 0 && code <= 255, "byte out of range")
+        return chr(code)
+    }
+    fun join(values: list<str>, separator: str) -> str { return __loxis_join(values, separator) }
+    fun joinToString<T>(items: list<T>, separator: str, render: fun(T) -> str) -> str { return __loxis_joinToString<T>(items, separator, render) }
 }

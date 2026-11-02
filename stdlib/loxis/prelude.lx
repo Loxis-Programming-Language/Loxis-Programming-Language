@@ -16,19 +16,19 @@ fun require(condition: bool, message: str) -> unit {
 fun TODO() -> noreturn { error("TODO") }
 
 // --- Numeric ---
-fun max(x: int, y: int) -> int { if (x > y) { return x } return y }
-fun min(x: int, y: int) -> int { if (x < y) { return x } return y }
-fun abs(v: int) -> int { require(v != -9223372036854775807 - 1, "absolute value overflow"); if (v < 0) { return -v } return v }
+fun __loxis_max(x: int, y: int) -> int { if (x > y) { return x } return y }
+fun __loxis_min(x: int, y: int) -> int { if (x < y) { return x } return y }
+
 
 // --- Array (backed by halloc/hread/hset/hfree) ---
 // Layout: [len:9B] [elem0:9B] [elem1:9B] ...
-fun arrayNew(n: int) -> int {
+fun __loxis_arrayNew(n: int) -> int {
     require(n >= 0 && n <= 477218586, "array capacity out of range")
     val arr = halloc(9 + n * 9)
     hset(arr, 0, n)
     return arr
 }
-fun arrayGet(arr: int, idx: int) -> int { return hread(arr, 9 + idx * 9) }
-fun arraySet(arr: int, idx: int, value: int) -> unit { hset(arr, 9 + idx * 9, value) }
-fun arrayLen(arr: int) -> int { return hread(arr, 0) }
-fun arrayFree(arr: int) -> unit { hfree(arr) }
+fun __loxis_arrayGet(arr: int, idx: int) -> int { return hread(arr, 9 + idx * 9) }
+fun __loxis_arraySet(arr: int, idx: int, value: int) -> unit { hset(arr, 9 + idx * 9, value) }
+fun __loxis_arrayLen(arr: int) -> int { return hread(arr, 0) }
+fun __loxis_arrayFree(arr: int) -> unit { hfree(arr) }

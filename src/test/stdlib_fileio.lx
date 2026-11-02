@@ -3,14 +3,14 @@ import loxis.text
 
 fun main() -> int {
     val path = "loxis_fileio_smoke.tmp"
-    print(writeText(path, "hello"))
-    print(appendText(path, "-std"))
-    print(appendText(path, "lib"))
+    print(File.writeText(path, "hello").getOrElseGet({ reason -> error(reason) }))
+    print(File.appendText(path, "-std").getOrElseGet({ reason -> error(reason) }))
+    print(File.appendText(path, "lib").getOrElseGet({ reason -> error(reason) }))
 
-    val content = readText(path)
-    print(len(content))
-    print(indexOf(content, "std"))
+    val content = File.readText(path).getOrElseGet({ reason -> error(reason) })
+    print((content).length())
+    print((content).indexOf("std"))
     print(content)
-    print(removeFile(path))
+    print(File.remove(path))
     return 0
 }

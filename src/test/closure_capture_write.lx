@@ -1,0 +1,39 @@
+// Closures that assign to a captured local, and closures whose body calls a
+// function-typed parameter of the enclosing function.
+import loxis.functional
+
+fun inc(x: int) -> int {
+    return x + 1
+}
+
+fun makeCounter() -> fun() -> int {
+    var n = 0
+    val c: fun() -> int = {
+        n = n + 1
+        n
+    }
+    return c
+}
+
+fun makeCaller(f: fun(int) -> int) -> fun(int) -> int {
+    return { x -> f(x) }
+}
+
+fun compose(f: fun(int) -> int, g: fun(int) -> int) -> fun(int) -> int {
+    return { x -> f(g(x)) }
+}
+
+fun main() -> int {
+    val counter = makeCounter()
+    print(counter())
+    print(counter())
+    print(counter())
+
+    val caller = makeCaller(inc)
+    print(caller(41))
+
+    val c = compose(inc, { x -> x * 2 })
+    print(c(20))
+
+    return 0
+}

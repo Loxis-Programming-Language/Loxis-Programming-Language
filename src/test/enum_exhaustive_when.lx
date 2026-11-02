@@ -1,3 +1,4 @@
+import loxis.math
 // Enum exhaustiveness for `when` in value position.
 //
 // Regression: a `when` missing a variant compiled without complaint and fell

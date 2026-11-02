@@ -1,3 +1,4 @@
+import loxis.unsafe
 // Heap memory test — alloc, store, load
 
 fun main() {

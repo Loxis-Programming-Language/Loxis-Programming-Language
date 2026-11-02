@@ -91,7 +91,11 @@ struct ExprPath { Path path;
     uint32_t globalSlot = ~0u;     // Persistent VM global slot
 };
 struct ExprTuple { std::vector<ExprPtr> elems; };
-struct ExprArray { std::vector<ExprPtr> elems; };
+struct ExprArray {
+    std::vector<ExprPtr> elems;
+    std::vector<bool> spreads;
+    TyPtr resolvedTy;
+};
 struct ExprMapEntry { ExprPtr key; ExprPtr value; };
 struct ExprMap {
     std::vector<ExprMapEntry> entries;
@@ -100,6 +104,9 @@ struct ExprMap {
     TyPtr resolvedTy;
     std::string hashFunction;
     std::string equalFunction;
+    std::vector<ExprPtr> spreads;
+    std::vector<std::string> reservedKeys;
+    bool argumentPack = false;
 };
 struct ExprFieldInit { std::string name; ExprPtr expr; };
 struct ExprStruct { Path path; std::vector<ExprFieldInit> fields; bool rest = false;
@@ -118,6 +125,8 @@ struct ExprCall {
     std::vector<TyPtr> resolvedTypeArgs; // TypeChecker: concrete generic args
     TyPtr resolvedTy = nullptr; // TypeChecker: return type of the call
     std::vector<std::optional<std::string>> argNames;
+    std::vector<ExprPtr> evaluationArgs; // source order before parameter binding
+    bool argumentsBound = false;
 };
 struct ExprMethodCall { ExprPtr recv; std::string method; std::vector<ExprPtr> args;
     std::string qualifiedName;        // "ClassName.method" for static dispatch
@@ -130,6 +139,8 @@ struct ExprMethodCall { ExprPtr recv; std::string method; std::vector<ExprPtr> a
     std::vector<TypePtr> typeArgs;
     std::vector<TyPtr> resolvedTypeArgs;
     std::vector<std::optional<std::string>> argNames;
+    std::vector<ExprPtr> evaluationArgs;
+    bool argumentsBound = false;
 };
 struct ExprField { ExprPtr obj; std::string field;
     uint32_t fieldOffset = 0;         // Filled by TypeChecker: byte offset in object
@@ -210,6 +221,11 @@ struct ClosureCapture {
     std::string name;
     TyPtr ty = nullptr;
     uint32_t offset = 0;
+    // When this capture forwards a variable already held in an enclosing
+    // closure's environment, `sourceOffset` is that variable's payload offset in
+    // the parent env (read via closure_get during lowering). ~0u means the value
+    // is read from the current scope instead.
+    uint32_t sourceOffset = ~0u;
 };
 
 struct ExprClosure {
@@ -327,6 +343,7 @@ struct ItemFun {
     TypePtr receiverType;     // non-null for extension functions: the type being extended
     std::string receiverName = "this"; // name bound to the receiver value
     std::optional<size_t> varargIndex;
+    std::optional<size_t> kwargsIndex;
     std::vector<TyPtr> resolvedParamTys;
 };
 
@@ -360,6 +377,7 @@ struct InterfaceMethodDecl {
     TypePtr ret;
     ExprPtr defaultBody;
     std::optional<size_t> varargIndex;
+    std::optional<size_t> kwargsIndex;
 };
 
 struct ItemInterface {
@@ -450,6 +468,8 @@ struct Module {
     std::optional<Path> packageName;
     std::vector<ItemPtr> items;
     SourceLocation loc;
+    // Populated by ModuleLoader from resolved paths, never from package spelling.
+    std::vector<std::string> intrinsicSources;
 };
 
 } // namespace

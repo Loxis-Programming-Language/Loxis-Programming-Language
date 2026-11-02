@@ -85,7 +85,7 @@ fun drawBoard(body: list<int>, food: int, score: int) -> str {
                 x = x + 1
             }
             row.push("|\n")
-            frame = frame + join(row, "")
+            frame = frame + Text.join(row, "")
         }
         y = y + 1
     }
@@ -98,7 +98,7 @@ fun drawBoard(body: list<int>, food: int, score: int) -> str {
 // Turning straight back onto yourself is ignored rather than fatal.
 fun readDirection(current: int) -> int {
     while true {
-        val c = readChar()
+        val c = Console.readChar()
         if c < 0 { return -1 }
         if c == 10 || c == 13 { continue }
         if c == 113 || c == 81 { return -1 }
@@ -110,8 +110,8 @@ fun readDirection(current: int) -> int {
         else if c == 97 || c == 65 { want = 3 }
         else if c == 27 {
             // arrow keys arrive as ESC [ A/B/C/D
-            val second = readChar()
-            val third = readChar()
+            val second = Console.readChar()
+            val third = Console.readChar()
             if second == 91 {
                 if third == 65 { want = 0 }
                 else if third == 67 { want = 1 }
@@ -128,9 +128,9 @@ fun readDirection(current: int) -> int {
 
 fun main() -> int {
     // An optional seed argument makes a game reproducible: `snake.lx 12345`.
-    val args = arguments()
-    var seed = 2147483646 - (unixMillis() % 2147483645)
-    if args.size() > 0 { seed = s2i(args.get(0)) }
+    val args = System.arguments()
+    var seed = 2147483646 - (Clock.unixMillis() % 2147483645)
+    if args.size() > 0 { seed = (args.get(0)).toInt() }
 
     rngState = seed
 

@@ -1,13 +1,12 @@
 import loxis.collections.list
 
 fun main() -> int {
-    val xs = listWithCapacity<int>(2)
+    val xs = Lists.withCapacity<int>(2)
     xs.push(7)
     xs.push(8)
     xs.push(9)
     print(xs.size())
     print(xs.capacity())
     print(xs.get(0) + xs.get(1) + xs.get(2))
-    listFree<int>(xs)
     return 0
 }

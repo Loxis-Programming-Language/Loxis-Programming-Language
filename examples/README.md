@@ -34,6 +34,14 @@ and code-point counts do not depend on argument encoding.
 
 Other examples:
 
+- `call_arguments_demo.lx`: an editable checkout playground for generic `*rest`
+  and `**options` parameters, named arguments, `*array` / `**map` expansion,
+  methods and forwarding.
+  Run `./build-stdlib/Loxis.exe ./examples/call_arguments_demo.lx`, or customize
+  customer, quantity and discount with
+  `./build-stdlib/Loxis.exe ./examples/call_arguments_demo.lx -- Alex 3 8`.
+  It prints results and does not write files. Commented-out calls at the bottom
+  demonstrate invalid types and duplicate arguments.
 - `snake.lx`: a playable game, and the only example that needs a real console —
   it redraws the board in place with ANSI escapes and reads keys with `readChar`.
   Input is blocking, so the snake takes one step per keypress rather than moving

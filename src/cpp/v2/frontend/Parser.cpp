@@ -222,22 +222,33 @@ TypePtr Parser::parseRet() {
     return nullptr;
 }
 
-std::vector<std::pair<std::string,TypePtr>> Parser::parseFnParams(std::optional<size_t>* varargIndex) {
+std::vector<std::pair<std::string,TypePtr>> Parser::parseFnParams(std::optional<size_t>* varargIndex,
+                                                                            std::optional<size_t>* kwargsIndex) {
     std::vector<std::pair<std::string,TypePtr>> out;
     expect(Tk::LParen);
     while (!check(Tk::RParen) && !atEnd()) {
-        const bool isVararg = match(Tk::KwVararg);
+        const bool hasStar = match(Tk::Star);
+        const bool isKwargs = hasStar && match(Tk::Star);
+        const bool isVararg = hasStar && !isKwargs;
         if (isVararg) {
-            if (!varargIndex) error("vararg is not allowed here");
-            if (varargIndex && *varargIndex) error("only one vararg parameter is allowed");
+            if (!varargIndex) error("'*' parameter is not allowed here");
+            if (varargIndex && *varargIndex) error("only one '*' parameter is allowed");
             if (varargIndex) *varargIndex = out.size();
         }
+        if (isKwargs) {
+            if (!kwargsIndex) error("'**' parameter is not allowed here");
+            if (kwargsIndex && *kwargsIndex) error("only one '**' parameter is allowed");
+            if (kwargsIndex) *kwargsIndex = out.size();
+        }
         std::string name = expectIdent();
+        for (const auto& param : out) if (param.first == name) error("duplicate parameter '" + name + "'");
         expect(Tk::Colon);
         TypePtr ty = parseType();
         out.emplace_back(name, ty);
-        if (isVararg && !check(Tk::RParen)) error("vararg parameter must be last");
         if (!match(Tk::Comma)) break;
+        if (isKwargs && !check(Tk::RParen)) error("'**' parameter must be last");
+        if (isVararg && !check(Tk::RParen) && !(check(Tk::Star) && check(Tk::Star, 1)))
+            error("only a '**' parameter may follow a '*' parameter");
     }
     expect(Tk::RParen);
     return out;
@@ -426,7 +437,8 @@ ItemFun Parser::parseFun(Visibility vis) {
     }
     auto generics = parseGenerics();
     std::optional<size_t> varargIndex;
-    auto params = parseFnParams(&varargIndex);
+    std::optional<size_t> kwargsIndex;
+    auto params = parseFnParams(&varargIndex, &kwargsIndex);
     TypePtr ret = parseRet();
     auto where_ = parseWhere();
     ExprPtr body = nullptr;
@@ -441,6 +453,7 @@ ItemFun Parser::parseFun(Visibility vis) {
     ItemFun result{funcName, vis, std::move(generics), std::move(params), ret, std::move(where_), body,
                    false, false, false, "", receiverType, "this"};
     result.varargIndex = varargIndex;
+    result.kwargsIndex = kwargsIndex;
     return result;
 }
 
@@ -652,7 +665,8 @@ ItemPtr Parser::parseInterface(Visibility vis) {
         advance();
         std::string mname = expectIdent();
         std::optional<size_t> varargIndex;
-        auto params = parseFnParams(&varargIndex);
+        std::optional<size_t> kwargsIndex;
+        auto params = parseFnParams(&varargIndex, &kwargsIndex);
         TypePtr ret = parseRet();
         ExprPtr def = nullptr;
         if (match(Tk::Semi)) {
@@ -665,6 +679,7 @@ ItemPtr Parser::parseInterface(Visibility vis) {
         // If none matched, it's an abstract method with no body
         InterfaceMethodDecl method{mname, std::move(params), ret, def};
         method.varargIndex = varargIndex;
+        method.kwargsIndex = kwargsIndex;
         methods.push_back(std::move(method));
     }
     expect(Tk::RBrace);
@@ -1196,8 +1211,26 @@ ExprPtr Parser::parsePostfix() {
     };
 
     ExprPtr expr = parsePrimary();
+    bool justParsedCall = false;
     while (true) {
         if (tryAttachGenericArgs(expr)) {
+            continue;
+        }
+        // Trailing lambda: `foo(a) { x -> body }` / `obj.method() { x -> body }`
+        // passes the closure as the final argument. Disabled while parsing a
+        // control-flow head (`if (foo()) { … }`) so the brace stays a block.
+        if (justParsedCall && check(Tk::LBrace) && !atLineStart() && !m_parsingBlockHead) {
+            ExprPtr lambda = parseBlockOrClosure();
+            if (auto* call = std::get_if<ExprCall>(expr.get())) {
+                call->args.push_back(std::move(lambda));
+                call->argNames.push_back(std::nullopt);
+            } else if (auto* mc = std::get_if<ExprMethodCall>(expr.get())) {
+                mc->args.push_back(std::move(lambda));
+                mc->argNames.push_back(std::nullopt);
+            } else if (auto* sc = std::get_if<ExprSafeCall>(expr.get())) {
+                sc->args.push_back(std::move(lambda));
+            }
+            justParsedCall = false;
             continue;
         }
         // A '(' that opens a new source line begins a new statement rather than
@@ -1211,7 +1244,9 @@ ExprPtr Parser::parsePostfix() {
             advance();
             while (!check(Tk::RParen) && !atEnd()) {
                 std::optional<std::string> argName;
-                if (check(Tk::Ident) && check(Tk::Eq, 1)) {
+                if (match(Tk::Star)) {
+                    argName = match(Tk::Star) ? "**" : "*";
+                } else if (check(Tk::Ident) && check(Tk::Eq, 1)) {
                     argName = peek().lex;
                     pos += 2;
                 }
@@ -1223,6 +1258,7 @@ ExprPtr Parser::parsePostfix() {
             auto call = ExprCall{expr, std::move(args)};
             call.argNames = std::move(argNames);
             expr = stamp(std::make_shared<Expr>(std::move(call)), parenLoc, 1);
+            justParsedCall = true;
         } else if (match(Tk::Dot)) {
             if (check(Tk::Ident)) {
                 const SourceLocation nameLoc = peek().loc;
@@ -1243,7 +1279,9 @@ ExprPtr Parser::parsePostfix() {
                     advance();
                     while (!check(Tk::RParen) && !atEnd()) {
                         std::optional<std::string> argName;
-                        if (check(Tk::Ident) && check(Tk::Eq, 1)) {
+                        if (match(Tk::Star)) {
+                            argName = match(Tk::Star) ? "**" : "*";
+                        } else if (check(Tk::Ident) && check(Tk::Eq, 1)) {
                             argName = peek().lex;
                             pos += 2;
                         }
@@ -1256,9 +1294,21 @@ ExprPtr Parser::parsePostfix() {
                     call.typeArgs = std::move(methodTypeArgs);
                     call.argNames = std::move(argNames);
                     expr = stamp(std::make_shared<Expr>(std::move(call)), nameLoc, name.size());
+                    justParsedCall = true;
+                } else if (check(Tk::LBrace) && !atLineStart() && !m_parsingBlockHead) {
+                    // Parentheses-elided trailing lambda: `xs.map { x -> ... }`
+                    ExprPtr lambda = parseBlockOrClosure();
+                    std::vector<ExprPtr> args;
+                    args.push_back(std::move(lambda));
+                    auto call = ExprMethodCall{expr, name, std::move(args)};
+                    call.typeArgs = std::move(methodTypeArgs);
+                    call.argNames.push_back(std::nullopt);
+                    expr = stamp(std::make_shared<Expr>(std::move(call)), nameLoc, name.size());
+                    justParsedCall = false;
                 } else {
                     if (!methodTypeArgs.empty()) error("generic member arguments require a method call");
                     expr = stamp(std::make_shared<Expr>(ExprField{expr, name}), nameLoc, name.size());
+                    justParsedCall = false;
                 }
             } else {
                 error("expected identifier after '.'");
@@ -1275,15 +1325,19 @@ ExprPtr Parser::parsePostfix() {
                         std::vector<ExprPtr> args;
                         advance();
                         while (!check(Tk::RParen) && !atEnd()) {
+                            if ((check(Tk::Ident) && check(Tk::Eq, 1)) || check(Tk::Star))
+                                error("named and spread arguments require an ordinary method call; unwrap the receiver first");
                             args.push_back(parseExpr());
                             if (!match(Tk::Comma)) break;
                         }
                         expect(Tk::RParen);
                         expr = stamp(std::make_shared<Expr>(ExprSafeCall{expr, name, std::move(args)}),
                                      nameLoc, name.size());
+                        justParsedCall = true;
                     } else {
                         expr = stamp(std::make_shared<Expr>(ExprSafeField{expr, name}),
                                      nameLoc, name.size());
+                        justParsedCall = false;
                     }
                 } else {
                     error("expected identifier after '?.'");
@@ -1312,6 +1366,7 @@ ExprPtr Parser::parsePostfix() {
             ExprPtr idx = parseExpr();
             expect(Tk::RBracket);
             expr = stamp(std::make_shared<Expr>(ExprIndex{expr, idx}), bracketLoc, 1);
+            justParsedCall = false;
         } else {
             break;
         }

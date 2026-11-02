@@ -17,6 +17,6 @@ fun main() -> int {
     val words = list<str>()
     words.push("hello")
     words.push("Loxis")
-    print(join(words, " "))
+    print(Text.join(words, " "))
     return 0
 }

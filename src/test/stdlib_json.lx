@@ -1,15 +1,16 @@
+import loxis.text
 import loxis.json
 
 fun main() -> int {
-    val quote = chr(34)
-    val slash = chr(92)
+    val quote = Text.fromByte(34)
+    val slash = Text.fromByte(92)
     val source = "{" + quote + "values" + quote + ":[true,null,-12.5e+2,9223372036854775808]," + quote + "text" + quote + ":" + quote + slash + "uD83D" + slash + "uDE3A" + quote + "}"
     val parsed = Json.parse(source)
     require(parsed.isSuccess(), "parse structured JSON")
     val value = parsed.getOrElse(Json.nullValue())
     val encoded = Json.stringify(value).getOrElse("")
-    require(contains(encoded, "9223372036854775808"), "exact number")
-    require(contains(encoded, fromCodePoint(128570)), "surrogate pair")
+    require((encoded).contains("9223372036854775808"), "exact number")
+    require((encoded).contains(Unicode.fromCodePoint(128570)), "surrogate pair")
     require(Json.parse(encoded).isSuccess(), "roundtrip")
     require(Json.parse("[1,]").isFailure(), "trailing comma")
     require(Json.parse("01").isFailure(), "leading zero")
@@ -18,7 +19,7 @@ fun main() -> int {
     require(Json.parse("{" + quote + "x" + quote + ":1," + quote + "x" + quote + ":2}").isFailure(), "duplicate keys")
     require(Json.parse(quote + slash + "uD800" + quote).isFailure(), "lone surrogate")
     require(Json.stringify(Json.number("NaN")).isFailure(), "invalid number serialization")
-    val control = Json.string(chr(0) + chr(10) + quote + slash)
+    val control = Json.string(Text.fromByte(0) + Text.fromByte(10) + quote + slash)
     require(Json.parse(Json.stringify(control).getOrElse("")).isSuccess(), "control escaping")
     var deep = "0"
     var i = 0

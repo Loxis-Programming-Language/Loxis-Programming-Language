@@ -38,7 +38,6 @@ Tk Lexer::keyword(const std::string& s) const {
     static const std::unordered_map<std::string, Tk> kw = {
         {"package", Tk::KwPackage}, {"import", Tk::KwImport}, {"from", Tk::KwFrom},
         {"fun", Tk::KwFun}, {"let", Tk::KwLet}, {"var", Tk::KwVar}, {"val", Tk::KwVal},
-        {"vararg", Tk::KwVararg},
         {"class", Tk::KwClass}, {"interface", Tk::KwInterface}, {"object", Tk::KwObject}, {"enum", Tk::KwEnum},
         {"open", Tk::KwOpen}, {"abstract", Tk::KwAbstract}, {"data", Tk::KwData}, {"override", Tk::KwOverride},
         {"init", Tk::KwInit}, {"companion", Tk::KwCompanion},

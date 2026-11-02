@@ -50,7 +50,7 @@ fun main() -> int {
     // Optional and Result keep empty input and parse errors explicit.
     val first = words.first().getOrElse("(empty)")
     print("First word: " + first)
-    val parsed = tryParseInt("12x")
+    val parsed = ("12x").toIntResult()
     print("Invalid integer fallback: " + parsed.getOrElse(-1).toString())
     val scalars = source.codePoints()
     require(scalars.isSuccess(), "input must be valid UTF-8")
@@ -66,7 +66,7 @@ fun main() -> int {
 
     // Serialize [word, count] rows, write the file, then read and parse it back.
     val rows = list<JsonValue>()
-    for word in listIter<str>(unique) {
+    for word in Iter.fromList<str>(unique) {
         val row = list<JsonValue>()
         row.push(Json.string(word))
         row.push(Json.number(frequency(word).toString()))

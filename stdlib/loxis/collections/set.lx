@@ -4,14 +4,14 @@ import loxis.collections.map
 
 // Open-addressed set. States: 0 empty, 1 occupied, 2 deleted.
 class HashSet<T>(val hash: fun(T) -> int, val equal: fun(T, T) -> bool) {
-    var states: list<int> = listWithCapacity<int>(8)
-    var slots: list<Optional<T>> = listWithCapacity<Optional<T>>(8)
+    var states: list<int> = __loxis_listWithCapacity<int>(8)
+    var slots: list<Optional<T>> = __loxis_listWithCapacity<Optional<T>>(8)
     var count: int = 0
 
     fun ensureStorage() -> unit {
         if !this.states.isEmpty() { return }
         var i = 0
-        while i < 8 { this.states.push(0); this.slots.push(optionalEmpty<T>()); i += 1 }
+        while i < 8 { this.states.push(0); this.slots.push(__loxis_optionalEmpty<T>()); i += 1 }
     }
 
     fun locate(value: T) -> int {
@@ -23,7 +23,7 @@ class HashSet<T>(val hash: fun(T) -> int, val equal: fun(T, T) -> bool) {
         while visited < capacity {
             val state = this.states.get(index)
             if state == 0 { return -1 }
-            if state == 1 && this.equal(optionalValueOrFail<T>(this.slots.get(index)), value) { return index }
+            if state == 1 && this.equal(__loxis_optionalValueOrFail<T>(this.slots.get(index)), value) { return index }
             index = (index + 1) % capacity
             visited += 1
         }
@@ -42,7 +42,7 @@ class HashSet<T>(val hash: fun(T) -> int, val equal: fun(T, T) -> bool) {
         if index < 0 { index += capacity }
         while this.states.get(index) == 1 { index = (index + 1) % capacity }
         this.states.set(index, 1)
-        this.slots.set(index, optionalValue<T>(value))
+        this.slots.set(index, __loxis_optionalValue<T>(value))
         this.count += 1
         return true
     }
@@ -51,7 +51,7 @@ class HashSet<T>(val hash: fun(T) -> int, val equal: fun(T, T) -> bool) {
         val index = this.locate(value)
         if index < 0 { return false }
         this.states.set(index, 2)
-        this.slots.set(index, optionalEmpty<T>())
+        this.slots.set(index, __loxis_optionalEmpty<T>())
         this.count -= 1
         return true
     }
@@ -61,23 +61,23 @@ class HashSet<T>(val hash: fun(T) -> int, val equal: fun(T, T) -> bool) {
         val oldSlots = this.slots
         require(oldStates.size() <= 238609293, "set capacity overflow")
         val capacity = oldStates.size() * 2
-        this.states = listWithCapacity<int>(capacity)
-        this.slots = listWithCapacity<Optional<T>>(capacity)
+        this.states = __loxis_listWithCapacity<int>(capacity)
+        this.slots = __loxis_listWithCapacity<Optional<T>>(capacity)
         this.count = 0
         var i = 0
-        while i < capacity { this.states.push(0); this.slots.push(optionalEmpty<T>()); i += 1 }
+        while i < capacity { this.states.push(0); this.slots.push(__loxis_optionalEmpty<T>()); i += 1 }
         i = 0
         while i < oldStates.size() {
-            if oldStates.get(i) == 1 { this.add(optionalValueOrFail<T>(oldSlots.get(i))) }
+            if oldStates.get(i) == 1 { this.add(__loxis_optionalValueOrFail<T>(oldSlots.get(i))) }
             i += 1
         }
     }
 
     fun values() -> list<T> {
-        val out = listWithCapacity<T>(this.count)
+        val out = __loxis_listWithCapacity<T>(this.count)
         var i = 0
         while i < this.states.size() {
-            if this.states.get(i) == 1 { out.push(optionalValueOrFail<T>(this.slots.get(i))) }
+            if this.states.get(i) == 1 { out.push(__loxis_optionalValueOrFail<T>(this.slots.get(i))) }
             i += 1
         }
         return out
@@ -87,7 +87,7 @@ class HashSet<T>(val hash: fun(T) -> int, val equal: fun(T, T) -> bool) {
         var i = 0
         while i < this.states.size() {
             this.states.set(i, 0)
-            this.slots.set(i, optionalEmpty<T>())
+            this.slots.set(i, __loxis_optionalEmpty<T>())
             i += 1
         }
         this.count = 0

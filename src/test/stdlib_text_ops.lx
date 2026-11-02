@@ -1,24 +1,24 @@
 import loxis.text
 
 fun main() -> int {
-    val value = concat("loxis", "-stdlib")
-    print(len(value))
-    print(charCodeAt(value, 0))
-    print(slice(value, 2, 3))
-    print(indexOf(value, "std"))
+    val value = (("loxis") + ("-stdlib"))
+    print((value).length())
+    print((value).byteAt(0))
+    print((value).slice(2, 3))
+    print((value).indexOf("std"))
 
-    if contains(value, "lib") {
+    if (value).contains("lib") {
         print(1)
     } else {
         print(0)
     }
 
-    if contains(value, "missing") {
+    if (value).contains("missing") {
         print(1)
     } else {
         print(0)
     }
 
-    print(slice(value, 100, 2))
+    print((value).slice(100, 2))
     return 0
 }

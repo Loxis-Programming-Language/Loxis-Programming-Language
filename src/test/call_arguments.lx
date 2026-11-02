@@ -1,0 +1,92 @@
+import loxis.collections.map
+
+fun sum(*values: int) -> int {
+    var total = 0
+    for value in values { total += value }
+    return total
+}
+fun first<T>(*values: T) -> T { return values[0] }
+fun forward(*values: int) -> int { return sum(*values) }
+fun count<T>(*values: T) -> int { return values.size() }
+fun select(value: str) -> str { return value }
+fun select<T>(*values: T) -> T { return values[0] }
+fun str.withOptions(prefix: str, **options: str) -> str {
+    return prefix + this + options.get("suffix").getOrElse("")
+}
+interface Totals { fun total(*values: int) -> int }
+class TotalsImpl() : Totals {
+    override fun total(*values: int) -> int { return sum(*values) }
+}
+fun options(base: int, **values: int) -> int {
+    return base + values.get("left").getOrElse(0) + values.get("right").getOrElse(0)
+}
+fun combined(base: int, *values: int, **extra: int) -> int {
+    var total = base + extra.get("bonus").getOrElse(0)
+    for value in values { total += value }
+    return total
+}
+fun genericOptions<T>(fallback: T, **values: T) -> T {
+    return values.get("value").getOrElse(fallback)
+}
+fun pair(left: int, right: int) -> int { return left * 10 + right }
+fun swapped(left: int, right: int) -> int { return right * 10 + left }
+fun ordinaryNames(vararg: int, kwargs: int) -> int { return vararg * 10 + kwargs }
+class Counter(var trace: int) {
+    fun mark(value: int) -> int { this.trace = this.trace * 10 + value; return value }
+    fun total(*values: int) -> int {
+        var result = 0
+        for value in values { result += value }
+        return result
+    }
+    fun named(left: int, right: int) -> int { return left * 10 + right }
+    fun optional(**values: int) -> int { return values.size() }
+    fun generic<T>(*values: T) -> T { return values[0] }
+}
+fun main() {
+    require(ordinaryNames(vararg = 2, kwargs = 3) == 23, "former keywords are ordinary identifiers")
+    require(sum() == 0 && sum(1, 2, 3, 4) == 10, "varargs")
+    require(first(42, 7) == 42 && first("hi", "bye") == "hi", "generic varargs")
+    require(options(base = 1, right = 3, left = 2) == 6, "kwargs")
+    require(options(9) == 9, "empty kwargs")
+    require(combined(1, 2, 3, bonus = 4) == 10, "both collectors")
+    val values = [2, 3]
+    require(sum(1, *values, 4, *values) == 15, "positional spread")
+    require(sum(*[]) == 0 && sum(1, *[]) == 1, "empty positional spread")
+    require(forward(1, 2, 3) == 6 && forward() == 0, "vararg forwarding")
+    require(count<int>() == 0 && count("a", "b") == 2, "empty generic varargs and size")
+    require(select(2, 3) == 2 && select("ok") == "ok", "variadic overload")
+    require(first(*values) == 2, "generic positional spread")
+    val extras = {"bonus": 4}
+    require(combined(1, *values, **extras) == 10, "keyword spread")
+    val more = {"right": 3}
+    require(options(1, left = 2, **more) == 6, "mixed keyword spread")
+    val allOptions = {"base": 1, "left": 2, "right": 3}
+    require(options(**allOptions) == 6, "fixed parameters from keyword spread")
+    require(allOptions.size() == 3, "keyword spread preserves source map")
+    require(genericOptions("fallback", value = "chosen") == "chosen", "generic kwargs")
+    require(genericOptions("fallback") == "fallback", "empty generic kwargs")
+    val counter = Counter(0)
+    require(pair(right = counter.mark(1), left = counter.mark(2)) == 21, "named binding")
+    require(counter.trace == 12, "source evaluation order")
+    require(counter.named(right = 4, left = 3) == 34, "named method")
+    require(counter.total(1, 2, 3) == 6 && counter.total() == 0, "method varargs")
+    require(counter.total(*values) == 5, "method spread")
+    require(counter.optional(a = 1, b = 2) == 2 && counter.optional() == 0, "method kwargs")
+    require(counter.generic("ok", "other") == "ok", "generic method varargs")
+    val named = Counter(trace = 7)
+    require(named.trace == 7, "named constructor")
+    val total = sum
+    require(total(1, 2, 3) == 6, "vararg function value")
+    val namedFunction = pair
+    require(namedFunction(right = 2, left = 1) == 12, "named function value")
+    var target = pair
+    val change: fun() -> int = { -> target = swapped; 1 }
+    require(target(right = change(), left = 2) == 21, "callee evaluated before arguments")
+    require("value".withOptions(suffix = "]", prefix = "[") == "[value]", "extension kwargs")
+    val totals: Totals = TotalsImpl()
+    require(totals.total(1, 2, 3) == 6 && totals.total() == 0, "interface varargs")
+    values[0] = 5
+    values[1] += 1
+    require(sum(*values) == 9, "array stores with spread")
+    print("call arguments ok")
+}

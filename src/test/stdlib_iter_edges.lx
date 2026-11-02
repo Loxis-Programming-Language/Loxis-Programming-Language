@@ -1,3 +1,4 @@
+import loxis.collections.list
 import loxis.collections.stream
 
 class Tally(var calls: int) {}
@@ -10,7 +11,7 @@ fun main() -> int {
     require(!stream<int>().any({ value: int -> true }), "empty any")
     require(stream<int>().all({ value: int -> false }), "empty all")
     require(stream<int>(NeverRead()).take(0).next().isEmpty(), "zero take is lazy")
-    val xs = listWithCapacity<int>(2)
+    val xs = Lists.withCapacity<int>(2)
     xs.push(10); xs.push(20)
     val tally = Tally(0)
     val source = stream<int>(xs).map<int>({ value: int -> tally.calls += 1; value + tally.calls })

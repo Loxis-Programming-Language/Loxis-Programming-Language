@@ -1,3 +1,4 @@
+import loxis.collections.iterator
 import loxis.collections.stream
 import loxis.collections.set
 import loxis.collections.queue
@@ -36,14 +37,14 @@ fun main() -> int {
     require(mapped.next().valueOrFail() == "40", "take does not overconsume")
     val nullable = list<int?>()
     nullable.push(null); nullable.push(7)
-    val iter = listIter<int?>(nullable)
+    val iter = Iter.fromList<int?>(nullable)
     val first = iter.next()
     require(first.hasValue(), "nullable is not end")
     require(first.valueOrFail() == null, "nullable payload")
     require(iter.next().valueOrFail() == 7, "next nullable")
     require(iter.next().isEmpty(), "nullable end")
     var sum = 0
-    for value in listIter<int>(xs) {
+    for value in Iter.fromList<int>(xs) {
         if value == 2 { continue }
         sum += value
         if value == 3 { break }

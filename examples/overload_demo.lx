@@ -1,3 +1,4 @@
+import loxis.collections.iterator
 import loxis.collections.stream
 import loxis.text
 
@@ -29,10 +30,10 @@ fun main() -> int {
 
     print(streamLabel<int>())
     print(streamLabel<int>(numbers))
-    print(streamLabel<int>(listIter<int>(numbers)))
+    print(streamLabel<int>(Iter.fromList<int>(numbers)))
 
     print("stream() count: " + stream<int>().count().toString())
     print("stream(list) sum: " + stream<int>(numbers).fold<int>(0, { sum: int, value: int -> sum + value }).toString())
-    print("stream(iterator) first: " + stream<int>(listIter<int>(numbers)).next().getOrElse(-1).toString())
+    print("stream(iterator) first: " + stream<int>(Iter.fromList<int>(numbers)).next().getOrElse(-1).toString())
     return 0
 }

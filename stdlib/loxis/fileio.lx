@@ -4,73 +4,51 @@ import loxis.result
 import loxis.collections.list
 
 // Legacy wrappers retain their original result types.
-fun readText(path: str) -> str { return nativeFileReadText(path) }
-fun writeText(path: str, content: str) -> int { return nativeFileWriteText(path, content) }
-fun appendText(path: str, content: str) -> int { return nativeFileAppendText(path, content) }
-fun removeFile(path: str) -> int { return nativeFileRemove(path) }
-fun exists(path: str) -> bool { return nativeFileExists(path) != 0 }
+fun __loxis_readText(path: str) -> str { return nativeFileReadText(path) }
+fun __loxis_writeText(path: str, content: str) -> int { return nativeFileWriteText(path, content) }
+fun __loxis_appendText(path: str, content: str) -> int { return nativeFileAppendText(path, content) }
 
-fun tryReadText(path: str) -> Result<str, str> {
+
+fun __loxis_tryReadText(path: str) -> Result<str, str> {
     val content = nativeTryReadText(path)
-    if content == null { return resultFailure<str, str>(nativeIoError()) }
-    return resultSuccess<str, str>(content!!)
+    if content == null { return __loxis_resultFailure<str, str>(nativeIoError()) }
+    return __loxis_resultSuccess<str, str>(content!!)
 }
 
-fun tryWriteText(path: str, content: str) -> Result<int, str> {
-    if writeText(path, content) == 0 { return resultFailure<int, str>("cannot write file: " + path) }
-    return resultSuccess<int, str>(strlen(content))
+fun __loxis_tryWriteText(path: str, content: str) -> Result<int, str> {
+    if __loxis_writeText(path, content) == 0 { return __loxis_resultFailure<int, str>("cannot write file: " + path) }
+    return __loxis_resultSuccess<int, str>(strlen(content))
 }
 
-fun tryAppendText(path: str, content: str) -> Result<int, str> {
-    if appendText(path, content) == 0 { return resultFailure<int, str>("cannot append file: " + path) }
-    return resultSuccess<int, str>(strlen(content))
+fun __loxis_tryAppendText(path: str, content: str) -> Result<int, str> {
+    if __loxis_appendText(path, content) == 0 { return __loxis_resultFailure<int, str>("cannot append file: " + path) }
+    return __loxis_resultSuccess<int, str>(strlen(content))
 }
 
-fun readBytes(path: str) -> Result<list<int>, str> {
-    val content = nativeTryReadText(path)
-    if content == null { return resultFailure<list<int>, str>(nativeIoError()) }
-    val text = content!!
-    val bytes = listWithCapacity<int>(strlen(text))
-    var i = 0
-    while i < strlen(text) { bytes.push(strchar(text, i)); i += 1 }
-    return resultSuccess<list<int>, str>(bytes)
-}
-
-fun writeBytes(path: str, bytes: list<int>) -> Result<int, str> {
-    var content = ""
-    var i = 0
-    while i < bytes.size() {
-        val b = bytes.get(i)
-        if b < 0 || b > 255 { return resultFailure<int, str>("byte out of range") }
-        content = content + chr(b)
-        i += 1
-    }
-    return tryWriteText(path, content)
-}
 
 object File {
-    fun readText(path: str) -> Result<str, str> { return tryReadText(path) }
-    fun writeText(path: str, content: str) -> Result<int, str> { return tryWriteText(path, content) }
-    fun appendText(path: str, content: str) -> Result<int, str> { return tryAppendText(path, content) }
+    fun readText(path: str) -> Result<str, str> { return __loxis_tryReadText(path) }
+    fun writeText(path: str, content: str) -> Result<int, str> { return __loxis_tryWriteText(path, content) }
+    fun appendText(path: str, content: str) -> Result<int, str> { return __loxis_tryAppendText(path, content) }
     fun readBytes(path: str) -> Result<list<int>, str> {
         val content = nativeTryReadText(path)
-        if content == null { return resultFailure<list<int>, str>(nativeIoError()) }
+        if content == null { return __loxis_resultFailure<list<int>, str>(nativeIoError()) }
         val text = content!!
-        val bytes = listWithCapacity<int>(strlen(text))
+        val bytes = __loxis_listWithCapacity<int>(strlen(text))
         var i = 0
         while i < strlen(text) { bytes.push(strchar(text, i)); i += 1 }
-        return resultSuccess<list<int>, str>(bytes)
+        return __loxis_resultSuccess<list<int>, str>(bytes)
     }
     fun writeBytes(path: str, bytes: list<int>) -> Result<int, str> {
         var content = ""
         var i = 0
         while i < bytes.size() {
             val byte = bytes.get(i)
-            if byte < 0 || byte > 255 { return resultFailure<int, str>("byte out of range") }
+            if byte < 0 || byte > 255 { return __loxis_resultFailure<int, str>("byte out of range") }
             content = content + chr(byte)
             i += 1
         }
-        return tryWriteText(path, content)
+        return __loxis_tryWriteText(path, content)
     }
     fun exists(path: str) -> bool { return nativeFileExists(path) != 0 }
     fun remove(path: str) -> bool { return nativeFileRemove(path) != 0 }

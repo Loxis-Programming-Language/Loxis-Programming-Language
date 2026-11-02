@@ -45,7 +45,7 @@ fun main() -> int {
     }
     unique.sortBy({ a: str, b: str -> a < b })
     print("words=" + words.size().toString() + ", unique=" + unique.size().toString())
-    print("joined=" + unique.join(", "))
+    print("joined=" + Text.join(unique, ", "))
 
     // Lazy stream pipeline with a capturing callback.
     val minimum = 4
@@ -54,7 +54,7 @@ fun main() -> int {
         .map<int>({ length: int -> length * length })
         .take(5)
         .toList()
-    print("squared lengths=" + selected.map<str>({ value: int -> value.toString() }).join(", "))
+    print("squared lengths=" + Text.join(selected.map<str>({ value: int -> value.toString() }), ", "))
 
     // Set and queue.
     val seen = HashSet<str>(hashString, equalString)

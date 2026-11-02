@@ -1,6 +1,7 @@
 #include "HirBuilder.hpp"
 #include "../NativeBuiltins.hpp"
 #include "../type/Scope.hpp"
+#include <algorithm>
 
 namespace loxis::v2 {
 
@@ -256,6 +257,39 @@ HirStmtPtr HirBuilder::buildStmt(const StmtPtr& stmt) {
 
 HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
     if (!expr) return std::make_shared<HirExpr>(HirNull{mkUnit()});
+    if (auto found = m_argumentTemps.find(expr.get()); found != m_argumentTemps.end()) return found->second;
+    std::vector<ExprPtr> sourceArgs;
+    if (auto* call = std::get_if<ExprCall>(expr.get()); call && !call->evaluationArgs.empty()) {
+        auto* path = call->func ? std::get_if<ExprPath>(call->func.get()) : nullptr;
+        if (!path || (!path->isStaticFunction && path->resolvedTy && path->resolvedTy->kind() == TyKind::Fn))
+            sourceArgs.push_back(call->func);
+        sourceArgs.insert(sourceArgs.end(), call->evaluationArgs.begin(), call->evaluationArgs.end());
+    }
+    if (auto* call = std::get_if<ExprMethodCall>(expr.get()); call && !call->evaluationArgs.empty()) {
+        sourceArgs.push_back(call->recv);
+        sourceArgs.insert(sourceArgs.end(), call->evaluationArgs.begin(), call->evaluationArgs.end());
+    }
+    if (!sourceArgs.empty()) {
+        auto savedTemps = m_argumentTemps;
+        std::vector<HirStmtPtr> statements;
+        for (const auto& source : sourceArgs) {
+            auto value = buildExpr(source);
+            auto ty = typeOfHirExpr(value);
+            auto name = "__call_arg_" + std::to_string(m_literalCounter++);
+            auto binding = std::make_shared<HirPat>(HirPatBind{name, false, nullptr});
+            statements.push_back(std::make_shared<HirStmt>(HirStmtLet{binding, ty, value}));
+            m_argumentTemps[source.get()] = std::make_shared<HirExpr>(HirPath{name, {}, ty, false});
+        }
+        auto copy = std::make_shared<Expr>(*expr);
+        if (auto* call = std::get_if<ExprCall>(copy.get())) call->evaluationArgs.clear();
+        if (auto* call = std::get_if<ExprMethodCall>(copy.get())) call->evaluationArgs.clear();
+        auto tail = buildExpr(copy);
+        auto ty = typeOfHirExpr(tail);
+        m_argumentTemps = std::move(savedTemps);
+        auto block = std::make_shared<HirExpr>(HirBlock{std::move(statements), tail, ty});
+        block->loc = expr->loc;
+        return block;
+    }
     HirExprPtr result = std::visit([&](const auto& e) -> HirExprPtr {
         using T = std::decay_t<decltype(e)>;
         if constexpr (std::is_same_v<T, ExprLit>) {
@@ -287,7 +321,46 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
         } else if constexpr (std::is_same_v<T, ExprArray>) {
             std::vector<HirExprPtr> elems;
             for (const auto& elem : e.elems) elems.push_back(buildExpr(elem));
-            return std::make_shared<HirExpr>(HirArray{std::move(elems), mkInt()});
+            auto arrayTy = e.resolvedTy ? e.resolvedTy : mkInt();
+            if (std::none_of(e.spreads.begin(), e.spreads.end(), [](bool spread) { return spread; }))
+                return std::make_shared<HirExpr>(HirArray{std::move(elems), arrayTy});
+            const auto prefix = "__spread_" + std::to_string(m_literalCounter++);
+            auto path = [](const std::string& name, TyPtr ty) {
+                return std::make_shared<HirExpr>(HirPath{name, {}, ty, false});
+            };
+            auto call = [](const std::string& name, std::vector<HirExprPtr> args, TyPtr ty) {
+                return std::make_shared<HirExpr>(HirCall{nullptr, name, {}, std::move(args), {}, ty});
+            };
+            std::vector<HirStmtPtr> statements;
+            auto bind = [&](const std::string& name, HirExprPtr value, TyPtr ty, bool mut = false) {
+                statements.push_back(std::make_shared<HirStmt>(HirStmtLet{
+                    std::make_shared<HirPat>(HirPatBind{name, mut, nullptr}), ty, value}));
+                return path(name, ty);
+            };
+            HirExprPtr length = makeIntLit(0);
+            for (size_t i = 0; i < elems.size(); ++i) {
+                auto ty = typeOfHirExpr(elems[i]);
+                elems[i] = bind(prefix + "_value_" + std::to_string(i), elems[i], ty);
+                length = makeBin(MirBinOp::Add, length, i < e.spreads.size() && e.spreads[i]
+                    ? call("__loxis_arrayLen", {elems[i]}, mkInt()) : makeIntLit(1));
+            }
+            auto result = bind(prefix + "_result", call("__loxis_arrayNew", {length}, arrayTy), arrayTy);
+            auto index = bind(prefix + "_index", makeIntLit(0), mkInt(), true);
+            auto append = [&](HirExprPtr value) {
+                return makeSeqBlock({call("__loxis_arraySet", {result, index, value}, mkUnit()),
+                    makeAssign(index, makeBin(MirBinOp::Add, index, makeIntLit(1)))}, nullptr);
+            };
+            for (size_t i = 0; i < elems.size(); ++i) {
+                HirExprPtr action;
+                if (i < e.spreads.size() && e.spreads[i]) {
+                    auto sourceIndex = bind(prefix + "_source_" + std::to_string(i), makeIntLit(0), mkInt(), true);
+                    auto body = makeSeqBlock({append(makeIndex(elems[i], sourceIndex)),
+                        makeAssign(sourceIndex, makeBin(MirBinOp::Add, sourceIndex, makeIntLit(1)))}, nullptr);
+                    action = makeWhile(makeBin(MirBinOp::Lt, sourceIndex, call("__loxis_arrayLen", {elems[i]}, mkInt())), body, {});
+                } else action = append(elems[i]);
+                statements.push_back(std::make_shared<HirStmt>(HirStmtExpr{action}));
+            }
+            return std::make_shared<HirExpr>(HirBlock{std::move(statements), result, arrayTy});
         } else if constexpr (std::is_same_v<T, ExprMap>) {
             const std::string localName = "__map_literal_" + std::to_string(m_literalCounter++);
             auto hashTy = std::make_shared<Ty>(TyFn{{e.keyTy}, mkInt()});
@@ -309,6 +382,55 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
                     ~0u, false, ~0u, 0, mkUnit(), {}
                 });
                 statements.push_back(std::make_shared<HirStmt>(HirStmtExpr{put}));
+            }
+            if (!e.spreads.empty()) {
+                auto classType = [&](const std::string& name, std::vector<TyPtr> args) -> TyPtr {
+                    auto* sym = m_scope ? m_scope->lookup(name) : nullptr;
+                    if (sym && sym->ty && sym->ty->kind() == TyKind::Class_)
+                        return std::make_shared<Ty>(TyClass{std::get<TyClass>(*sym->ty).def, std::move(args)});
+                    return mkInt();
+                };
+                auto listTy = classType("list", {mkStr()});
+                auto optionalTy = classType("Optional", {e.valueTy});
+                auto path = [](const std::string& name, TyPtr ty) {
+                    return std::make_shared<HirExpr>(HirPath{name, {}, ty, false});
+                };
+                auto method = [](HirExprPtr recv, const std::string& name, const std::string& owner,
+                                 std::vector<HirExprPtr> args, TyPtr ty) {
+                    return std::make_shared<HirExpr>(HirMethodCall{recv, name, owner + "." + name,
+                        std::move(args), ~0u, false, ~0u, 0, ty, {}});
+                };
+                auto check = [&](HirExprPtr condition, const std::string& message) {
+                    return std::make_shared<HirExpr>(HirCall{nullptr, std::string{"require"}, {},
+                        {condition, std::make_shared<HirExpr>(HirLit{mkStr(), message})}, {}, mkUnit()});
+                };
+                auto bind = [&](const std::string& name, HirExprPtr value, TyPtr ty, bool mut = false) {
+                    statements.push_back(std::make_shared<HirStmt>(HirStmtLet{
+                        std::make_shared<HirPat>(HirPatBind{name, mut, nullptr}), ty, value}));
+                    return path(name, ty);
+                };
+                for (const auto& source : e.spreads) {
+                    auto prefix = "__kwargs_" + std::to_string(m_literalCounter++);
+                    auto src = bind(prefix, buildExpr(source), e.resolvedTy);
+                    auto keys = bind(prefix + "_keys", method(src, "keys", "HashMap", {}, listTy), listTy);
+                    auto index = bind(prefix + "_index", makeIntLit(0), mkInt(), true);
+                    auto keyName = prefix + "_key";
+                    auto key = path(keyName, mkStr());
+                    auto recv = path(localName, e.resolvedTy);
+                    std::vector<HirExprPtr> actions;
+                    for (const auto& reserved : e.reservedKeys)
+                        actions.push_back(check(makeBin(MirBinOp::Ne, key,
+                            std::make_shared<HirExpr>(HirLit{mkStr(), reserved})), "keyword spread duplicates a fixed parameter"));
+                    actions.push_back(check(std::make_shared<HirExpr>(HirUnary{MirUnaryOp::Not,
+                        method(recv, "containsKey", "HashMap", {key}, mkBool()), mkBool()}), "duplicate keyword argument"));
+                    auto value = method(method(src, "get", "HashMap", {key}, optionalTy), "valueOrFail", "Optional", {}, e.valueTy);
+                    actions.push_back(method(recv, "put", "HashMap", {key, value}, optionalTy));
+                    actions.push_back(makeAssign(index, makeBin(MirBinOp::Add, index, makeIntLit(1))));
+                    auto body = makeLet(keyName, method(keys, "get", "list", {index}, mkStr()),
+                                        makeSeqBlock(std::move(actions), nullptr), mkStr());
+                    auto loop = makeWhile(makeBin(MirBinOp::Lt, index, method(keys, "size", "list", {}, mkInt())), body, {});
+                    statements.push_back(std::make_shared<HirStmt>(HirStmtExpr{loop}));
+                }
             }
             auto result = std::make_shared<HirExpr>(HirPath{localName, {}, e.resolvedTy, false});
             return std::make_shared<HirExpr>(HirBlock{std::move(statements), result, e.resolvedTy});
@@ -401,7 +523,7 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
                 for (const auto& a : e.args) args.push_back(buildExpr(a));
                 return std::make_shared<HirExpr>(HirCall{
                     nullptr, std::string{e.qualifiedName}, std::string{}, std::move(args),
-                    std::vector<CoreTyPtr>{}, e.resolvedTy ? e.resolvedTy : mkInt()
+                    e.resolvedTypeArgs, e.resolvedTy ? e.resolvedTy : mkInt()
                 });
             }
             std::vector<HirExprPtr> args;
@@ -526,7 +648,7 @@ HirExprPtr HirBuilder::buildExpr(const ExprPtr& expr) {
             }
             std::vector<HirClosureCapture> captures;
             for (const auto& capture : e.captures) {
-                captures.push_back({capture.name, capture.ty, capture.offset});
+                captures.push_back({capture.name, capture.ty, capture.offset, capture.sourceOffset});
             }
             return std::make_shared<HirExpr>(HirClosure{name, std::move(captures), e.envTypeId, fnTy});
         } else if constexpr (std::is_same_v<T, ExprRef>) {
@@ -738,8 +860,8 @@ HirExprPtr HirBuilder::desugarFor(const ExprFor& e) {
     }
 
     if (e.iterKind == ExprFor::IterKind::Array) {
-        HirExprPtr lenLit = makeIntLit(static_cast<int64_t>(e.arrayLen));
         HirExprPtr arrPath = std::make_shared<HirExpr>(HirPath{"__for_arr", {}, mkInt()});
+        HirExprPtr lenLit = std::make_shared<HirExpr>(HirCall{nullptr, std::string{"__loxis_arrayLen"}, {}, {arrPath}, {}, mkInt()});
         HirExprPtr elem = makeIndex(arrPath, idxPath);
         HirExprPtr exitCond = makeBin(MirBinOp::Ge, idxPath, lenLit);
         HirExprPtr loop = makeForLoopBody(idxPath, incIdx(), exitCond, e.pat, elem, body, e.label);
@@ -765,9 +887,9 @@ HirExprPtr HirBuilder::desugarFor(const ExprFor& e) {
         call.recv = std::make_shared<HirExpr>(HirPath{"__for_it", {}, iterTy});
         auto item = std::make_shared<HirExpr>(HirPath{"__for_item", {}, call.ty});
         auto empty = std::make_shared<HirExpr>(HirCall{
-            nullptr, std::string{"optionalIsEmpty"}, {}, {item}, {e.iteratorElementTy}, mkBool()});
+            nullptr, std::string{"__loxis_optionalIsEmpty"}, {}, {item}, {e.iteratorElementTy}, mkBool()});
         auto value = std::make_shared<HirExpr>(HirCall{
-            nullptr, std::string{"optionalValueOrFail"}, {}, {item}, {e.iteratorElementTy}, e.iteratorElementTy});
+            nullptr, std::string{"__loxis_optionalValueOrFail"}, {}, {item}, {e.iteratorElementTy}, e.iteratorElementTy});
         auto stop = std::make_shared<HirExpr>(HirBreak{e.label, nullptr, mkUnit()});
         auto guard = std::make_shared<HirExpr>(HirIf{empty, stop, nullptr, mkUnit()});
         auto loopBody = makeLet("__for_item", next,
@@ -792,8 +914,16 @@ HirFn HirBuilder::buildFn(const ItemFun& fn) {
         CoreTyPtr recvTy = astType(fn.receiverType);
         out.params.push_back({fn.receiverName.empty() ? "this" : fn.receiverName, recvTy});
     }
-    for (const auto& p : fn.params) {
-        out.params.push_back({p.first, astType(p.second)});
+    for (size_t i = 0; i < fn.params.size(); ++i) {
+        const auto& p = fn.params[i];
+        auto ty = astType(p.second);
+        if (fn.varargIndex && *fn.varargIndex == i) ty = std::make_shared<Ty>(TyArray{ty, 0});
+        if (fn.kwargsIndex && *fn.kwargsIndex == i && m_scope) {
+            auto* map = m_scope->lookup("HashMap");
+            if (map && map->ty && map->ty->kind() == TyKind::Class_)
+                ty = std::make_shared<Ty>(TyClass{std::get<TyClass>(*map->ty).def, {mkStr(), ty}});
+        }
+        out.params.push_back({p.first, i < fn.resolvedParamTys.size() ? fn.resolvedParamTys[i] : ty});
     }
     out.body = buildExpr(fn.body);
     popGenerics();
@@ -806,8 +936,16 @@ HirFn HirBuilder::buildInterfaceMethod(const std::string& ifaceName, const Inter
     pushGenerics(generics);
     // self is NOT in AST params — add it explicitly (mirrors resolveInterface)
     out.params.push_back({"self", mkInt()});
-    for (const auto& p : method.params) {
-        out.params.push_back({p.first, astType(p.second)});
+    for (size_t i = 0; i < method.params.size(); ++i) {
+        const auto& p = method.params[i];
+        auto ty = astType(p.second);
+        if (method.varargIndex && *method.varargIndex == i) ty = std::make_shared<Ty>(TyArray{ty, 0});
+        if (method.kwargsIndex && *method.kwargsIndex == i && m_scope) {
+            auto* map = m_scope->lookup("HashMap");
+            if (map && map->ty && map->ty->kind() == TyKind::Class_)
+                ty = std::make_shared<Ty>(TyClass{std::get<TyClass>(*map->ty).def, {mkStr(), ty}});
+        }
+        out.params.push_back({p.first, ty});
     }
     out.ret = method.ret ? astType(method.ret) : mkUnit();
     out.body = buildExpr(method.defaultBody);

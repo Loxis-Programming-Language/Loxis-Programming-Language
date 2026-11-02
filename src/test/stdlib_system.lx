@@ -1,3 +1,4 @@
+import loxis.collections.list
 import loxis.fs
 import loxis.path
 import loxis.system
@@ -15,7 +16,7 @@ fun main() -> int {
     require(Path.join("a", "b") == "a/b", "path join")
     require(Path.normalize("a/../b") == "b", "path normalize")
     require(Path.name("a/b.txt") == "b.txt" && Path.extension("a/b.txt") == ".txt", "path parts")
-    val bytes = listWithCapacity<int>(4)
+    val bytes = Lists.withCapacity<int>(4)
     bytes.push(0); bytes.push(13); bytes.push(128); bytes.push(255)
     require(File.writeBytes("bytes.bin", bytes).isSuccess(), "write bytes")
     val read = File.readBytes("bytes.bin").getOrElse(list<int>())
@@ -24,7 +25,7 @@ fun main() -> int {
     require(entries.size() == 3, "directory entries")
     require(File.readText("nested").isFailure(), "directory is not text file")
     require(File.writeText("absent/file", "x").isFailure(), "write error")
-    val unicodePath = fromCodePoint(20013) + ".txt"
+    val unicodePath = Unicode.fromCodePoint(20013) + ".txt"
     require(File.writeText(unicodePath, "content").isSuccess(), "unicode path write")
     require(File.readText(unicodePath).getOrElse("") == "content", "unicode path read")
     require(File.remove(unicodePath) && !File.exists(unicodePath), "unicode path remove")

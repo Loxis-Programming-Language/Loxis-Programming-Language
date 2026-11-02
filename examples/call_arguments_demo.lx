@@ -1,0 +1,79 @@
+import loxis.math
+import loxis.collections.map
+import loxis.system
+import loxis.text
+
+// *prices 收集为数组；**extras 收集为 HashMap<str, int>。
+fun checkout(base: int, *prices: int, **extras: int) -> int {
+    var total = base
+    for price in prices { total += price }
+    total += extras.get("service").getOrElse(0)
+    total -= extras.get("discount").getOrElse(0)
+    return Math.max(0, total)
+}
+
+// 泛型由实参推断，同一个函数可以接收 int 或 str。
+fun last<T>(first: T, *rest: T) -> T {
+    if rest.size() == 0 { return first }
+    return rest[rest.size() - 1]
+}
+
+// 把收到的可变参数继续转发给另一个函数。
+fun basket(*prices: int) -> int {
+    return checkout(0, *prices)
+}
+
+class Receipt(val customer: str) {
+    fun show(*prices: int, **extras: int) {
+        print("Customer: ${this.customer}")
+        print("Items: ${prices.size()}")
+        print("Pay: ${checkout(0, *prices, **extras)}")
+    }
+}
+
+fun main() {
+    // 运行时可在 -- 后传入：名字、份数、优惠金额。
+    val args = System.arguments()
+    var name = "Ada"
+    var quantity = 2
+    var coupon = 5
+    if args.size() > 0 { name = args.get(0) }
+    if args.size() > 1 { quantity = args.get(1).toInt() }
+    if args.size() > 2 { coupon = args.get(2).toInt() }
+    require(quantity >= 0 && quantity <= 1000, "quantity must be between 0 and 1000")
+    require(coupon >= 0 && coupon <= 10000, "discount must be between 0 and 10000")
+
+    print("=== Loxis argument playground ===")
+
+    print("--- varargs + named kwargs ---")
+    print(checkout(0, 12, 18, service = 2, discount = coupon))
+
+    print("--- *array + **map + method ---")
+    val prices = [12, 18, quantity * 6]
+    val extras = {"service": 2, "discount": coupon}
+    val receipt = Receipt(customer = name)
+    receipt.show(*prices, **extras)
+
+    print("--- **map supplies fixed parameters too ---")
+    val named = {"base": 30, "service": 2, "discount": coupon}
+    print(checkout(**named))
+    print("Source map still has ${named.size()} entries")
+
+    print("--- generic inference ---")
+    print(last(10, 20, 30))
+    print(last("tea", "coffee", "cake"))
+    print(last("only one"))
+
+    print("--- forwarding + function value ---")
+    print(basket(*prices))
+    val pay = checkout
+    print(pay(0, *prices, discount = coupon))
+
+    print("--- empty varargs / kwargs ---")
+    print(checkout(0))
+
+    // 取消注释，试试类型检查和重复参数诊断：
+    // checkout(0, "not a price")
+    // checkout(base = 0, discount = 1, discount = 2)
+    // last()
+}

@@ -1,3 +1,4 @@
+import loxis.option
 import loxis.collections.list
 
 class Box<T>(val value: T) {}
@@ -28,13 +29,11 @@ fun main() -> int {
     val factor = 10
     val ys = xs.map({ x -> x * factor })
     print(ys.get(0) + ys.get(1))
-    listFree(ys)
-    listFree(xs)
     print(choose(Box(12)))
     print(choose("overload"))
     print(unwrap(unwrap(Box(Box(8)))))
     print(acceptsEmpty(InferenceEmpty()))
-    val optional: Optional<int> = optionalEmpty()
+    val optional: Optional<int> = Option.none()
     print(optional.getOrElse(15))
     val nullable: int? = 16
     val inferredNullable = identity(nullable)

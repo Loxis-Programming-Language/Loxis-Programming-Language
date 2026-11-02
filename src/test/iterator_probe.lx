@@ -5,12 +5,12 @@ fun main() -> int {
     val s: int? = 42
     print(s ?: 0)
 
-    val items = listWithCapacity<int>(4)
+    val items = Lists.withCapacity<int>(4)
     items.push(10)
     items.push(20)
     items.push(30)
 
-    val iter = listIter<int>(items)
+    val iter = Iter.fromList<int>(items)
     val a = iter.next()
     val b = iter.next()
     val c = iter.next()

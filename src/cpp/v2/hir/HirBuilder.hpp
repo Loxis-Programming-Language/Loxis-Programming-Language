@@ -1,6 +1,7 @@
 #pragma once
 #include "../AST.hpp"
 #include "HIR.hpp"
+#include <unordered_map>
 
 namespace loxis::v2 {
 
@@ -17,6 +18,7 @@ private:
     std::vector<size_t> m_genericDepthStack;         // counts per nesting level
     std::vector<HirFn> m_generatedFns;
     uint32_t m_literalCounter = 0;
+    std::unordered_map<const Expr*, HirExprPtr> m_argumentTemps;
 
     void pushGenerics(const std::vector<GenericParam>& params);
     void popGenerics();

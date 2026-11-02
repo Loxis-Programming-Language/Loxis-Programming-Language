@@ -15,26 +15,26 @@ enum class JsonValue {
     fun stringify() -> Result<str, str> { return Json.stringify(this) }
     fun asString() -> Optional<str> {
         return when (this) {
-            JsonValue::String(value) -> optionalValue<str>(value),
-            else -> optionalEmpty<str>()
+            JsonValue::String(value) -> __loxis_optionalValue<str>(value),
+            else -> __loxis_optionalEmpty<str>()
         }
     }
     fun asArray() -> Optional<list<JsonValue>> {
         return when (this) {
-            JsonValue::Array(value) -> optionalValue<list<JsonValue>>(value),
-            else -> optionalEmpty<list<JsonValue>>()
+            JsonValue::Array(value) -> __loxis_optionalValue<list<JsonValue>>(value),
+            else -> __loxis_optionalEmpty<list<JsonValue>>()
         }
     }
     fun asObject() -> Optional<HashMap<str, JsonValue>> {
         return when (this) {
-            JsonValue::Object(value) -> optionalValue<HashMap<str, JsonValue>>(value),
-            else -> optionalEmpty<HashMap<str, JsonValue>>()
+            JsonValue::Object(value) -> __loxis_optionalValue<HashMap<str, JsonValue>>(value),
+            else -> __loxis_optionalEmpty<HashMap<str, JsonValue>>()
         }
     }
 }
 
-fun jsonDigit(code: int) -> bool { return code >= 48 && code <= 57 }
-fun jsonHex(code: int) -> int {
+fun __loxis_jsonDigit(code: int) -> bool { return code >= 48 && code <= 57 }
+fun __loxis_jsonHex(code: int) -> int {
     if code >= 48 && code <= 57 { return code - 48 }
     if code >= 65 && code <= 70 { return code - 55 }
     if code >= 97 && code <= 102 { return code - 87 }
@@ -54,7 +54,7 @@ class JsonParser(val source: str, var position: int, var failure: str) {
         var value = 0
         var i = 0
         while i < 4 {
-            val digit = jsonHex(this.peek())
+            val digit = __loxis_jsonHex(this.peek())
             if digit < 0 { this.fail("invalid Unicode escape"); return 0 }
             value = value * 16 + digit
             this.position += 1
@@ -92,7 +92,7 @@ class JsonParser(val source: str, var position: int, var failure: str) {
                         if low < 56320 || low > 57343 { this.fail("invalid low surrogate"); return "" }
                         code = 65536 + (code - 55296) * 1024 + low - 56320
                     } else if code >= 56320 && code <= 57343 { this.fail("unpaired low surrogate"); return "" }
-                    if strlen(this.failure) == 0 { out = out + fromCodePoint(code) }
+                    if strlen(this.failure) == 0 { out = out + __loxis_fromCodePoint(code) }
                 } else { this.fail("invalid escape"); return "" }
             }
         }
@@ -105,18 +105,18 @@ class JsonParser(val source: str, var position: int, var failure: str) {
         if this.peek() == 48 { this.position += 1 }
         else {
             if this.peek() < 49 || this.peek() > 57 { this.fail("expected digit"); return JsonValue::Null() }
-            while jsonDigit(this.peek()) { this.position += 1 }
+            while __loxis_jsonDigit(this.peek()) { this.position += 1 }
         }
         if this.peek() == 46 {
             this.position += 1
-            if !jsonDigit(this.peek()) { this.fail("expected fractional digit"); return JsonValue::Null() }
-            while jsonDigit(this.peek()) { this.position += 1 }
+            if !__loxis_jsonDigit(this.peek()) { this.fail("expected fractional digit"); return JsonValue::Null() }
+            while __loxis_jsonDigit(this.peek()) { this.position += 1 }
         }
         if this.peek() == 101 || this.peek() == 69 {
             this.position += 1
             if this.peek() == 43 || this.peek() == 45 { this.position += 1 }
-            if !jsonDigit(this.peek()) { this.fail("expected exponent digit"); return JsonValue::Null() }
-            while jsonDigit(this.peek()) { this.position += 1 }
+            if !__loxis_jsonDigit(this.peek()) { this.fail("expected exponent digit"); return JsonValue::Null() }
+            while __loxis_jsonDigit(this.peek()) { this.position += 1 }
         }
         return JsonValue::Number(strslice(this.source, start, this.position - start))
     }
@@ -125,13 +125,13 @@ class JsonParser(val source: str, var position: int, var failure: str) {
         if depth > 128 { this.fail("JSON nesting limit exceeded"); return JsonValue::Null() }
         val c = this.peek()
         if c == 34 { return JsonValue::String(this.stringValue()) }
-        if c == 45 || jsonDigit(c) { return this.numberValue() }
+        if c == 45 || __loxis_jsonDigit(c) { return this.numberValue() }
         if strslice(this.source, this.position, 4) == "null" { this.position += 4; return JsonValue::Null() }
         if strslice(this.source, this.position, 4) == "true" { this.position += 4; return JsonValue::Boolean(true) }
         if strslice(this.source, this.position, 5) == "false" { this.position += 5; return JsonValue::Boolean(false) }
         if c == 91 {
             this.position += 1
-            val items = listWithCapacity<JsonValue>(4)
+            val items = __loxis_listWithCapacity<JsonValue>(4)
             this.whitespace()
             if this.peek() == 93 { this.position += 1; return JsonValue::Array(items) }
             while strlen(this.failure) == 0 {
@@ -169,7 +169,7 @@ class JsonParser(val source: str, var position: int, var failure: str) {
 
 class JsonWriter(val chunks: list<str>, var failure: str) {
     fun stringValue(value: str) -> unit {
-        if resultIsFailure<list<int>, str>(codePoints(value)) { this.failure = "invalid UTF-8 string"; return }
+        if __loxis_resultIsFailure<list<int>, str>(__loxis_codePoints(value)) { this.failure = "invalid UTF-8 string"; return }
         this.chunks.push(chr(34))
         var i = 0
         while i < strlen(value) {
@@ -217,7 +217,7 @@ class JsonWriter(val chunks: list<str>, var failure: str) {
                     val key = keys.get(i)
                     this.stringValue(key)
                     this.chunks.push(":")
-                    this.value(optionalValueOrFail<JsonValue>(members.get(key)), depth + 1)
+                    this.value(__loxis_optionalValueOrFail<JsonValue>(members.get(key)), depth + 1)
                     i += 1
                 }
                 this.chunks.push("}")
@@ -229,19 +229,19 @@ class JsonWriter(val chunks: list<str>, var failure: str) {
 
 object Json {
     fun parse(source: str) -> Result<JsonValue, str> {
-        if resultIsFailure<list<int>, str>(codePoints(source)) { return resultFailure<JsonValue, str>("invalid UTF-8") }
+        if __loxis_resultIsFailure<list<int>, str>(__loxis_codePoints(source)) { return __loxis_resultFailure<JsonValue, str>("invalid UTF-8") }
         val parser = JsonParser(source, 0, "")
         val value = parser.value(0)
         parser.whitespace()
         if parser.position != strlen(source) { parser.fail("trailing input") }
-        if strlen(parser.failure) > 0 { return resultFailure<JsonValue, str>(parser.failure) }
-        return resultSuccess<JsonValue, str>(value)
+        if strlen(parser.failure) > 0 { return __loxis_resultFailure<JsonValue, str>(parser.failure) }
+        return __loxis_resultSuccess<JsonValue, str>(value)
     }
     fun stringify(value: JsonValue) -> Result<str, str> {
-        val writer = JsonWriter(listWithCapacity<str>(16), "")
+        val writer = JsonWriter(__loxis_listWithCapacity<str>(16), "")
         writer.value(value, 0)
-        if strlen(writer.failure) > 0 { return resultFailure<str, str>(writer.failure) }
-        return resultSuccess<str, str>(join(writer.chunks, ""))
+        if strlen(writer.failure) > 0 { return __loxis_resultFailure<str, str>(writer.failure) }
+        return __loxis_resultSuccess<str, str>(__loxis_join(writer.chunks, ""))
     }
     fun nullValue() -> JsonValue { return JsonValue::Null() }
     fun boolean(value: bool) -> JsonValue { return JsonValue::Boolean(value) }

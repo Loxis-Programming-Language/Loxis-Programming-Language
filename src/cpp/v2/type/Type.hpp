@@ -55,6 +55,7 @@ struct MethodInfo {
     std::vector<std::string> genericParams;
     std::vector<std::string> paramNames;
     std::optional<size_t> varargIndex;
+    std::optional<size_t> kwargsIndex;
     TyPtr funcType;             // (self, params...) -> ret
     uint32_t arity = 0;         // number of source parameters (excluding self)
     uint32_t vtableIndex = ~0u; // ~0u = static/final dispatch
@@ -107,7 +108,12 @@ struct TyInt { enum Width { W32, W64 } w; };      // int, long
 struct TyFloat{ enum Width { W32, W64 } w; };      // float, double
 struct TyStr {};
 struct TyNull {};
-struct TyFn { std::vector<TyPtr> params; TyPtr ret; };
+struct TyFn {
+    std::vector<TyPtr> params; TyPtr ret;
+    std::vector<std::string> paramNames;
+    std::optional<size_t> varargIndex;
+    std::optional<size_t> kwargsIndex;
+};
 struct TyTuple { std::vector<TyPtr> elems; };
 struct TyArray { TyPtr elem; uint64_t len; };
 struct TySlice { TyPtr elem; };

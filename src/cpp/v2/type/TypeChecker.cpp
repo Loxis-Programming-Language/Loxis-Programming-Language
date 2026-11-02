@@ -48,51 +48,108 @@ TyPtr callableParamType(TyPtr type, size_t index, std::optional<size_t> varargIn
 
 TyPtr TypeChecker::freshInfer() { return mkInfer(inferCounter++); }
 
-bool TypeChecker::arrangeArguments(
-    const std::vector<ExprPtr>& args,
-    const std::vector<std::optional<std::string>>& argNames,
-    const std::vector<std::string>& paramNames,
-    std::optional<size_t> varargIndex,
-    std::vector<ExprPtr>& arranged,
-    bool diagnose) {
-    const size_t count = paramNames.size();
-    arranged.assign(count, nullptr);
-    std::vector<ExprPtr> variadic;
-    size_t positional = 0;
-    bool sawNamed = false;
-    auto fail = [&](const std::string& message) {
-        if (diagnose) error(message);
-        return false;
+bool TypeChecker::canAccessIntrinsic(const std::string& name) {
+    static const std::vector<std::string> internal = {
+        "alloc", "halloc", "hread", "hload", "hset", "hstore", "hfree", "syscall",
+        "strlen", "strchar", "strslice", "strindexof", "i2s", "s2i", "chr",
+        "itof", "ftoi", "fadd", "fsub", "fmul", "fdiv", "fneg",
+        "nativeFileReadText", "nativeFileWriteText", "nativeFileAppendText", "nativeFileRemove"
     };
+    if (name != "Unsafe" && !name.starts_with("__loxis_") && !findNativeBuiltin(name) &&
+        std::find(internal.begin(), internal.end(), name) == internal.end()) return true;
+    if (std::find(intrinsicSources.begin(), intrinsicSources.end(), currentLoc.file) != intrinsicSources.end()) return true;
+    error("'" + name + "' is an internal runtime API; use the standard-library methods or explicitly import loxis.unsafe");
+    return false;
+}
+
+TyPtr TypeChecker::parameterType(TyPtr type, size_t index, std::optional<size_t> varargIndex,
+                                  std::optional<size_t> kwargsIndex, Scope* sc) {
+    if (kwargsIndex && *kwargsIndex == index) {
+        auto* map = sc->lookup("HashMap");
+        if (!map || !map->ty || map->ty->kind() != TyKind::Class_) {
+            error("'**' parameter requires import loxis.collections.map");
+            return mkError();
+        }
+        return std::make_shared<Ty>(TyClass{std::get<TyClass>(*map->ty).def, {mkStr(), type}});
+    }
+    return callableParamType(type, index, varargIndex);
+}
+
+bool TypeChecker::bindArguments(const std::vector<ExprPtr>& args,
+    const std::vector<std::optional<std::string>>& argNames,
+    const std::vector<std::string>& paramNames, std::optional<size_t> varargIndex,
+    std::optional<size_t> kwargsIndex, std::vector<ExprPtr>& arranged, bool diagnose) {
+    arranged.assign(paramNames.size(), nullptr);
+    ExprArray rest;
+    ExprMap keywords;
+    std::vector<std::string> seen;
+    size_t positional = 0;
+    bool named = false;
+    const size_t fixed = varargIndex.value_or(kwargsIndex.value_or(paramNames.size()));
+    auto fail = [&](const std::string& message) { if (diagnose) error(message); return false; };
     for (size_t i = 0; i < args.size(); ++i) {
-        const auto name = i < argNames.size() ? argNames[i] : std::nullopt;
-        if (name) {
-            sawNamed = true;
-            auto found = std::find(paramNames.begin(), paramNames.end(), *name);
-            if (found == paramNames.end()) return fail("unknown named argument '" + *name + "'");
-            size_t target = static_cast<size_t>(found - paramNames.begin());
-            if (varargIndex && target == *varargIndex) variadic.push_back(args[i]);
-            else {
-                if (arranged[target]) return fail("argument '" + *name + "' is supplied more than once");
-                arranged[target] = args[i];
-            }
+        auto name = i < argNames.size() ? argNames[i] : std::nullopt;
+        if (name && *name == "*") {
+            if (named) return fail("positional spread cannot follow a named argument");
+            if (!varargIndex || positional < fixed) return fail("positional spread requires a '*' parameter after all fixed positional arguments");
+            rest.elems.push_back(args[i]); rest.spreads.push_back(true);
             continue;
         }
-        if (sawNamed) return fail("positional argument cannot follow a named argument");
-        while (positional < count && arranged[positional]) ++positional;
-        if (varargIndex && positional >= *varargIndex) variadic.push_back(args[i]);
-        else {
-            if (positional >= count) return fail("too many arguments");
-            arranged[positional++] = args[i];
+        if (name && *name == "**") {
+            if (!kwargsIndex) return fail("keyword spread requires a '**' parameter");
+            named = true;
+            keywords.spreads.push_back(args[i]);
+            continue;
+        }
+        if (name) {
+            named = true;
+            if (std::find(seen.begin(), seen.end(), *name) != seen.end())
+                return fail("argument '" + *name + "' is supplied more than once");
+            seen.push_back(*name);
+            auto found = std::find(paramNames.begin(), paramNames.begin() + fixed, *name);
+            if (found != paramNames.begin() + fixed) {
+                size_t target = static_cast<size_t>(found - paramNames.begin());
+                if (arranged[target]) return fail("argument '" + *name + "' is supplied more than once");
+                arranged[target] = args[i];
+            } else if (kwargsIndex) {
+                keywords.entries.push_back({std::make_shared<Expr>(ExprLit{*name}), args[i]});
+            } else return fail("unknown named argument '" + *name + "'");
+        } else {
+            if (named) return fail("positional argument cannot follow a named argument");
+            if (positional < fixed) arranged[positional++] = args[i];
+            else if (varargIndex) { rest.elems.push_back(args[i]); rest.spreads.push_back(false); }
+            else return fail("too many positional arguments");
         }
     }
-    const size_t required = varargIndex.value_or(count);
-    for (size_t i = 0; i < required; ++i)
+    if (varargIndex) arranged[*varargIndex] = std::make_shared<Expr>(std::move(rest));
+    if (kwargsIndex) {
+        const bool hasSpread = !keywords.spreads.empty();
+        for (size_t i = 0; i < fixed; ++i)
+            if (arranged[i]) keywords.reservedKeys.push_back(paramNames[i]);
+        keywords.argumentPack = true;
+        auto packed = std::make_shared<Expr>(std::move(keywords));
+        arranged[*kwargsIndex] = packed;
+        for (size_t i = 0; i < fixed; ++i) {
+            if (arranged[i]) continue;
+            if (!hasSpread) return fail("missing argument '" + paramNames[i] + "'");
+            auto key = std::make_shared<Expr>(ExprLit{paramNames[i]});
+            auto removed = std::make_shared<Expr>(ExprMethodCall{packed, "remove", {key}});
+            auto present = std::make_shared<Expr>(ExprMethodCall{packed, "containsKey", {key}});
+            auto message = std::make_shared<Expr>(ExprLit{std::string("missing argument '") + paramNames[i] + "' from keyword spread"});
+            Path requirePath; requirePath.segs.push_back("require");
+            auto check = std::make_shared<Expr>(ExprCall{std::make_shared<Expr>(ExprPath{requirePath}), {present, message}});
+            auto value = std::make_shared<Expr>(ExprMethodCall{removed, "valueOrFail", {}});
+            ExprBlock block;
+            block.stmts.push_back(std::make_shared<Stmt>(StmtExpr{check, true}));
+            block.tail = value;
+            arranged[i] = std::make_shared<Expr>(std::move(block));
+        }
+    }
+    for (size_t i = 0; i < fixed; ++i)
         if (!arranged[i]) return fail("missing argument '" + paramNames[i] + "'");
-    if (varargIndex) arranged[*varargIndex] = std::make_shared<Expr>(ExprArray{std::move(variadic)});
-    else for (const auto& arg : arranged) if (!arg) return fail("missing argument");
     return true;
 }
+
 void TypeChecker::error(const std::string& msg) {
     SourceLocation end = currentEndLoc;
     if (end.file.empty() || end.line != currentLoc.line || end.col <= currentLoc.col) {
@@ -335,7 +392,7 @@ const MethodInfo* TypeChecker::lookupMethod(TyPtr recv, const std::string& name,
     if (inner->kind() == TyKind::Class_) {
         auto& cls = std::get<TyClass>(*inner);
         for (const auto& m : cls.def->methods) {
-            if (m.name == name && m.arity == arity) {
+            if (m.name == name && (m.arity == arity || m.varargIndex || m.kwargsIndex)) {
                 if (m_trace)
                     m_trace->lookup("method " + name + "/" + std::to_string(arity),
                                     inner->toString(), memberNamesOf(*inner, true), true);
@@ -345,7 +402,7 @@ const MethodInfo* TypeChecker::lookupMethod(TyPtr recv, const std::string& name,
     } else if (inner->kind() == TyKind::Interface_) {
         auto& iface = std::get<TyInterface>(*inner);
         for (const auto& m : iface.def->methods) {
-            if (m.name == name && m.arity == arity) {
+            if (m.name == name && (m.arity == arity || m.varargIndex || m.kwargsIndex)) {
                 if (m_trace)
                     m_trace->lookup("method " + name + "/" + std::to_string(arity),
                                     inner->toString(), memberNamesOf(*inner, true), true);
@@ -749,7 +806,13 @@ bool TypeChecker::inferCall(TyFn& signature, const std::vector<std::string>& nam
         }, *ty);
     };
     std::vector<TyPtr> actuals(args.size());
+    auto emptyCollection = [](const ExprPtr& arg) {
+        if (auto* array = std::get_if<ExprArray>(arg.get())) return array->elems.empty();
+        if (auto* map = std::get_if<ExprMap>(arg.get())) return map->entries.empty() && map->spreads.empty();
+        return false;
+    };
     for (size_t i = 0; i < args.size(); ++i) {
+        if (emptyCollection(args[i])) continue;
         if (args[i] && !std::holds_alternative<ExprClosure>(*args[i])) {
             actuals[i] = checkExpr(args[i], sc, unresolved(signature.params[i + offset]) ? nullptr :
                                     substituteType(signature.params[i + offset], bindings));
@@ -762,6 +825,7 @@ bool TypeChecker::inferCall(TyFn& signature, const std::vector<std::string>& nam
     // Infer ordinary arguments first, then contextual lambda inputs and outputs.
     for (size_t i = 0; i < args.size(); ++i) {
         if (actuals[i]) continue;
+        if (emptyCollection(args[i])) continue;
         auto* closure = args[i] ? std::get_if<ExprClosure>(args[i].get()) : nullptr;
         TyPtr formal = signature.params[i + offset];
         if (!closure || formal->kind() != TyKind::Fn) return false;
@@ -785,8 +849,10 @@ bool TypeChecker::inferCall(TyFn& signature, const std::vector<std::string>& nam
         typeArgs.push_back(it->second);
     }
     signature = std::get<TyFn>(*substituteType(std::make_shared<Ty>(signature), bindings));
-    for (size_t i = 0; i < args.size(); ++i)
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (!actuals[i]) actuals[i] = checkExpr(args[i], sc, signature.params[i + offset]);
         if (!isSubtype(actuals[i], signature.params[i + offset])) return false;
+    }
     return true;
 }
 
@@ -823,6 +889,7 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
             }, n.val);
 
         } else if constexpr (std::is_same_v<T, ExprPath>) {
+            if (!n.path.segs.empty() && !canAccessIntrinsic(n.path.segs.back())) return mkError();
             // Resolve name — may be value (var/val/fun) or type (for constructor)
             Symbol* sym = nullptr;
             Scope* search = sc;
@@ -945,21 +1012,50 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
                 if (!closureScopes.empty() && n.path.segs.size() == 1) {
                     auto& closureCtx = closureScopes.back();
                     Scope* closureScope = closureCtx.scope;
-                    ExprClosure* closureExpr = closureCtx.expr;
                     const std::string& valueName = n.path.segs[0];
                     bool localToClosure = closureScope->lookupLocal(valueName) != nullptr;
                     if (!localToClosure && sym->node == nullptr && !isBuiltinValueName(valueName)) {
-                        auto existing = std::find_if(
-                            closureExpr->captures.begin(),
-                            closureExpr->captures.end(),
-                            [&](const ClosureCapture& capture) { return capture.name == valueName; }
-                        );
-                        if (existing == closureExpr->captures.end()) {
-                            uint32_t nextOffset = static_cast<uint32_t>(closureExpr->captures.size()) * 9u;
-                            closureExpr->captures.push_back({valueName, ty, nextOffset});
-                            n.captureOffset = nextOffset;
-                        } else {
-                            n.captureOffset = existing->offset;
+                        // Closure-convert the referenced variable: find the
+                        // innermost closure that already owns it (as a local or an
+                        // existing capture), then make every strictly inner closure
+                        // capture/forward it down to the referencing one.
+                        const int back = static_cast<int>(closureScopes.size()) - 1;
+                        int ownerIdx = -1;
+                        uint32_t sourceOffset = ~0u;
+                        for (int k = back; k >= 0; --k) {
+                            if (closureScopes[k].scope->lookupLocal(valueName)) {
+                                ownerIdx = k;
+                                sourceOffset = ~0u;
+                                break;
+                            }
+                            for (const auto& cap : closureScopes[k].expr->captures) {
+                                if (cap.name == valueName) {
+                                    ownerIdx = k;
+                                    sourceOffset = cap.offset;
+                                    break;
+                                }
+                            }
+                            if (ownerIdx == k) break;
+                        }
+                        for (int k = ownerIdx + 1; k <= back; ++k) {
+                            ExprClosure* ce = closureScopes[k].expr;
+                            uint32_t thisOffset;
+                            auto existing = std::find_if(ce->captures.begin(), ce->captures.end(),
+                                [&](const ClosureCapture& c) { return c.name == valueName; });
+                            if (existing == ce->captures.end()) {
+                                thisOffset = static_cast<uint32_t>(ce->captures.size()) * 9u;
+                                ce->captures.push_back({valueName, ty, thisOffset, sourceOffset});
+                            } else {
+                                thisOffset = existing->offset;
+                            }
+                            sourceOffset = thisOffset;
+                            if (k == back) n.captureOffset = thisOffset;
+                        }
+                        if (ownerIdx == back) {
+                            // Already captured by the innermost closure by an
+                            // earlier reference; just point at that slot.
+                            for (const auto& cap : closureScopes[back].expr->captures)
+                                if (cap.name == valueName) { n.captureOffset = cap.offset; break; }
                         }
                     }
                 }
@@ -1026,24 +1122,59 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
 
         } else if constexpr (std::is_same_v<T, ExprArray>) {
             if (n.elems.empty()) {
-                if (expectedTy && expectedTy->kind() == TyKind::Array)
-                    return std::make_shared<Ty>(TyArray{std::get<TyArray>(*expectedTy).elem, 0});
+                if (expectedTy && expectedTy->kind() == TyKind::Array) {
+                    n.resolvedTy = std::make_shared<Ty>(TyArray{std::get<TyArray>(*expectedTy).elem, 0});
+                    return n.resolvedTy;
+                }
                 error("empty array literal requires an explicit type");
                 return mkError();
             }
             TyPtr expectedElem = expectedTy && expectedTy->kind() == TyKind::Array
                 ? std::get<TyArray>(*expectedTy).elem : nullptr;
-            TyPtr first = checkExpr(n.elems[0], sc, expectedElem);
-            for (size_t i = 1; i < n.elems.size(); ++i) {
-                TyPtr et = checkExpr(n.elems[i], sc, first);
-                if (!sameType(et, first)) error("array element type mismatch");
+            TyPtr first;
+            bool spread = false;
+            for (size_t i = 0; i < n.elems.size(); ++i) {
+                bool expands = i < n.spreads.size() && n.spreads[i];
+                TyPtr context = first ? first : expectedElem;
+                if (expands && context) context = std::make_shared<Ty>(TyArray{context, 0});
+                TyPtr et = checkExpr(n.elems[i], sc, context);
+                if (expands) {
+                    spread = true;
+                    if (et->kind() != TyKind::Array || et->nullable) {
+                        error("positional spread requires a non-null array"); return mkError();
+                    }
+                    et = std::get<TyArray>(*et).elem;
+                }
+                if (!first) first = et;
+                else if (!sameType(et, first)) error("array element type mismatch");
             }
-            return std::make_shared<Ty>(TyArray{first, static_cast<uint64_t>(n.elems.size())});
+            n.resolvedTy = std::make_shared<Ty>(TyArray{first, spread ? 0 : static_cast<uint64_t>(n.elems.size())});
+            return n.resolvedTy;
 
         } else if constexpr (std::is_same_v<T, ExprMap>) {
-            if (n.entries.empty()) { error("empty map literal requires an explicit type"); return mkError(); }
-            TyPtr keyTy = checkExpr(n.entries[0].key, sc);
-            TyPtr valueTy = checkExpr(n.entries[0].value, sc);
+            TyPtr expectedKey, expectedValue;
+            if (expectedTy && expectedTy->kind() == TyKind::Class_) {
+                const auto& map = std::get<TyClass>(*expectedTy);
+                if (map.def->name == "HashMap" && map.args.size() == 2) {
+                    expectedKey = map.args[0]; expectedValue = map.args[1];
+                }
+            }
+            TyPtr spreadKey, spreadValue;
+            for (const auto& source : n.spreads) {
+                auto ty = checkExpr(source, sc);
+                if (ty->kind() != TyKind::Class_ || ty->nullable) { error("keyword spread requires HashMap<str, T>"); return mkError(); }
+                const auto& map = std::get<TyClass>(*ty);
+                if (map.def->name != "HashMap" || map.args.size() != 2 || map.args[0]->kind() != TyKind::Str) {
+                    error("keyword spread requires HashMap<str, T>"); return mkError();
+                }
+                if (spreadValue && !sameType(spreadValue, map.args[1])) error("keyword spread value type mismatch");
+                spreadKey = map.args[0]; spreadValue = map.args[1];
+            }
+            if (!expectedValue) { expectedKey = spreadKey; expectedValue = spreadValue; }
+            if (n.entries.empty() && !expectedValue) { error("empty map literal requires an explicit type"); return mkError(); }
+            TyPtr keyTy = n.entries.empty() ? expectedKey : checkExpr(n.entries[0].key, sc, expectedKey);
+            TyPtr valueTy = n.entries.empty() ? expectedValue : checkExpr(n.entries[0].value, sc, expectedValue);
+            if (spreadValue && !sameType(spreadValue, valueTy)) error("keyword spread value type mismatch");
             for (size_t i = 1; i < n.entries.size(); ++i) {
                 TyPtr nextKey = checkExpr(n.entries[i].key, sc);
                 TyPtr nextValue = checkExpr(n.entries[i].value, sc);
@@ -1117,6 +1248,15 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
             auto checkBuiltinArgs = [&]() {
                 for (const auto& a : n.args) checkExpr(a, sc);
             };
+            if (!canAccessIntrinsic(builtinName)) return mkError();
+            const std::vector<std::string> intrinsics = {
+                "print", "println", "write", "syscall", "alloc", "halloc", "hread", "hload",
+                "hset", "hstore", "hfree", "strlen", "s2i", "i2s", "chr", "strchar", "strslice",
+                "strindexof", "itof", "ftoi", "fadd", "fsub", "fmul", "fdiv", "fneg"};
+            if ((findNativeBuiltin(builtinName) || std::find(intrinsics.begin(), intrinsics.end(), builtinName) != intrinsics.end()) &&
+                std::any_of(n.argNames.begin(), n.argNames.end(), [](const auto& name) { return name.has_value(); })) {
+                error("compiler intrinsics accept positional arguments only"); return mkError();
+            }
 
             if (const auto* native = findNativeBuiltin(builtinName)) {
                 std::vector<TyPtr> argTypes;
@@ -1246,6 +1386,23 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
             // Constructor call: callee is a class type
             if (callee->kind() == TyKind::Class_) {
                 auto cls = std::get<TyClass>(*callee);
+                if (cls.def->isEnum && std::any_of(n.argNames.begin(), n.argNames.end(),
+                                                  [](const auto& name) { return name.has_value(); })) {
+                    error("enum variants accept positional arguments only"); return mkError();
+                }
+                if (!cls.def->isEnum && !n.argumentsBound) {
+                    auto* symbol = sc->lookup(cls.def->name);
+                    if (symbol && symbol->node) {
+                        auto* item = static_cast<ItemClass*>(symbol->node);
+                        std::vector<std::string> names;
+                        for (const auto& param : item->primaryCtor) names.push_back(param.name);
+                        std::vector<ExprPtr> bound;
+                        if (!bindArguments(n.args, n.argNames, names, {}, {}, bound, true)) return mkError();
+                        if (bound != n.args) n.evaluationArgs = n.args;
+                        n.args = std::move(bound);
+                        n.argumentsBound = true;
+                    }
+                }
                 if (cls.args.empty() && !cls.def->params.empty() &&
                     std::holds_alternative<ExprPath>(*n.func) && std::get<ExprPath>(*n.func).path.args.empty()) {
                     std::vector<TyPtr> params;
@@ -1356,12 +1513,27 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
             bool inferred = false;
             bool triedInference = false;
             std::vector<TyPtr> knownArgTypes(n.args.size());
+            std::vector<ExprPtr> matchedArgs;
             for (auto& cand : candidates) {
+                std::vector<ExprPtr> candidateArgs = n.args;
                 if (cand.second) {
                     auto* item = static_cast<ItemFun*>(cand.second);
                     if (item->receiverType) continue;
+                    if (!n.argumentsBound) {
+                        std::vector<std::string> names;
+                        for (const auto& param : item->params) names.push_back(param.first);
+                        if (!bindArguments(n.args, n.argNames, names, item->varargIndex,
+                                           item->kwargsIndex, candidateArgs, candidates.size() == 1)) continue;
+                    }
+                } else if (!n.argumentsBound && !cand.first.paramNames.empty()) {
+                    if (!bindArguments(n.args, n.argNames, cand.first.paramNames, cand.first.varargIndex,
+                                       cand.first.kwargsIndex, candidateArgs, true)) continue;
+                } else if (!n.argumentsBound && std::any_of(n.argNames.begin(), n.argNames.end(),
+                                                           [](const auto& name) { return name.has_value(); })) {
+                    error("named arguments require a declared function or method"); return mkError();
                 }
-                if (cand.first.params.size() != n.args.size()) continue;
+                if (cand.first.params.size() != candidateArgs.size()) continue;
+                knownArgTypes.assign(candidateArgs.size(), nullptr);
                 if (cand.second && std::get_if<ExprPath>(n.func.get()) &&
                     std::get<ExprPath>(*n.func).path.args.empty()) {
                     auto* item = static_cast<ItemFun*>(cand.second);
@@ -1370,11 +1542,12 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
                         std::vector<std::string> names;
                         for (const auto& g : item->generics) names.push_back(g.name);
                         const auto savedErrors = errors.size();
-                        if (inferCall(cand.first, names, n.args, sc, n.resolvedTypeArgs, expectedTy) &&
+                        if (inferCall(cand.first, names, candidateArgs, sc, n.resolvedTypeArgs, expectedTy) &&
                             errors.size() == savedErrors) {
                             matchedFn = &cand.first;
                             matchedNode = cand.second;
                             inferred = true;
+                            matchedArgs = std::move(candidateArgs);
                             break;
                         }
                         errors.resize(savedErrors);
@@ -1384,8 +1557,8 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
                 }
                 bool compatible = true;
                 for (size_t i = 0; i < knownArgTypes.size(); ++i) {
-                    if (n.args[i] && !std::holds_alternative<ExprClosure>(*n.args[i]))
-                        knownArgTypes[i] = checkExpr(n.args[i], sc, cand.first.params[i]);
+                    if (candidateArgs[i] && !std::holds_alternative<ExprClosure>(*candidateArgs[i]))
+                        knownArgTypes[i] = checkExpr(candidateArgs[i], sc, cand.first.params[i]);
                     if (knownArgTypes[i] && !isSubtype(knownArgTypes[i], cand.first.params[i])) {
                         compatible = false;
                         break;
@@ -1394,10 +1567,19 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
                 if (compatible) {
                     matchedFn = &cand.first;
                     matchedNode = cand.second;
+                    matchedArgs = std::move(candidateArgs);
                     break;
                 }
             }
             if (!matchedFn) { error(triedInference ? "cannot infer generic type arguments: conflicting types or insufficient information; specify explicit type arguments" : "no matching overload for arity"); return mkError(); }
+            if (!n.argumentsBound) {
+                if (matchedArgs != n.args) n.evaluationArgs = n.args;
+                for (const auto& arg : matchedArgs)
+                    if (auto* map = std::get_if<ExprMap>(arg.get()); map && map->argumentPack && !map->spreads.empty())
+                        n.evaluationArgs.push_back(arg);
+                n.args = std::move(matchedArgs);
+                n.argumentsBound = true;
+            }
 
             // Mangle name for overloaded functions: <name>$<arity>
             if (callSym && !callSym->overloads.empty()) {
@@ -1435,6 +1617,12 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
         } else if constexpr (std::is_same_v<T, ExprMethodCall>) {
             TyPtr recv = checkExpr(n.recv, sc);
             if (!recv || recv->isError()) return mkError();
+            if (recv->kind() == TyKind::Array && !recv->nullable && n.method == "size" &&
+                n.args.empty() && n.typeArgs.empty()) {
+                n.qualifiedName = "__loxis_arrayLen";
+                n.resolvedTy = mkInt();
+                return n.resolvedTy;
+            }
 
             // Determine dispatch kind for the backend
             TyPtr inner = recv->nullable ? unwrapNullable(recv) : recv;
@@ -1452,6 +1640,17 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
 
             const MethodInfo* mi = lookupMethod(recv, n.method, n.args.size());
             if (mi) {
+                if (!n.argumentsBound) {
+                    std::vector<ExprPtr> bound;
+                    if (!bindArguments(n.args, n.argNames, mi->paramNames, mi->varargIndex,
+                                       mi->kwargsIndex, bound, true)) return mkError();
+                    if (bound != n.args) n.evaluationArgs = n.args;
+                    for (const auto& arg : bound)
+                        if (auto* map = std::get_if<ExprMap>(arg.get()); map && map->argumentPack && !map->spreads.empty())
+                            n.evaluationArgs.push_back(arg);
+                    n.args = std::move(bound);
+                    n.argumentsBound = true;
+                }
                 // Regular method dispatch
                 n.vtableIndex = mi->vtableIndex;
                 if (inner->kind() == TyKind::Class_) {
@@ -1510,6 +1709,7 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
             if (const auto* field = lookupField(recv, n.method); field && field->type && field->type->kind() == TyKind::Fn) {
                 auto callee = std::make_shared<Expr>(ExprField{n.recv, n.method});
                 n.callableField = std::make_shared<Expr>(ExprCall{callee, n.args});
+                std::get<ExprCall>(*n.callableField).argNames = n.argNames;
                 n.resolvedTy = checkExpr(n.callableField, sc);
                 return n.resolvedTy;
             }
@@ -1528,12 +1728,44 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
                     }
                 }
                 for (auto& cand : candidates) {
-                    auto& fnTy = std::get<TyFn>(*cand.second);
+                    auto fnTy = std::get<TyFn>(*cand.second);
                     if (fnTy.params.empty()) continue;
+                    auto* item = cand.first ? static_cast<ItemFun*>(cand.first) : nullptr;
+                    if (!item || !item->receiverType) continue;
+                    std::vector<ExprPtr> bound = n.args;
+                    if (!n.argumentsBound) {
+                        std::vector<std::string> names;
+                        for (const auto& param : item->params) names.push_back(param.first);
+                        if (!bindArguments(n.args, n.argNames, names, item->varargIndex, item->kwargsIndex, bound)) continue;
+                    }
                     // First param is the receiver — check if it matches
-                    size_t extArgs = n.args.size() + 1; // +1 for receiver
+                    size_t extArgs = bound.size() + 1; // +1 for receiver
                     if (fnTy.params.size() == extArgs &&
                         isSubtype(recv, fnTy.params[0])) {
+                        bool inferredExtension = false;
+                        if (!item->generics.empty()) {
+                            std::vector<std::string> names;
+                            for (const auto& param : item->generics) names.push_back(param.name);
+                            if (!n.typeArgs.empty()) {
+                                if (n.typeArgs.size() != names.size()) continue;
+                                n.resolvedTypeArgs.clear();
+                                for (const auto& type : n.typeArgs) n.resolvedTypeArgs.push_back(resolveType(*type, sc));
+                                fnTy = std::get<TyFn>(*substituteType(std::make_shared<Ty>(fnTy), makeSubstMap(names, n.resolvedTypeArgs)));
+                            } else {
+                                const auto savedErrors = errors.size();
+                                if (!inferCall(fnTy, names, bound, sc, n.resolvedTypeArgs, expectedTy, 1)) {
+                                    errors.resize(savedErrors); continue;
+                                }
+                                inferredExtension = true;
+                            }
+                        }
+                        if (!n.argumentsBound) {
+                            if (bound != n.args) n.evaluationArgs = n.args;
+                            for (const auto& arg : bound)
+                                if (auto* map = std::get_if<ExprMap>(arg.get()); map && map->argumentPack && !map->spreads.empty())
+                                    n.evaluationArgs.push_back(arg);
+                            n.args = std::move(bound); n.argumentsBound = true;
+                        }
                         // Found matching extension function!
                         // Use the mangled backend name from the ItemFun node
                         std::string backendName = n.method;
@@ -1544,10 +1776,12 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
                             }
                         }
                         // Check arg types
-                        for (size_t i = 0; i < extArgs && i < fnTy.params.size(); ++i) {
+                        if (!inferredExtension) for (size_t i = 0; i < extArgs && i < fnTy.params.size(); ++i) {
                             TyPtr argTy;
                             if (i == 0) argTy = recv; // already checked
-                            else argTy = checkExpr(n.args[i - 1], sc);
+                            else if (auto* closure = std::get_if<ExprClosure>(n.args[i - 1].get()))
+                                argTy = checkClosure(*closure, sc, fnTy.params[i]);
+                            else argTy = checkExpr(n.args[i - 1], sc, fnTy.params[i]);
                             if (!isSubtype(argTy, fnTy.params[i]))
                                 error("extension function argument type mismatch for '" + n.method + "'");
                         }
@@ -1993,7 +2227,7 @@ TyPtr TypeChecker::checkExpr(ExprPtr e, Scope* sc, TyPtr expectedTy) {
             return result;
 
         } else if constexpr (std::is_same_v<T, ExprClosure>) {
-            return checkClosure(n, sc);
+            return checkClosure(n, sc, expectedTy);
 
         } else if constexpr (std::is_same_v<T, ExprRef>) {
             TyPtr inner = checkExpr(n.expr, sc);
@@ -2208,13 +2442,16 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
             // Extension functions: first param is the receiver
             if (recvTy) paramTys.push_back(recvTy);
             for (size_t pi = 0; pi < n.params.size(); ++pi) {
-                TyPtr paramTy = callableParamType(resolveType(*n.params[pi].second, &fnScope), pi, n.varargIndex);
+                TyPtr paramTy = parameterType(resolveType(*n.params[pi].second, &fnScope), pi, n.varargIndex, n.kwargsIndex, &fnScope);
                 n.resolvedParamTys.push_back(paramTy);
                 paramTys.push_back(paramTy);
             }
 
             TyPtr retTy = n.ret ? resolveType(*n.ret, &fnScope) : mkUnit();
             TyPtr fnTy = std::make_shared<Ty>(TyFn{paramTys, retTy});
+            auto& callable = std::get<TyFn>(*fnTy);
+            for (const auto& param : n.params) callable.paramNames.push_back(param.first);
+            callable.varargIndex = n.varargIndex; callable.kwargsIndex = n.kwargsIndex;
 
             Symbol* sym = sc->lookup(n.name);
             if (sym) {
@@ -2332,8 +2569,8 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
                     }
                     std::vector<TyPtr> params;
                     params.push_back(classScope->selfTy() ? classScope->selfTy() : mkError());
-                    for (const auto& p : m.params) {
-                        params.push_back(resolveType(*p.second, &methodSignatureScope));
+                    for (size_t pi = 0; pi < m.params.size(); ++pi) {
+                        params.push_back(parameterType(resolveType(*m.params[pi].second, &methodSignatureScope), pi, m.varargIndex, m.kwargsIndex, &methodSignatureScope));
                     }
                     TyPtr retTy = m.ret ? resolveType(*m.ret, &methodSignatureScope) : mkUnit();
                     TyPtr methodTy = std::make_shared<Ty>(TyFn{std::move(params), retTy});
@@ -2382,8 +2619,8 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
                     }
                     std::vector<TyPtr> params;
                     params.push_back(enumScope->selfTy() ? enumScope->selfTy() : mkError());
-                    for (const auto& p : m.params)
-                        params.push_back(resolveType(*p.second, &methodSignatureScope));
+                    for (size_t pi = 0; pi < m.params.size(); ++pi)
+                        params.push_back(parameterType(resolveType(*m.params[pi].second, &methodSignatureScope), pi, m.varargIndex, m.kwargsIndex, &methodSignatureScope));
                     TyPtr retTy = m.ret ? resolveType(*m.ret, &methodSignatureScope) : mkUnit();
                     TyPtr methodTy = std::make_shared<Ty>(TyFn{std::move(params), retTy});
                     for (auto& method : enumDef->methods) {
@@ -2409,8 +2646,9 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
                         Scope methodScope(ifaceScope);
                         methodScope.declare("self", SymbolKind::Value, nullptr, selfTy);
                         methodScope.declare("this", SymbolKind::Value, nullptr, selfTy);
-                        for (const auto& p : m.params) {
-                            TyPtr pt = resolveType(*p.second, ifaceScope);
+                        for (size_t pi = 0; pi < m.params.size(); ++pi) {
+                            const auto& p = m.params[pi];
+                            TyPtr pt = parameterType(resolveType(*p.second, ifaceScope), pi, m.varargIndex, m.kwargsIndex, ifaceScope);
                             methodScope.declare(p.first, SymbolKind::Value, nullptr, pt);
                         }
                         TyPtr savedRet = currentRetTy;
@@ -2461,7 +2699,8 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
                     }
                     std::vector<TyPtr> params;
                     params.push_back(objScope->selfTy() ? objScope->selfTy() : mkError());
-                    for (const auto& p : m.params) params.push_back(resolveType(*p.second, &methodSignatureScope));
+                    for (size_t pi = 0; pi < m.params.size(); ++pi)
+                        params.push_back(parameterType(resolveType(*m.params[pi].second, &methodSignatureScope), pi, m.varargIndex, m.kwargsIndex, &methodSignatureScope));
                     TyPtr retTy = m.ret ? resolveType(*m.ret, &methodSignatureScope) : mkUnit();
                     TyPtr methodTy = std::make_shared<Ty>(TyFn{std::move(params), retTy});
                     for (auto& method : classDef->methods) {
@@ -2623,6 +2862,7 @@ void TypeChecker::applyRefinements(Scope* target, const std::vector<TypeRefineme
 }
 
 bool TypeChecker::checkModule(Module& mod) {
+    intrinsicSources = mod.intrinsicSources;
     ScopeBuilder builder;
     rootOwner = builder.build(mod);
     rootScope = rootOwner.get();
@@ -2641,7 +2881,7 @@ bool TypeChecker::checkModule(Module& mod) {
                             std::make_shared<Ty>(TyParam{method.generics[i].name, static_cast<uint32_t>(i)}));
                     std::vector<TyPtr> params{scope->selfTy()};
                     for (size_t pi = 0; pi < method.params.size(); ++pi)
-                        params.push_back(callableParamType(resolveType(*method.params[pi].second, &methodScope), pi, method.varargIndex));
+                        params.push_back(parameterType(resolveType(*method.params[pi].second, &methodScope), pi, method.varargIndex, method.kwargsIndex, &methodScope));
                     auto ret = method.ret ? resolveType(*method.ret, &methodScope) : mkUnit();
                     auto fn = std::make_shared<Ty>(TyFn{std::move(params), ret});
                     for (auto& info : def->methods)
@@ -2661,7 +2901,7 @@ bool TypeChecker::checkModule(Module& mod) {
                             std::make_shared<Ty>(TyParam{method.generics[i].name, static_cast<uint32_t>(i)}));
                     std::vector<TyPtr> params{scope->selfTy()};
                     for (size_t pi = 0; pi < method.params.size(); ++pi)
-                        params.push_back(callableParamType(resolveType(*method.params[pi].second, &methodScope), pi, method.varargIndex));
+                        params.push_back(parameterType(resolveType(*method.params[pi].second, &methodScope), pi, method.varargIndex, method.kwargsIndex, &methodScope));
                     auto ret = method.ret ? resolveType(*method.ret, &methodScope) : mkUnit();
                     auto fn = std::make_shared<Ty>(TyFn{std::move(params), ret});
                     for (auto& info : def->methods)
@@ -2675,7 +2915,7 @@ bool TypeChecker::checkModule(Module& mod) {
                 for (const auto& method : owner.methods) {
                     std::vector<TyPtr> params{symbol->ty};
                     for (size_t pi = 0; pi < method.params.size(); ++pi)
-                        params.push_back(callableParamType(resolveType(*method.params[pi].second, scope), pi, method.varargIndex));
+                        params.push_back(parameterType(resolveType(*method.params[pi].second, scope), pi, method.varargIndex, method.kwargsIndex, scope));
                     auto ret = method.ret ? resolveType(*method.ret, scope) : mkUnit();
                     auto fn = std::make_shared<Ty>(TyFn{std::move(params), ret});
                     for (auto& info : def->methods)
@@ -2703,12 +2943,14 @@ bool TypeChecker::checkModule(Module& mod) {
         if (fn->receiverType) params.push_back(resolveType(*fn->receiverType, &signatureScope));
         fn->resolvedParamTys.clear();
         for (size_t pi = 0; pi < fn->params.size(); ++pi) {
-            TyPtr paramTy = callableParamType(resolveType(*fn->params[pi].second, &signatureScope), pi, fn->varargIndex);
+            TyPtr paramTy = parameterType(resolveType(*fn->params[pi].second, &signatureScope), pi, fn->varargIndex, fn->kwargsIndex, &signatureScope);
             fn->resolvedParamTys.push_back(paramTy);
             params.push_back(paramTy);
         }
         auto ret = fn->ret ? resolveType(*fn->ret, &signatureScope) : mkUnit();
         TyFn signature{std::move(params), ret};
+        for (const auto& param : fn->params) signature.paramNames.push_back(param.first);
+        signature.varargIndex = fn->varargIndex; signature.kwargsIndex = fn->kwargsIndex;
         auto type = std::make_shared<Ty>(signature);
         localSignatures.push_back({fn, signature});
         if (auto* symbol = rootScope->lookup(fn->name)) {

@@ -4,9 +4,9 @@ import loxis.collections.list
 
 // Open addressing with linear probing. States: 0 empty, 1 occupied, 2 deleted.
 class HashMap<K, V>(val hash: fun(K) -> int, val equal: fun(K, K) -> bool) {
-    var states: list<int> = listWithCapacity<int>(8)
-    var keySlots: list<Optional<K>> = listWithCapacity<Optional<K>>(8)
-    var valueSlots: list<Optional<V>> = listWithCapacity<Optional<V>>(8)
+    var states: list<int> = __loxis_listWithCapacity<int>(8)
+    var keySlots: list<Optional<K>> = __loxis_listWithCapacity<Optional<K>>(8)
+    var valueSlots: list<Optional<V>> = __loxis_listWithCapacity<Optional<V>>(8)
     var count: int = 0
 
     fun ensureStorage() -> unit {
@@ -14,8 +14,8 @@ class HashMap<K, V>(val hash: fun(K) -> int, val equal: fun(K, K) -> bool) {
         var i = 0
         while i < 8 {
             this.states.push(0)
-            this.keySlots.push(optionalEmpty<K>())
-            this.valueSlots.push(optionalEmpty<V>())
+            this.keySlots.push(__loxis_optionalEmpty<K>())
+            this.valueSlots.push(__loxis_optionalEmpty<V>())
             i += 1
         }
     }
@@ -32,7 +32,7 @@ class HashMap<K, V>(val hash: fun(K) -> int, val equal: fun(K, K) -> bool) {
         while visited < capacity {
             val state = this.states.get(index)
             if state == 0 { return -1 }
-            if state == 1 && this.equal(optionalValueOrFail<K>(this.keySlots.get(index)), key) { return index }
+            if state == 1 && this.equal(__loxis_optionalValueOrFail<K>(this.keySlots.get(index)), key) { return index }
             index = (index + 1) % capacity
             visited += 1
         }
@@ -42,7 +42,7 @@ class HashMap<K, V>(val hash: fun(K) -> int, val equal: fun(K, K) -> bool) {
     fun containsKey(key: K) -> bool { return this.locate(key) >= 0 }
     fun get(key: K) -> Optional<V> {
         val index = this.locate(key)
-        if index < 0 { return optionalEmpty<V>() }
+        if index < 0 { return __loxis_optionalEmpty<V>() }
         return this.valueSlots.get(index)
     }
 
@@ -50,7 +50,7 @@ class HashMap<K, V>(val hash: fun(K) -> int, val equal: fun(K, K) -> bool) {
         val oldIndex = this.locate(key)
         if oldIndex >= 0 {
             val old = this.valueSlots.get(oldIndex)
-            this.valueSlots.set(oldIndex, optionalValue<V>(value))
+            this.valueSlots.set(oldIndex, __loxis_optionalValue<V>(value))
             return old
         }
         if (this.count + 1) * 4 >= this.states.size() * 3 { this.grow() }
@@ -59,19 +59,19 @@ class HashMap<K, V>(val hash: fun(K) -> int, val equal: fun(K, K) -> bool) {
         if index < 0 { index += capacity }
         while this.states.get(index) == 1 { index = (index + 1) % capacity }
         this.states.set(index, 1)
-        this.keySlots.set(index, optionalValue<K>(key))
-        this.valueSlots.set(index, optionalValue<V>(value))
+        this.keySlots.set(index, __loxis_optionalValue<K>(key))
+        this.valueSlots.set(index, __loxis_optionalValue<V>(value))
         this.count += 1
-        return optionalEmpty<V>()
+        return __loxis_optionalEmpty<V>()
     }
 
     fun remove(key: K) -> Optional<V> {
         val index = this.locate(key)
-        if index < 0 { return optionalEmpty<V>() }
+        if index < 0 { return __loxis_optionalEmpty<V>() }
         val old = this.valueSlots.get(index)
         this.states.set(index, 2)
-        this.keySlots.set(index, optionalEmpty<K>())
-        this.valueSlots.set(index, optionalEmpty<V>())
+        this.keySlots.set(index, __loxis_optionalEmpty<K>())
+        this.valueSlots.set(index, __loxis_optionalEmpty<V>())
         this.count -= 1
         return old
     }
@@ -82,31 +82,31 @@ class HashMap<K, V>(val hash: fun(K) -> int, val equal: fun(K, K) -> bool) {
         val oldValues = this.valueSlots
         require(oldStates.size() <= 238609293, "map capacity overflow")
         val capacity = oldStates.size() * 2
-        this.states = listWithCapacity<int>(capacity)
-        this.keySlots = listWithCapacity<Optional<K>>(capacity)
-        this.valueSlots = listWithCapacity<Optional<V>>(capacity)
+        this.states = __loxis_listWithCapacity<int>(capacity)
+        this.keySlots = __loxis_listWithCapacity<Optional<K>>(capacity)
+        this.valueSlots = __loxis_listWithCapacity<Optional<V>>(capacity)
         this.count = 0
         var i = 0
         while i < capacity {
             this.states.push(0)
-            this.keySlots.push(optionalEmpty<K>())
-            this.valueSlots.push(optionalEmpty<V>())
+            this.keySlots.push(__loxis_optionalEmpty<K>())
+            this.valueSlots.push(__loxis_optionalEmpty<V>())
             i += 1
         }
         i = 0
         while i < oldStates.size() {
             if oldStates.get(i) == 1 {
-                this.put(optionalValueOrFail<K>(oldKeys.get(i)), optionalValueOrFail<V>(oldValues.get(i)))
+                this.put(__loxis_optionalValueOrFail<K>(oldKeys.get(i)), __loxis_optionalValueOrFail<V>(oldValues.get(i)))
             }
             i += 1
         }
     }
 
     fun keys() -> list<K> {
-        val out = listWithCapacity<K>(this.count)
+        val out = __loxis_listWithCapacity<K>(this.count)
         var i = 0
         while i < this.states.size() {
-            if this.states.get(i) == 1 { out.push(optionalValueOrFail<K>(this.keySlots.get(i))) }
+            if this.states.get(i) == 1 { out.push(__loxis_optionalValueOrFail<K>(this.keySlots.get(i))) }
             i += 1
         }
         return out
@@ -116,8 +116,8 @@ class HashMap<K, V>(val hash: fun(K) -> int, val equal: fun(K, K) -> bool) {
         var i = 0
         while i < this.states.size() {
             this.states.set(i, 0)
-            this.keySlots.set(i, optionalEmpty<K>())
-            this.valueSlots.set(i, optionalEmpty<V>())
+            this.keySlots.set(i, __loxis_optionalEmpty<K>())
+            this.valueSlots.set(i, __loxis_optionalEmpty<V>())
             i += 1
         }
         this.count = 0

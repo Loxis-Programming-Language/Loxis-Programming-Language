@@ -79,6 +79,12 @@ if(Python3_Interpreter_FOUND)
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_generic_inference.py --exe $<TARGET_FILE:Loxis>)
     add_test(NAME loxis_parser_regressions
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_parser_regressions.py --exe $<TARGET_FILE:Loxis>)
+    add_test(NAME loxis_call_arguments
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_call_arguments.py --exe $<TARGET_FILE:Loxis>)
+    add_test(NAME loxis_api_boundary
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_api_boundary.py --exe $<TARGET_FILE:Loxis>)
+    add_test(NAME loxis_examples
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/run_examples.py --exe $<TARGET_FILE:Loxis>)
 endif()
 
 add_executable(LSPTest

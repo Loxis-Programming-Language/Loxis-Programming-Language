@@ -1,28 +1,29 @@
+import loxis.text
 fun main(): void {
     // int + int → int
     print(10 + 20)
 
     // double + double → double
     var a = 3.0 + 4.0
-    print(ftoi(a))
+    print((a).toInt())
 
     // double * double
     var b = 2.5 * 2.0
-    print(ftoi(b))
+    print((b).toInt())
 
     // int + double → auto-promote
     var c = 3 + 4.0
-    print(ftoi(c))
+    print((c).toInt())
 
     // double / double
     var d = 10.0 / 3.0
-    print(ftoi(d))
+    print((d).toInt())
 
     // float literal
     var e = 3f + 4f
-    print(ftoi(e))
+    print((e).toInt())
 
     // mixed expression
     var f = 1.5 + 2.5 * 2.0
-    print(ftoi(f))
+    print((f).toInt())
 }

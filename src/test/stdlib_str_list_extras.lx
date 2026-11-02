@@ -17,14 +17,14 @@ fun main() -> int {
     xs.push(2)
     print(xs.contains(2))
     print(xs.contains(9))
-    print(toString(xs.contains(2)))
+    print((xs.contains(2)).toString())
 
     val names = list<str>()
     names.push("a")
     names.push("b")
-    print(join(names, ","))
+    print(Text.join(names, ","))
 
-    print(toString(1 < 2))
+    print((1 < 2).toString())
     print("${1 < 2} ${2 < 1}")
     return 0
 }

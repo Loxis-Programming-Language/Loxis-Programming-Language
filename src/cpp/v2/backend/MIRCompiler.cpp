@@ -857,6 +857,20 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
             emitReg(baseReg);
             emitReg(offReg);
             emitReg(placeReg);
+        } else if constexpr (std::is_same_v<T, RvClosureSet>) {
+            // The env object is the enclosing StAssign's place local; write the
+            // value into its capture slot (cell 0 is the function pointer).
+            uint16_t offReg = 250;
+            uint16_t valReg = 251;
+            uint16_t baseReg = localToReg(place);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+            emitReg(offReg);
+            emitImm(static_cast<int64_t>(v.offset + 9));
+            emitOperandToReg(v.value, valReg);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::HStore));
+            emitReg(baseReg);
+            emitReg(offReg);
+            emitReg(valReg);
         } else if constexpr (std::is_same_v<T, RvField>) {
             uint16_t offReg = 250;
             uint16_t baseReg = localToReg(v.local);
@@ -880,26 +894,30 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
             emitReg(offReg);
             emitReg(valReg);
         } else if constexpr (std::is_same_v<T, RvAggregate>) {
-            if (v.kind == RvAggregate::Array && !v.ops.empty()) {
+            if (v.kind == RvAggregate::Array) {
                 uint32_t n = static_cast<uint32_t>(v.ops.size());
                 m_chunk.emitByte(static_cast<uint8_t>(OpCode::Alloc));
                 emitImm(0);
-                emitImm(static_cast<int64_t>(n * 9));
+                emitImm(static_cast<int64_t>((n + 1) * 9));
                 emitReg(placeReg);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                emitReg(250); emitImm(0);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
+                emitReg(251); emitImm(n);
+                m_chunk.emitByte(static_cast<uint8_t>(OpCode::HStore));
+                emitReg(placeReg); emitReg(250); emitReg(251);
                 for (uint32_t i = 0; i < n; ++i) {
                     uint16_t offReg = 250;
                     uint16_t valReg = 251;
                     m_chunk.emitByte(static_cast<uint8_t>(OpCode::Push));
                     emitReg(offReg);
-                    emitImm(static_cast<int64_t>(i * 9));
+                    emitImm(static_cast<int64_t>((i + 1) * 9));
                     emitOperandToReg(v.ops[i], valReg);
                     m_chunk.emitByte(static_cast<uint8_t>(OpCode::HStore));
                     emitReg(placeReg);
                     emitReg(offReg);
                     emitReg(valReg);
                 }
-            } else if (v.kind == RvAggregate::Array) {
-                throw std::runtime_error("backend received an empty array aggregate");
             } else {
                 throw std::runtime_error("backend does not implement tuple/ADT aggregates");
             }
@@ -916,6 +934,8 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
             emitReg(idxReg);
             emitReg(nineReg);
             emitReg(offReg);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Add));
+            emitReg(offReg); emitReg(nineReg); emitReg(offReg);
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::HLoad));
             emitReg(baseReg);
             emitReg(offReg);
@@ -934,6 +954,8 @@ void MIRCompiler::emitRvalue(LocalId place, const Rvalue& rv) {
             emitReg(idxReg);
             emitReg(nineReg);
             emitReg(offReg);
+            m_chunk.emitByte(static_cast<uint8_t>(OpCode::Add));
+            emitReg(offReg); emitReg(nineReg); emitReg(offReg);
             emitOperandToReg(v.value, valReg);
             m_chunk.emitByte(static_cast<uint8_t>(OpCode::HStore));
             emitReg(baseReg);

@@ -1,21 +1,22 @@
 package test
+import loxis.fileio
 
 import loxis.io
 
 fun main() -> int {
     // Test file write + read
-    writeText("_stdlib_io_test.txt", "LoxisIO")
-    val content = readText("_stdlib_io_test.txt")
+    File.writeText("_stdlib_io_test.txt", "LoxisIO").getOrElseGet({ reason -> error(reason) })
+    val content = File.readText("_stdlib_io_test.txt").getOrElseGet({ reason -> error(reason) })
     print(content)
 
     // Test readLines with a file containing newline chars
-    writeText("_stdlib_io_lines.txt", "a")
-    val lines = readLines("_stdlib_io_lines.txt")
+    File.writeText("_stdlib_io_lines.txt", "a").getOrElseGet({ reason -> error(reason) })
+    val lines = Lines.read("_stdlib_io_lines.txt")
     print(lines.size())
     print(lines.get(0))
 
     // Cleanup
-    remove("_stdlib_io_test.txt")
-    remove("_stdlib_io_lines.txt")
+    File.remove("_stdlib_io_test.txt")
+    File.remove("_stdlib_io_lines.txt")
     return 0
 }

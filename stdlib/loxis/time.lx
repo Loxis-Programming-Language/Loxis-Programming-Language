@@ -1,7 +1,5 @@
 package loxis.time
 
-fun unixMillis() -> int { return nativeUnixMillis() }
-fun monotonicNanos() -> int { return nativeMonotonicNanos() }
 
 object Clock {
     fun unixMillis() -> int { return nativeUnixMillis() }

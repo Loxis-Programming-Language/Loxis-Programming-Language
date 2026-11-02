@@ -6,7 +6,7 @@ fun main() -> int {
     val addBase: fun(int) -> int = { x -> x + base }
     print(addBase(5))
 
-    val values = listWithCapacity<int>(2)
+    val values = Lists.withCapacity<int>(2)
     values.push(1)
     values.push(3)
 

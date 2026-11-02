@@ -1,7 +1,7 @@
 package loxis.refl
 
-// --- Reflection ---
-
-fun typeof(obj: int) -> int {
-    return syscall(2, obj)
+object Reflection {
+    fun typeOf<T>(value: T) -> int { return syscall(2, value) }
 }
+
+// --- Reflection ---

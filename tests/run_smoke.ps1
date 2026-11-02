@@ -181,7 +181,7 @@ $cases = @(
     @{
         Name = "stdlib file io"
         File = "src\test\stdlib_fileio.lx"
-        Out = "1`n1`n1`n12`n6`nhello-stdlib`n1`n"
+        Out = "5`n4`n3`n12`n6`nhello-stdlib`ntrue`n"
     },
     @{
         Name = "stdlib functional"
@@ -197,6 +197,21 @@ $cases = @(
         Name = "capturing closure"
         File = "src\test\capturing_closure.lx"
         Out = "15`n11`n13`n15`n10`n"
+    },
+    @{
+        Name = "closure capture write"
+        File = "src\test\closure_capture_write.lx"
+        Out = "1`n2`n3`n42`n41`n"
+    },
+    @{
+        Name = "nested closures"
+        File = "src\test\closure_nested.lx"
+        Out = "15`n123`n42`n"
+    },
+    @{
+        Name = "trailing lambda"
+        File = "src\test\trailing_lambda.lx"
+        Out = "2`n8`n10`n42`n"
     },
     @{
         Name = "enum ctor when"

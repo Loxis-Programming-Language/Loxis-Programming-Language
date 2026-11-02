@@ -1,4 +1,4 @@
 package loxis.mem
 
 // --- Heap memory (native wrappers) ---
-// halloc, hread, hset, hfree are VM built-ins
+// Runtime experiments must explicitly import loxis.unsafe in the calling file.

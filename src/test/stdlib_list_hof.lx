@@ -1,7 +1,7 @@
 import loxis.collections.list
 
 fun main() -> int {
-    val xs = listWithCapacity<int>(2)
+    val xs = Lists.withCapacity<int>(2)
     xs.push(1)
     xs.push(2)
     xs.push(3)
@@ -16,9 +16,5 @@ fun main() -> int {
     print(filtered.get(0) + filtered.get(1))
 
     filtered.forEach({ x -> print(x) })
-
-    listFree<int>(filtered)
-    listFree<int>(mapped)
-    listFree<int>(xs)
     return 0
 }

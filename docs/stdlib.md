@@ -5,6 +5,39 @@ Import modules explicitly, for example `import loxis.collections.map`.
 repository's library; set `LOXIS_STDLIB` to this repository's `stdlib` directory
 when another installation is configured in your environment.
 
+## Public API boundary and migration
+
+Ordinary code uses values, constructors and scoped service objects. VM bridge
+names (`native*`, heap operations, `syscall`, numeric conversion opcodes) and
+`__loxis_*` helpers are internal APIs. The compiler checks the resolved source
+file, not its `package` declaration. Calling or taking an alias to these APIs
+from an ordinary file is rejected.
+
+For runtime experiments only, explicitly `import loxis.unsafe` in the file
+using low-level calls. This opt-in does not propagate to importing files.
+`Unsafe.arrayNew/Get/Set/Len/Free` provide the old raw integer-handle array
+operations. Normal programs use array literals or `list<T>()`, without `free`.
+This is an API boundary, not a sandbox for untrusted standard libraries.
+
+| Removed public spelling | Use instead |
+| --- | --- |
+| `i2s`, `intToString`, free `toString` | `value.toString()` or `${value}` |
+| `s2i`, `parseInt`, `tryParseInt` | `text.toInt()` / `text.toIntResult()` |
+| `strlen`, `strslice`, `strchar` | `text.length()`, `text.slice(...)`, `text.byteAt(...)` |
+| `concat`, `strcat`, `fadd/fsub/fmul/fdiv/fneg` | ordinary operators |
+| `listXxx(items, ...)`, `listFree(items)` | `items.xxx(...)`; remove explicit freeing |
+| `listWithCapacity`, `flatten`, `chunked` | `Lists.withCapacity`, `Lists.flatten`, `Lists.chunked` |
+| `optionalXxx`, `resultXxx` | value methods, `Option` and `Results` factories |
+| `iterXxx`, `listIter`, `emptyIter` | `Iter` methods |
+| `pathXxx`, `arguments`, `environment`, clock functions | `Path`, `System`, `Clock` |
+| bare math and file operations | `Math`, `File`, `Files`, `Console`, `Lines` |
+| duplicate `typeof` wrappers | `Reflection.typeOf(value)` |
+
+The common `print/println/write`, `require`, `error` and `TODO` entry points
+remain. Explicitly imported `apply`/`twice`, the `stream` factory, and hash/equality
+callbacks also remain free functions; ordinary user-defined functions are unaffected.
+There are no public compatibility aliases for the removed spellings.
+
 ## Errors and values
 
 `Optional<T>` has `Empty` and `Value(T)` variants. `Result<T, E>` has `Success(T)`
@@ -15,9 +48,10 @@ and `Failure(E)` variants. An optional payload may itself be nullable.
 | `loxis.option` | `Option.some<T>`, `Option.none<T>`; `Optional<T>` with `hasValue`, `isEmpty`, `map`, `flatMap`, `getOrElse`, `getOrElseGet`, `valueOrFail` |
 | `loxis.result` | `Result::<T, E>::Success(value)`, `Result::<T, E>::Failure(error)`; `Result<T, E>` with `isSuccess`, `isFailure`, `map`, `flatMap`, `mapError`, `getOrElse`, `getOrElseGet`, `toOptional` |
 
-Prefer `optional.isEmpty()`, `optional.getOrElse(value)`, `result.isSuccess()`,
-and `result.getOrElse(value)`. The prefixed free functions remain compatibility
-entry points. `GetOrElseGet` invokes its fallback only on an empty/failure value. `require`
+Use `Option.some/none/fromNullable`, `Results.success/failure/fromOptional`,
+`optional.isEmpty()`, `optional.orNull()`, `optional.getOrElse(value)`,
+`result.isSuccess()`, and `result.getOrElse(value)`. The old prefixed free
+functions have been removed from the public API. `getOrElseGet` invokes its fallback only on an empty/failure value. `require`
 and `error` report a runtime failure with a nonzero process exit status.
 
 ## Collections
@@ -26,7 +60,7 @@ Builtin type names use lowercase: `int`, `str`, and `list<T>`. Create an empty,
 GC-managed list with `list<int>()`, or use `val values: list<int> = list()` and
 let the expected type infer `T`; it grows on demand.
 The former `List<T>` type is now spelled `list<T>` throughout the library.
-Use `listWithCapacity<T>(capacity)` only when preallocated storage matters.
+Use `Lists.withCapacity<T>(capacity)` only when preallocated storage matters.
 Methods: `size`,
 `capacity`, `isEmpty`, `get`, `set`, `push`, `insert`, `removeAt`, `pop`, `clear`.
 Algorithms are methods too: `map`, `filter`, `fold`, `forEach`, `count`, `any`,
@@ -39,24 +73,20 @@ The Kotlin-style helpers are `mapIndexed`, `filterIndexed`, `forEachIndexed`
 `indexOfFirst`, `indexOfLast`, `none`, `reduce`, and the slicing set `drop`,
 `dropLast`, `takeLast`, `takeWhile`, `dropWhile`. Out-of-range slice counts
 clamp rather than fail; `reduce` on an empty list fails, so use `fold` there.
-Each has a free-function mirror (`listMapIndexed`, `listDrop`, ...).
-`joinToString(items, separator, render)` renders as it joins.
-`flatten(items)` and `chunked(items, size)` are free functions because their
-signatures mention `list<list<...>>`, which a method cannot express today.
+`Text.joinToString(items, separator, render)` renders as it joins.
+`Lists.flatten(items)` and `Lists.chunked(items, size)` handle nested lists
+whose constraints cannot yet be expressed as ordinary generic list methods.
 
-These call the lambda directly rather than from inside another closure: calling
-a function-typed parameter from within a closure currently returns 0, and
-assigning to a captured local from a closure is a silent no-op, so accumulate
-with `fold` or an explicit loop instead of mutating a captured variable.
-`get/set/removeAt` require `0 <= index < size`; `insert` also accepts `size`.
+Lambdas may be called directly or from inside another closure, and a closure may
+assign to a captured local (the write goes through the closure's environment, so
+a counter closure keeps state across calls). `get/set/removeAt` require
+`0 <= index < size`; `insert` also accepts `size`.
 `pop` returns `Optional<T>`. Negative or unrepresentable capacities fail.
 Clearing/removing elements releases their stored references.
 
-Compatibility free functions include `listMap`, `listFilter`, `listForEach`,
-`listFold`, `listCount`, `listAny`, `listAll`, `listFind`, `listAppend`,
-`listReverse`, `listReversed`, and `listSortBy`. `listSortBy` mutates its input;
-the comparator must define a strict ordering. It currently uses selection sort.
-`listFree` is a legacy compatibility entry point; GC owns storage reclamation.
+The old `listXxx` mirrors and `listFree` are no longer public. GC owns storage
+reclamation. `sortBy` mutates its input; its comparator must define a strict
+ordering. It currently uses selection sort.
 
 Create a map directly with `HashMap<K, V>(hash, equal)`.
 Equal keys must have equal hashes, and keys must not change in ways affecting
@@ -83,27 +113,29 @@ empty stream. Streams compose through `map<U>`, `filter`,
 `take`, `drop`, `zip<U>`, `fold<U>`, `forEach`, `count`, `toList`, `any`, `all`,
 and `find`. Zip produces `Pair<A, B>` and stops at the
 shorter source; when the right side ends it may consume one extra left element.
-Terminal operations: `iterForEach`, `iterCount`, `iterAny`, `iterAll`, `iterFind`,
-`iterFold`, `iterToList`. Counts for take/drop must be nonnegative.
+`Iter` supplies `fromList`, `empty`, `map`, `filter`, `take`, `drop`, `zip`,
+`forEach`, `count`, `any`, `all`, `find`, `fold`, and `toList`.
+Counts for take/drop must be nonnegative.
 
-The `iterXxx` and `streamXxx` functions remain compatibility entry points.
+The `iterXxx` and `streamXxx` free functions are no longer public. Prefer stream
+methods; `Streams.map` is also available for callers needing a scoped helper.
 Iterators and streams are lazy and single-pass. Repeating a terminal
 operation continues from the current position. Mutating an underlying collection
 during iteration is unsupported.
 
 ## Text and numbers
 
-Text indices and `len` count UTF-8 **bytes**, not code points or graphemes.
-`slice(value, start, count)` clamps its range. `charCodeAt` returns a byte or -1
-out of bounds. `chr` creates one byte. `fromCodePoint` encodes a Unicode scalar;
-`codePoints` validates UTF-8 and returns `Result<list<int>, str>`.
+Text indices and `text.length()` count UTF-8 **bytes**, not code points or graphemes.
+`text.slice(start, count)` clamps its range. `text.byteAt(index)` returns a byte
+or -1 out of bounds. `Text.fromByte` accepts 0..255. `Unicode.fromCodePoint`
+encodes a Unicode scalar; `text.codePoints()` validates UTF-8 and returns `Result<list<int>, str>`.
 
 `split` preserves empty fields; `split/replace` reject an empty separator.
-`join`, `trim` (ASCII whitespace), `startsWith`, `endsWith`, `contains`, `indexOf`,
-`concat`, `repeat` and `toString` are available in `loxis.text`.
-`repeat(value, count)` and `text.repeat(n)` build by doubling, so they stay
+`Text.join` and the string methods `trim` (ASCII whitespace), `startsWith`,
+`endsWith`, `contains`, `indexOf`, `repeat`, and `toString` are available in `loxis.text`.
+Use `+` or interpolation for concatenation. `text.repeat(n)` builds by doubling, so it stays
 linear rather than copying the accumulator once per repetition.
-`toString` has `int`, `double` and `bool` overloads; `bool.toString()` yields
+`toString()` is available on `int`, `double`, `bool`, and `str`; `bool.toString()` yields
 `"true"`/`"false"`. A bool carries no VM tag of its own, so both `print(bool)`
 and `"${flag}"` select that text statically rather than stringifying by tag;
 `print(flag)` says `true`, not `1`.
@@ -112,12 +144,13 @@ Prefer value-oriented calls such as `text.split(" ")`, `text.replace(old, new)`,
 `text.words()` splits ordinary text on ASCII whitespace without exposing numeric
 control-character codes or producing empty fields.
 
-`tryParseInt` parses an entire signed 64-bit decimal string and returns a Result.
-It rejects whitespace, missing digits, trailing input and overflow. Legacy
-`parseInt` retains the VM's permissive zero-on-failure behavior.
+`text.toIntResult()` parses an entire signed 64-bit decimal string and returns a
+Result. It rejects whitespace, missing digits, trailing input and overflow.
+`text.toInt()` throws on invalid input. `int.toDouble()` and `double.toInt()`
+replace the old `itof` / `ftoi` primitives in ordinary code.
 
-`tryParseDouble` returns a Result for whole-string floating-point parsing;
-`doubleToString` formats double-precision values.
+`text.toDoubleResult()` returns a Result for whole-string floating-point parsing;
+`double.toString()` formats double-precision values.
 
 `loxis.math` supplies `clamp`, `gcd`, checked `powInt`,
 plus double-precision `sqrt/floor/ceil/round/sin/cos/log/exp/pow/isFinite`.
@@ -132,12 +165,13 @@ domain errors follow IEEE behavior and may produce NaN/infinity.
 `File.readText`, `File.writeText`, `File.appendText`, `File.readBytes`, and
 `File.writeBytes` return `Result` values. Byte lists contain integers in 0..255. Binary reads
 preserve NUL and all byte values. `exists` checks filesystem metadata, including
-empty files. Legacy `readText` returns an empty string on failure;
-`writeText/appendText/removeFile` return 1 on success, 0 on failure.
+empty files. Write/append results contain the number of bytes written;
+`File.remove` returns a bool.
 
-`loxis.io` re-exports file I/O and supplies `readChar`, `writeChar`,
-`readLineOptional`, `readLine`, `readAll`, `readLines`, `writeLine`, `writeLines`,
-and legacy `remove`. `readLineOptional` distinguishes EOF from an empty line.
+`loxis.io` supplies `Console.readChar/writeChar`, `Console.readLineOptional`,
+`Console.readLine`, `Console.readAll`, `Console.print/println`, `Lines.read`
+(stdin or a file path), and `Lines.write(path, lines)`.
+`readLineOptional` distinguishes EOF from an empty line.
 LF terminates a line; a CR immediately preceding LF is stripped. `readAll`
 preserves every byte. `writeLines` inserts LF between lines without a final LF.
 
@@ -146,7 +180,7 @@ Directory removal is nonrecursive and requires an empty directory. Directory
 listings contain sorted entry names. Paths follow the host filesystem's rules.
 `Path` provides `join`, `normalize`, `parent`, `name`, `extension`, and
 `currentDirectory`; normalization is lexical, without resolving
-symlinks. An absolute child in pathJoin follows host path replacement semantics.
+symlinks. An absolute child in `Path.join` follows host path replacement semantics.
 
 `System.arguments()` contains only arguments after the CLI `--` separator.
 `System.environment(name)` returns `Optional<str>`. `Clock` offers Unix epoch

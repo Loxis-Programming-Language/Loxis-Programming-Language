@@ -1,4 +1,5 @@
+import loxis.unsafe
 fun main() -> int {
-    val storage = arrayNew(477218587)
+    val storage = Unsafe.arrayNew(477218587)
     return 0
 }

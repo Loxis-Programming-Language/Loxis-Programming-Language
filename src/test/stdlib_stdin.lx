@@ -1,9 +1,10 @@
+import loxis.text
 import loxis.io
 
 fun main() -> int {
     require(Console.readLineOptional().valueOrFail() == "", "blank line")
     require(Console.readLine() == "hello", "crlf")
-    require(Console.readAll() == "last" + chr(13), "preserve bytes")
+    require(Console.readAll() == "last" + Text.fromByte(13), "preserve bytes")
     require(Console.readLineOptional().isEmpty(), "eof")
     print("stdin ok")
     return 0

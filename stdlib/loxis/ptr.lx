@@ -1,7 +1,5 @@
 package loxis.ptr
 
 // --- String / pointer operations ---
-// strlen, i2s, s2i are VM built-ins
-// strcat is implemented via the + operator
-
-fun strcat(a: str, b: str) -> str { return a + b }
+// String operations live in loxis.text as value methods.
+// Use + or interpolation for concatenation; low-level access requires loxis.unsafe.

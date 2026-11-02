@@ -72,7 +72,8 @@ private:
     std::vector<WhereBound> parseWhere();
     TypePtr parseRet();
     std::vector<ParamDecl> parseClassParams();
-    std::vector<std::pair<std::string,TypePtr>> parseFnParams(std::optional<size_t>* varargIndex = nullptr);
+    std::vector<std::pair<std::string,TypePtr>> parseFnParams(std::optional<size_t>* varargIndex = nullptr,
+                                                          std::optional<size_t>* kwargsIndex = nullptr);
     Path parsePath();
     Path parseTypePath();
     std::vector<TypePtr> parseGenericArgs();

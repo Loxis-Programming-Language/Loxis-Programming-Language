@@ -154,6 +154,8 @@ struct RvaluePrinter {
             p.close();
         } else if constexpr (std::is_same_v<T, RvClosureGet>) {
             p.line("closure_get " + localText(n.env) + " +" + std::to_string(n.offset));
+        } else if constexpr (std::is_same_v<T, RvClosureSet>) {
+            p.line("closure_set +" + std::to_string(n.offset) + " = " + operandText(n.value));
         } else if constexpr (std::is_same_v<T, RvVTableSlot>) {
             p.line("vtable_slot " + localText(n.obj) + " [" + std::to_string(n.slot) + "]");
         } else if constexpr (std::is_same_v<T, RvTypeId>) {

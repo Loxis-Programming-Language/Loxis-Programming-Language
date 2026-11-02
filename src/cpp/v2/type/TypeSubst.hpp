@@ -33,7 +33,10 @@ inline TyPtr substituteType(TyPtr ty, const std::unordered_map<std::string, TyPt
         } else if constexpr (std::is_same_v<T, TyFn>) {
             std::vector<TyPtr> params;
             for (const auto& p : t.params) params.push_back(substituteType(p, subst));
-            return std::make_shared<Ty>(TyFn{std::move(params), substituteType(t.ret, subst)});
+            auto fn = t;
+            fn.params = std::move(params);
+            fn.ret = substituteType(t.ret, subst);
+            return std::make_shared<Ty>(std::move(fn));
         } else if constexpr (std::is_same_v<T, TyTuple>) {
             std::vector<TyPtr> elems;
             for (const auto& e : t.elems) elems.push_back(substituteType(e, subst));

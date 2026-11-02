@@ -1,4 +1,5 @@
+import loxis.text
 fun main() -> int {
-    print(chr(65))
+    print(Text.fromByte(65))
     return 0
 }

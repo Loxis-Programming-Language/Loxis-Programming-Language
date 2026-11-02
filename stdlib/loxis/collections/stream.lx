@@ -12,53 +12,57 @@ class Stream<T>(var iter: Iterator<T>) : Iterator<T> {
     override fun next() -> Optional<T> { return this.iter.next() }
 
     fun forEach(f: fun(T) -> unit) -> unit {
-        iterForEach<T>(this.iter, f)
+        __loxis_iterForEach<T>(this.iter, f)
     }
 
     fun count() -> int {
-        return iterCount<T>(this.iter)
+        return __loxis_iterCount<T>(this.iter)
     }
 
     fun toList() -> list<T> {
-        var result = listWithCapacity<T>(8)
+        var result = __loxis_listWithCapacity<T>(8)
         var item = this.iter.next()
-        while optionalHasValue<T>(item) {
-            result.push(optionalValueOrFail<T>(item))
+        while __loxis_optionalHasValue<T>(item) {
+            result.push(__loxis_optionalValueOrFail<T>(item))
             item = this.iter.next()
         }
         return result
     }
 
     fun any(pred: fun(T) -> bool) -> bool {
-        return iterAny<T>(this.iter, pred)
+        return __loxis_iterAny<T>(this.iter, pred)
     }
 
     fun all(pred: fun(T) -> bool) -> bool {
-        return iterAll<T>(this.iter, pred)
+        return __loxis_iterAll<T>(this.iter, pred)
     }
 
     fun find(pred: fun(T) -> bool) -> Optional<T> {
-        return iterFind<T>(this.iter, pred)
+        return __loxis_iterFind<T>(this.iter, pred)
     }
 
-    fun filter(pred: fun(T) -> bool) -> Stream<T> { return Stream<T>(iterFilter<T>(this.iter, pred)) }
-    fun map<U>(f: fun(T) -> U) -> Stream<U> { return Stream<U>(iterMap<T, U>(this.iter, f)) }
-    fun fold<U>(initial: U, f: fun(U, T) -> U) -> U { return iterFold<T, U>(this.iter, initial, f) }
+    fun filter(pred: fun(T) -> bool) -> Stream<T> { return Stream<T>(__loxis_iterFilter<T>(this.iter, pred)) }
+    fun map<U>(f: fun(T) -> U) -> Stream<U> { return Stream<U>(__loxis_iterMap<T, U>(this.iter, f)) }
+    fun fold<U>(initial: U, f: fun(U, T) -> U) -> U { return __loxis_iterFold<T, U>(this.iter, initial, f) }
     fun zip<U>(other: Stream<U>) -> Stream<Pair<T, U>> {
-        return Stream<Pair<T, U>>(iterZip<T, U>(this.iter, other.iter))
+        return Stream<Pair<T, U>>(__loxis_iterZip<T, U>(this.iter, other.iter))
     }
-    fun take(count: int) -> Stream<T> { return Stream<T>(iterTake<T>(this.iter, count)) }
-    fun drop(count: int) -> Stream<T> { return Stream<T>(iterDrop<T>(this.iter, count)) }
+    fun take(count: int) -> Stream<T> { return Stream<T>(__loxis_iterTake<T>(this.iter, count)) }
+    fun drop(count: int) -> Stream<T> { return Stream<T>(__loxis_iterDrop<T>(this.iter, count)) }
 }
 
 // ============================================================
 //  Constructors
 // ============================================================
 
-fun stream<T>(items: list<T>) -> Stream<T> { return Stream<T>(listIter<T>(items)) }
+fun stream<T>(items: list<T>) -> Stream<T> { return Stream<T>(__loxis_listIter<T>(items)) }
 fun stream<T>(iter: Iterator<T>) -> Stream<T> { return Stream<T>(iter) }
-fun stream<T>() -> Stream<T> { return Stream<T>(emptyIter<T>()) }
+fun stream<T>() -> Stream<T> { return Stream<T>(__loxis_emptyIter<T>()) }
 
-fun streamMap<T, U>(stream: Stream<T>, f: fun(T) -> U) -> Stream<U> {
-    return Stream<U>(iterMap<T, U>(stream.iter, f))
+fun __loxis_streamMap<T, U>(stream: Stream<T>, f: fun(T) -> U) -> Stream<U> {
+    return Stream<U>(__loxis_iterMap<T, U>(stream.iter, f))
+}
+
+object Streams {
+    fun map<T, U>(stream: Stream<T>, f: fun(T) -> U) -> Stream<U> { return __loxis_streamMap<T, U>(stream, f) }
 }

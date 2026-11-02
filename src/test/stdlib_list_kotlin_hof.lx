@@ -9,7 +9,7 @@ import loxis.text
 import loxis.collections.list
 
 fun show(items: list<int>) -> str {
-    return joinToString(items, ",", { v -> toString(v) })
+    return Text.joinToString(items, ",", { v -> (v).toString() })
 }
 
 fun main() -> int {
@@ -25,8 +25,8 @@ fun main() -> int {
 
     // chunked is a free function: the same signature as a method makes the
     // compiler hang (see the note in list.lx).
-    val chunks = chunked(xs, 2)
-    print("chunked " + toString(chunks.size()) + " " + show(chunks.get(0)) + " " + show(chunks.get(2)))
+    val chunks = Lists.chunked(xs, 2)
+    print("chunked " + (chunks.size()).toString() + " " + show(chunks.get(0)) + " " + show(chunks.get(2)))
 
     print("takeLast " + show(xs.takeLast(2)))
     print("dropLast " + show(xs.dropLast(2)))
@@ -39,27 +39,27 @@ fun main() -> int {
     print("distinct " + show(dup.distinct()))
     print("distinctBy " + show(dup.distinctBy({ x -> x % 2 })))
 
-    print("indexOfFirst " + toString(xs.indexOfFirst({ x -> x % 2 == 0 })))
-    print("indexOfLast " + toString(xs.indexOfLast({ x -> x % 2 == 0 })))
-    print("none " + toString(xs.none({ x -> x > 99 })))
-    print("reduce " + toString(xs.reduce({ a, b -> a + b })))
-    print("lastOrNull " + toString(xs.lastOrNull().getOrElse(0)))
-    print("lastOrNull empty " + toString(list<int>().lastOrNull().getOrElse(-1)))
+    print("indexOfFirst " + (xs.indexOfFirst({ x -> x % 2 == 0 })).toString())
+    print("indexOfLast " + (xs.indexOfLast({ x -> x % 2 == 0 })).toString())
+    print("none " + (xs.none({ x -> x > 99 })).toString())
+    print("reduce " + (xs.reduce({ a, b -> a + b })).toString())
+    print("lastOrNull " + (xs.lastOrNull().getOrElse(0)).toString())
+    print("lastOrNull empty " + (list<int>().lastOrNull().getOrElse(-1)).toString())
 
-    // free-function mirrors
-    print("mirrors " + show(listMapIndexed(xs, { i, x -> i + x })))
-    print("listReduce " + toString(listReduce(xs, { a, b -> a * b })))
-    print("listNone " + toString(listNone(xs, { x -> x < 0 })))
+    // Value-method API
+    print("mirrors " + show((xs).mapIndexed({ i, x -> i + x })))
+    print("listReduce " + ((xs).reduce({ a, b -> a * b })).toString())
+    print("listNone " + ((xs).none({ x -> x < 0 })).toString())
 
     // flatten over a list of lists
     val nested = list<list<int>>()
-    val pieces = chunked(xs, 2)
+    val pieces = Lists.chunked(xs, 2)
     var c = 0
     while c < pieces.size() { nested.push(pieces.get(c)); c += 1 }
-    print("flatten " + show(flatten(nested)))
+    print("flatten " + show(Lists.flatten(nested)))
 
     print("forEachIndexed")
-    xs.forEachIndexed({ i, x -> print(toString(i) + ":" + toString(x)) })
+    xs.forEachIndexed({ i, x -> print((i).toString() + ":" + (x).toString()) })
     print("done")
     return 0
 }

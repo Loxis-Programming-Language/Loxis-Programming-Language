@@ -3,7 +3,7 @@ package loxis.collections
 import loxis.option
 
 class list<T>() {
-    var buffer: int = arrayNew(0)
+    var buffer: int = __loxis_arrayNew(0)
     var len: int = 0
     var cap: int = 0
     fun size() -> int {
@@ -16,12 +16,12 @@ class list<T>() {
 
     fun get(index: int) -> T {
         require(index >= 0 && index < this.len, "list index out of bounds")
-        return arrayGet(this.buffer, index)
+        return __loxis_arrayGet(this.buffer, index)
     }
 
     fun set(index: int, value: T) -> unit {
         require(index >= 0 && index < this.len, "list index out of bounds")
-        arraySet(this.buffer, index, value)
+        __loxis_arraySet(this.buffer, index, value)
     }
 
     fun isEmpty() -> bool { return this.len == 0 }
@@ -59,8 +59,8 @@ class list<T>() {
     }
 
     fun pop() -> Optional<T> {
-        if this.len == 0 { return optionalEmpty<T>() }
-        return optionalValue<T>(this.removeAt(this.len - 1))
+        if this.len == 0 { return __loxis_optionalEmpty<T>() }
+        return __loxis_optionalValue<T>(this.removeAt(this.len - 1))
     }
 
     fun push(value: T) -> unit {
@@ -71,19 +71,19 @@ class list<T>() {
                 nextCap = 1
             }
 
-            val next = arrayNew(nextCap)
+            val next = __loxis_arrayNew(nextCap)
             var i = 0
             while i < this.len {
-                arraySet(next, i, arrayGet(this.buffer, i))
+                __loxis_arraySet(next, i, __loxis_arrayGet(this.buffer, i))
                 i += 1
             }
 
-            arrayFree(this.buffer)
+            __loxis_arrayFree(this.buffer)
             this.buffer = next
             this.cap = nextCap
         }
 
-        arraySet(this.buffer, this.len, value)
+        __loxis_arraySet(this.buffer, this.len, value)
         this.len += 1
     }
 
@@ -93,14 +93,14 @@ class list<T>() {
     }
 
     fun map<U>(f: fun(T) -> U) -> list<U> {
-        val out = listWithCapacity<U>(this.len)
+        val out = __loxis_listWithCapacity<U>(this.len)
         var i = 0
         while i < this.len { out.push(f(this.get(i))); i += 1 }
         return out
     }
 
     fun filter(pred: fun(T) -> bool) -> list<T> {
-        val out = listWithCapacity<T>(this.len)
+        val out = __loxis_listWithCapacity<T>(this.len)
         var i = 0
         while i < this.len {
             val value = this.get(i)
@@ -151,24 +151,24 @@ class list<T>() {
         var i = 0
         while i < this.len {
             val value = this.get(i)
-            if pred(value) { return optionalValue<T>(value) }
+            if pred(value) { return __loxis_optionalValue<T>(value) }
             i += 1
         }
-        return optionalEmpty<T>()
+        return __loxis_optionalEmpty<T>()
     }
 
     fun first() -> Optional<T> {
-        if this.len == 0 { return optionalEmpty<T>() }
-        return optionalValue<T>(this.get(0))
+        if this.len == 0 { return __loxis_optionalEmpty<T>() }
+        return __loxis_optionalValue<T>(this.get(0))
     }
 
     fun lastOrNull() -> Optional<T> {
-        if this.len == 0 { return optionalEmpty<T>() }
-        return optionalValue<T>(this.get(this.len - 1))
+        if this.len == 0 { return __loxis_optionalEmpty<T>() }
+        return __loxis_optionalValue<T>(this.get(this.len - 1))
     }
 
     fun sortBy(before: fun(T, T) -> bool) -> unit {
-        listSortBy<T>(this, before)
+        __loxis_listSortBy<T>(this, before)
     }
 
     // ---- index-aware forms ----
@@ -182,14 +182,14 @@ class list<T>() {
     }
 
     fun mapIndexed<U>(f: fun(int, T) -> U) -> list<U> {
-        val out = listWithCapacity<U>(this.len)
+        val out = __loxis_listWithCapacity<U>(this.len)
         var i = 0
         while i < this.len { out.push(f(i, this.get(i))); i += 1 }
         return out
     }
 
     fun filterIndexed(pred: fun(int, T) -> bool) -> list<T> {
-        val out = listWithCapacity<T>(this.len)
+        val out = __loxis_listWithCapacity<T>(this.len)
         var i = 0
         while i < this.len {
             val value = this.get(i)
@@ -302,8 +302,8 @@ class list<T>() {
 
     fun drop(count: int) -> list<T> {
         require(count >= 0, "negative drop count")
-        val start = min(count, this.len)
-        val out = listWithCapacity<T>(this.len - start)
+        val start = __loxis_min(count, this.len)
+        val out = __loxis_listWithCapacity<T>(this.len - start)
         var i = start
         while i < this.len { out.push(this.get(i)); i += 1 }
         return out
@@ -311,12 +311,12 @@ class list<T>() {
 
     fun dropLast(count: int) -> list<T> {
         require(count >= 0, "negative drop count")
-        return this.take(max(0, this.len - count))
+        return this.take(__loxis_max(0, this.len - count))
     }
 
     fun takeLast(count: int) -> list<T> {
         require(count >= 0, "negative take count")
-        return this.drop(max(0, this.len - count))
+        return this.drop(__loxis_max(0, this.len - count))
     }
 
     fun takeWhile(pred: fun(T) -> bool) -> list<T> {
@@ -341,15 +341,15 @@ class list<T>() {
 
     fun take(count: int) -> list<T> {
         require(count >= 0, "negative take count")
-        val limit = min(count, this.len)
-        val out = listWithCapacity<T>(limit)
+        val limit = __loxis_min(count, this.len)
+        val out = __loxis_listWithCapacity<T>(limit)
         var i = 0
         while i < limit { out.push(this.get(i)); i += 1 }
         return out
     }
 
     fun append(other: list<T>) -> list<T> {
-        val out = listWithCapacity<T>(this.len + other.size())
+        val out = __loxis_listWithCapacity<T>(this.len + other.size())
         var i = 0
         while i < this.len { out.push(this.get(i)); i += 1 }
         i = 0
@@ -370,140 +370,23 @@ class list<T>() {
     }
 
     fun reversed() -> list<T> {
-        val out = listWithCapacity<T>(this.len)
+        val out = __loxis_listWithCapacity<T>(this.len)
         var i = this.len - 1
         while i >= 0 { out.push(this.get(i)); i -= 1 }
         return out
     }
 }
 
-fun listWithCapacity<T>(capacity: int) -> list<T> {
-    val storage = arrayNew(capacity)
+fun __loxis_listWithCapacity<T>(capacity: int) -> list<T> {
+    val storage = __loxis_arrayNew(capacity)
     val out = list<T>()
     out.buffer = storage
     out.cap = capacity
     return out
 }
 
-fun listFree<T>(items: list<T>) -> unit {
-    arrayFree(items.buffer)
-}
 
-fun listForEach<T>(items: list<T>, f: fun(T) -> unit) -> unit {
-    var i = 0
-    while i < items.size() {
-        f(items.get(i))
-        i += 1
-    }
-}
-
-fun listMap<T, U>(items: list<T>, f: fun(T) -> U) -> list<U> {
-    val out = listWithCapacity<U>(items.size())
-    var i = 0
-    while i < items.size() {
-        out.push(f(items.get(i)))
-        i += 1
-    }
-    return out
-}
-
-fun listFilter<T>(items: list<T>, pred: fun(T) -> bool) -> list<T> {
-    val out = listWithCapacity<T>(items.size())
-    var i = 0
-    while i < items.size() {
-        val value = items.get(i)
-        if pred(value) {
-            out.push(value)
-        }
-        i += 1
-    }
-    return out
-}
-
-fun listFold<T, U>(items: list<T>, initial: U, f: fun(U, T) -> U) -> U {
-    var acc = initial
-    var i = 0
-    while i < items.size() {
-        acc = f(acc, items.get(i))
-        i += 1
-    }
-    return acc
-}
-
-fun listCount<T>(items: list<T>, pred: fun(T) -> bool) -> int {
-    var count = 0
-    var i = 0
-    while i < items.size() {
-        if pred(items.get(i)) {
-            count += 1
-        }
-        i += 1
-    }
-    return count
-}
-
-fun listAny<T>(items: list<T>, pred: fun(T) -> bool) -> bool {
-    var i = 0
-    while i < items.size() {
-        if pred(items.get(i)) {
-            return true
-        }
-        i += 1
-    }
-    return false
-}
-
-fun listAll<T>(items: list<T>, pred: fun(T) -> bool) -> bool {
-    var i = 0
-    while i < items.size() {
-        if !pred(items.get(i)) {
-            return false
-        }
-        i += 1
-    }
-    return true
-}
-
-fun listAppend<T>(left: list<T>, right: list<T>) -> list<T> {
-    val out = listWithCapacity<T>(left.size() + right.size())
-    var i = 0
-    while i < left.size() {
-        out.push(left.get(i))
-        i += 1
-    }
-
-    var j = 0
-    while j < right.size() {
-        out.push(right.get(j))
-        j += 1
-    }
-    return out
-}
-
-fun listReverse<T>(items: list<T>) -> unit {
-    var left = 0
-    var right = items.size() - 1
-    while left < right {
-        val a = items.get(left)
-        val b = items.get(right)
-        items.set(left, b)
-        items.set(right, a)
-        left += 1
-        right -= 1
-    }
-}
-
-fun listReversed<T>(items: list<T>) -> list<T> {
-    val out = listWithCapacity<T>(items.size())
-    var i = items.size() - 1
-    while i >= 0 {
-        out.push(items.get(i))
-        i -= 1
-    }
-    return out
-}
-
-fun listSortBy<T>(items: list<T>, before: fun(T, T) -> bool) -> unit {
+fun __loxis_listSortBy<T>(items: list<T>, before: fun(T, T) -> bool) -> unit {
     var i = 0
     while i < items.size() {
         var best = i
@@ -525,15 +408,6 @@ fun listSortBy<T>(items: list<T>, before: fun(T, T) -> bool) -> unit {
     }
 }
 
-fun listFind<T>(items: list<T>, pred: fun(T) -> bool) -> Optional<T> {
-    var i = 0
-    while i < items.size() {
-        val item = items.get(i)
-        if pred(item) { return optionalValue<T>(item) }
-        i += 1
-    }
-    return optionalEmpty<T>()
-}
 
 // A trailing shorter chunk is kept, matching Kotlin.
 //
@@ -542,7 +416,7 @@ fun listFind<T>(items: list<T>, pred: fun(T) -> bool) -> Optional<T> {
 // generic -- `fun chunked() -> list<list<T>>` -- makes monomorphization recurse
 // without bound, and the compiler hangs. The same signature as a free function
 // is fine.
-fun chunked<T>(items: list<T>, size: int) -> list<list<T>> {
+fun __loxis_chunked<T>(items: list<T>, size: int) -> list<list<T>> {
     require(size > 0, "chunk size must be positive")
     val out = list<list<T>>()
     var i = 0
@@ -562,74 +436,10 @@ fun chunked<T>(items: list<T>, size: int) -> list<list<T>> {
 // Free-function mirrors of the list methods above, matching the rest of this
 // file. Each just forwards so a call reads either way.
 
-fun listForEachIndexed<T>(items: list<T>, f: fun(int, T) -> unit) -> unit {
-    items.forEachIndexed(f)
-}
-
-fun listMapIndexed<T, U>(items: list<T>, f: fun(int, T) -> U) -> list<U> {
-    return items.mapIndexed(f)
-}
-
-fun listFilterIndexed<T>(items: list<T>, pred: fun(int, T) -> bool) -> list<T> {
-    return items.filterIndexed(pred)
-}
-
-fun listFlatMap<T, U>(items: list<T>, f: fun(T) -> list<U>) -> list<U> {
-    return items.flatMap(f)
-}
-
-
-fun listDistinct<T>(items: list<T>) -> list<T> {
-    return items.distinct()
-}
-
-fun listDistinctBy<T, K>(items: list<T>, f: fun(T) -> K) -> list<T> {
-    return items.distinctBy(f)
-}
-
-fun listIndexOfFirst<T>(items: list<T>, pred: fun(T) -> bool) -> int {
-    return items.indexOfFirst(pred)
-}
-
-fun listIndexOfLast<T>(items: list<T>, pred: fun(T) -> bool) -> int {
-    return items.indexOfLast(pred)
-}
-
-fun listLastOrNull<T>(items: list<T>) -> Optional<T> {
-    return items.lastOrNull()
-}
-
-fun listNone<T>(items: list<T>, pred: fun(T) -> bool) -> bool {
-    return items.none(pred)
-}
-
-fun listReduce<T>(items: list<T>, f: fun(T, T) -> T) -> T {
-    return items.reduce(f)
-}
-
-fun listDrop<T>(items: list<T>, count: int) -> list<T> {
-    return items.drop(count)
-}
-
-fun listDropLast<T>(items: list<T>, count: int) -> list<T> {
-    return items.dropLast(count)
-}
-
-fun listTakeLast<T>(items: list<T>, count: int) -> list<T> {
-    return items.takeLast(count)
-}
-
-fun listTakeWhile<T>(items: list<T>, pred: fun(T) -> bool) -> list<T> {
-    return items.takeWhile(pred)
-}
-
-fun listDropWhile<T>(items: list<T>, pred: fun(T) -> bool) -> list<T> {
-    return items.dropWhile(pred)
-}
 
 // Cannot be a method: `this` would have to be `list<list<U>>`, and there is no
 // way to declare a method on one particular instantiation.
-fun flatten<U>(items: list<list<U>>) -> list<U> {
+fun __loxis_flatten<U>(items: list<list<U>>) -> list<U> {
     val out = list<U>()
     var i = 0
     while i < items.size() {
@@ -642,4 +452,10 @@ fun flatten<U>(items: list<list<U>>) -> list<U> {
         i += 1
     }
     return out
+}
+
+object Lists {
+    fun withCapacity<T>(capacity: int) -> list<T> { return __loxis_listWithCapacity<T>(capacity) }
+    fun chunked<T>(items: list<T>, size: int) -> list<list<T>> { return __loxis_chunked<T>(items, size) }
+    fun flatten<U>(items: list<list<U>>) -> list<U> { return __loxis_flatten<U>(items) }
 }

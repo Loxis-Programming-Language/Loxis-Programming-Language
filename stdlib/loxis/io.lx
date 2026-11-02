@@ -3,54 +3,44 @@ package loxis.io
 import loxis.fileio
 import loxis.option
 
-fun readChar() -> int { return syscall(0) }
-fun writeChar(c: int) -> unit {
+fun __loxis_readChar() -> int { return syscall(0) }
+fun __loxis_writeChar(c: int) -> unit {
     require(c >= 0 && c <= 255, "byte out of range")
     write(chr(c))
 }
 
 // LF terminates a line; an immediately preceding CR is removed.
 // EOF is Empty, while a blank line is Value("").
-fun readLineOptional() -> Optional<str> {
-    var c = readChar()
-    if c < 0 { return optionalEmpty<str>() }
+fun __loxis_readLineOptional() -> Optional<str> {
+    var c = __loxis_readChar()
+    if c < 0 { return __loxis_optionalEmpty<str>() }
     var line = ""
     while c >= 0 && c != 10 {
         line = line + chr(c)
-        c = readChar()
+        c = __loxis_readChar()
     }
     val n = strlen(line)
     if c == 10 && n > 0 && strchar(line, n - 1) == 13 {
         line = strslice(line, 0, n - 1)
     }
-    return optionalValue<str>(line)
+    return __loxis_optionalValue<str>(line)
 }
 
-fun readLine() -> str { return optionalGetOrElse<str>(readLineOptional(), "") }
 
-fun readAll() -> str {
-    var out = ""
-    var c = readChar()
-    while c >= 0 { out = out + chr(c); c = readChar() }
-    return out
-}
-
-fun readLines() -> list<str> {
-    val out = listWithCapacity<str>(8)
-    var item = readLineOptional()
-    while optionalHasValue<str>(item) {
-        out.push(optionalValueOrFail<str>(item))
-        item = readLineOptional()
+fun __loxis_readLines() -> list<str> {
+    val out = __loxis_listWithCapacity<str>(8)
+    var item = __loxis_readLineOptional()
+    while __loxis_optionalHasValue<str>(item) {
+        out.push(__loxis_optionalValueOrFail<str>(item))
+        item = __loxis_readLineOptional()
     }
     return out
 }
 
-fun writeLine(value: str) -> unit { write(value); write(chr(10)) }
-fun remove(path: str) -> int { return removeFile(path) }
 
-fun readLines(path: str) -> list<str> {
-    val content = readText(path)
-    val out = listWithCapacity<str>(8)
+fun __loxis_readLines(path: str) -> list<str> {
+    val content = __loxis_readText(path)
+    val out = __loxis_listWithCapacity<str>(8)
     var start = 0
     var i = 0
     while i < strlen(content) {
@@ -66,7 +56,7 @@ fun readLines(path: str) -> list<str> {
     return out
 }
 
-fun writeLines(path: str, lines: list<str>) -> int {
+fun __loxis_writeLines(path: str, lines: list<str>) -> int {
     var content = ""
     var i = 0
     while i < lines.size() {
@@ -74,21 +64,24 @@ fun writeLines(path: str, lines: list<str>) -> int {
         content = content + lines.get(i)
         i += 1
     }
-    return writeText(path, content)
+    return __loxis_writeText(path, content)
 }
 
 object Console {
+    fun readChar() -> int { return __loxis_readChar() }
+    fun writeChar(c: int) -> unit { return __loxis_writeChar(c) }
+
     fun readLine() -> str { return this.readLineOptional().getOrElse("") }
     fun readLineOptional() -> Optional<str> {
         var c = syscall(0)
-        if c < 0 { return optionalEmpty<str>() }
+        if c < 0 { return __loxis_optionalEmpty<str>() }
         var line = ""
         while c >= 0 && c != 10 { line = line + chr(c); c = syscall(0) }
         val size = strlen(line)
         if c == 10 && size > 0 && strchar(line, size - 1) == 13 {
             line = strslice(line, 0, size - 1)
         }
-        return optionalValue<str>(line)
+        return __loxis_optionalValue<str>(line)
     }
     fun readAll() -> str {
         var out = ""
@@ -98,4 +91,10 @@ object Console {
     }
     fun print(value: str) -> unit { write(value) }
     fun println(value: str) -> unit { write(value); write(chr(10)) }
+}
+
+object Lines {
+    fun read() -> list<str> { return __loxis_readLines() }
+    fun read(path: str) -> list<str> { return __loxis_readLines(path) }
+    fun write(path: str, lines: list<str>) -> int { return __loxis_writeLines(path, lines) }
 }

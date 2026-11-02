@@ -37,6 +37,6 @@ fun main() -> int {
         print("main: initialization finished")
     }
 
-    print("selected port: " + toString(fallback))
+    print("selected port: " + (fallback).toString())
     return 0
 }

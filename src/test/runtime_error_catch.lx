@@ -1,3 +1,4 @@
+import loxis.unsafe
 import loxis.text
 
 fun divide() -> int { return 1 / 0 }
@@ -10,7 +11,7 @@ fun main() -> int {
     }
 
     try {
-        val ignored = parseInt("12x")
+        val ignored = ("12x").toInt()
     } catch (failure: RuntimeException) {
         print("caught parse: " + failure.message)
     }

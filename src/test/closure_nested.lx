@@ -1,0 +1,27 @@
+// Nested closures: an inner closure reads a variable captured by the outer
+// closure (which is itself forwarded down from the enclosing function).
+fun makeAdder(base: int) -> fun(int) -> int {
+    val outer: fun(int) -> int = { x -> x + base }
+    val inner: fun(int) -> int = { y -> outer(y) }
+    return inner
+}
+
+fun makeSummer(base: int) -> fun(int) -> int {
+    return { x ->
+        val addBase: fun(int) -> int = { y -> y + base }
+        addBase(x)
+    }
+}
+
+fun main() -> int {
+    val a = makeAdder(10)
+    print(a(5))
+
+    val b = makeAdder(100)
+    print(b(23))
+
+    val s = makeSummer(7)
+    print(s(35))
+
+    return 0
+}

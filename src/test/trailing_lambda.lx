@@ -1,0 +1,28 @@
+import loxis.collections.list
+
+fun applyTo(value: int, f: fun(int) -> int) -> int {
+    return f(value)
+}
+
+fun main() -> int {
+    val xs = list<int>()
+    xs.push(1)
+    xs.push(2)
+    xs.push(3)
+    xs.push(4)
+
+    // Method call with a single-parameter trailing lambda
+    val doubled = xs.map { x -> x * 2 }
+    print(doubled.get(0))
+    print(doubled.get(3))
+
+    // Method call with a two-parameter trailing lambda
+    val total = xs.fold(0) { acc, x -> acc + x }
+    print(total)
+
+    // Free function call with a trailing lambda
+    val applied = applyTo(41) { x -> x + 1 }
+    print(applied)
+
+    return 0
+}

@@ -177,6 +177,28 @@ fun show(value: str) -> str = value
 Backend symbols use structural descriptors containing parameter and return
 types. A declaration that differs only by return type is rejected.
 
+### Argument collection and expansion
+
+```text
+fun checkout(base: int, *prices: int, **extras: int) -> int {
+    var result = base
+    for price in prices { result += price }
+    return result - extras.get("discount").getOrElse(0)
+}
+
+checkout(0, 12, 18, discount = 5)
+checkout(0, *prices, **extras)
+```
+
+`*rest: T` collects extra positional arguments into an array of `T`.
+`**options: T` collects extra named arguments into `HashMap<str, T>` and requires
+`import loxis.collections.map`. The annotations describe individual elements and
+values. Fixed parameters precede `*`; `**` comes last. On calls, `*array` and
+`**map` expand values. Named arguments use `name = value`. Source arguments are
+evaluated once, from left to right; duplicate bindings are errors. `vararg` and
+`kwargs` are ordinary identifiers. See [the executable subset](executable-subset.md#named-arguments-varargs-and-kwargs)
+for supported call forms and current restrictions.
+
 ### Extension functions
 ```
 fun str.isLong() -> bool = length > 10
@@ -209,7 +231,14 @@ fun str.isLong() -> bool = length > 10
       }
   }
   ```
-- Closures: `{ x: int -> x * 2 }`
+- Closures: `{ x: int -> x * 2 }`. A closure captures variables from its
+  enclosing scopes (including values held by an enclosing closure, which are
+  forwarded down) and may assign to captured `var` bindings through its captured
+  environment. Function values — both bare functions and closures — are
+  first-class and can be called directly or from inside another closure.
+- Trailing lambda: a lambda argument may sit outside the call parentheses
+  (`xs.fold(0) { acc, x -> acc + x }`), and a single-lambda method call may
+  elide the parentheses entirely (`xs.map { x -> x * 2 }`).
 - Cast: `expr as Type`
 - Type check: `expr is Type`, `expr !is Type`
 - Try: `expr?` (error propagation)
@@ -318,8 +347,8 @@ import com.example.foo.*              // everything from package
 ### Standard library namespace: `loxis`
 ```
 loxis              — core types, auto-imported (int, str, bool, unit, noreturn, Array...)
-loxis.collections  — List<T>, MutableList<T>, Map<K,V>, Set<T>
-loxis.io           — println, print, readln
+loxis.collections  — list<T>, HashMap<K,V>, HashSet<T>, Queue<T>
+loxis.io           — Console, Lines
 loxis.math         — math utilities
 loxis.text         — string utilities
 ```
@@ -333,11 +362,15 @@ type arguments when inference would be ambiguous, for example
 `loxis` package is auto-imported into every file:
 - `int`, `long`, `float`, `double`, `bool`, `char`, `str`
 - `unit`, `noreturn`
-- `Array<T>`, `List<T>`, `MutableList<T>`
-- `println`, `print`
-- `fun require(condition: bool, message: str = "")`
+- Array literals; standard-library collections require explicit imports
+- `println`, `print`, `write`
+- `fun require(condition: bool, message: str)`
 - `fun TODO() -> noreturn`
 - `fun error(message: str) -> noreturn`
+
+VM bridge functions and `__loxis_*` helpers are not public prelude APIs.
+Low-level experiments must explicitly import `loxis.unsafe` in the calling file.
+See [the migration table and API boundary](stdlib.md#public-api-boundary-and-migration).
 - `open class Exception(val message: str)`
 - `class RuntimeException(message: str) : Exception(message)`
 
@@ -392,9 +425,9 @@ progress.
 | 2 | Lexer + Parser | ✅ done | Kotlin-style syntax, imports, generics, class/interface/object/enum forms, and nullable syntax are parsed. |
 | 3 | Scope & Name Resolution | ✅ done | Declaration + resolution passes handle `this` binding, field offsets, vtables, inheritance, and interface conformance. |
 | 4 | TypeChecker | ✅ baseline | The executable subset type-checks end-to-end, including imports, generic smoke cases, and class `this` method access. Remaining work is broader nullable analysis, pattern exhaustiveness, and richer OO dispatch rules. |
-| 5 | Lowering (AST→MIR) | ✅ baseline | The current smoke subset lowers successfully through MIR. Remaining work includes fuller constructor/field behavior, closures/function values, and richer nullable/pattern lowering. |
-| 6 | Backend (MIR→Bytecode) | ✅ baseline | The current subset emits runnable bytecode for arithmetic, control flow, imports, generics, and stdlib-backed helpers. Remaining work includes indirect calls, fuller object dispatch, and missing runtime op coverage. |
-| 7 | VM Runtime | ✅ baseline | The VM runs the demo and smoke suite successfully. Remaining work includes full object runtime semantics, nullable edge cases, and remaining dispatch/storage support. |
+| 5 | Lowering (AST→MIR) | ✅ baseline | The current smoke subset lowers successfully through MIR, including closures, captured-variable writes, nested capture forwarding, and indirect/closure calls. Remaining work includes fuller constructor/field behavior and richer nullable/pattern lowering. |
+| 6 | Backend (MIR→Bytecode) | ✅ baseline | The current subset emits runnable bytecode for arithmetic, control flow, imports, generics, closures, and stdlib-backed helpers. Remaining work includes fuller object dispatch and missing runtime op coverage. |
+| 7 | VM Runtime | ✅ baseline | The VM runs the demo and smoke suite successfully, including first-class function values and closure calls. Remaining work includes full object runtime semantics, nullable edge cases, and remaining dispatch/storage support. |
 | 8 | Module System | 🔶 partial | Local multi-file imports work and are smoke-covered. Remaining work is package visibility, alias/re-export behavior, and more robust stdlib module resolution. |
 | 9 | Standard Library | 🔶 partial | `loxis` prelude, core wrappers, and `loxis.collections.List<T>` are present and smoke-covered. `io`, `mem`, `ptr`, `refl`, and broader collections/text/math coverage are still incomplete. |
 | 10 | Verification | 🔶 manual smoke | `tests/run_smoke.ps1` and the `loxis_smoke` CTest entry cover the executable subset, but there is still no full automated unit/integration test framework. |
@@ -414,6 +447,11 @@ Expand the current executable subset into a broader, predictable v2 baseline: ke
    - Type-check closure literals and function-valued locals more broadly.
    - Lower callable values and indirect calls through MIR and bytecode.
    - Extend the VM/runtime path so non-direct calls execute correctly.
+
+   Function values and closures are now executable end-to-end: a closure can
+   call a function-typed parameter, assign to a captured `var`, and forward
+   captures through nested closures. Recursive closures (a closure that names
+   itself) are not yet supported.
 
 3. Expand `when` and nullable semantics.
    - Broaden `when` lowering and checking beyond the current smoke cases.

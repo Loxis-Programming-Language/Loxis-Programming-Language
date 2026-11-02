@@ -1,3 +1,5 @@
+import loxis.collections.list
+import loxis.unsafe
 import loxis.text
 import loxis.math
 import loxis.random
@@ -5,14 +7,14 @@ import loxis.collections.stream
 
 fun main() -> int {
     val choice = syscall(0)
-    if choice == 48 { listWithCapacity<int>(1).set(-1, 2) }
-    if choice == 49 { split("x", "") }
+    if choice == 48 { Lists.withCapacity<int>(1).set(-1, 2) }
+    if choice == 49 { ("x").split("") }
     if choice == 50 { Math.abs(-9223372036854775807 - 1) }
     if choice == 51 { Math.powInt(2, -1) }
     if choice == 52 { Math.powInt(9223372036854775807, 2) }
     if choice == 53 { Random.seeded(1).nextBounded(0) }
     if choice == 54 { stream<int>().take(-1) }
-    if choice == 55 { fromCodePoint(55296) }
+    if choice == 55 { Unicode.fromCodePoint(55296) }
     if choice == 56 { val value: int? = null; print(value!!) }
     return 0
 }

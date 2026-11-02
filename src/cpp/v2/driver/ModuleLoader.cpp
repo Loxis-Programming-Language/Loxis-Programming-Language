@@ -188,6 +188,14 @@ void ModuleLoader::appendModule(
 
     loading.insert(canonical);
     Module mod = Parser::parseFile(canonical.string());
+    const auto relative = canonical.lexically_relative(m_stdlibRoot);
+    bool intrinsicSource = !m_stdlibRoot.empty() && !relative.empty() &&
+        *relative.begin() != "..";
+    for (const auto& item : mod.items) {
+        if (auto* import = std::get_if<ItemImport>(item.get()); import &&
+            import->module.segs == std::vector<std::string>{"loxis", "unsafe"}) intrinsicSource = true;
+    }
+    if (intrinsicSource) out.intrinsicSources.push_back(canonical.string());
     fs::path baseDir = canonical.parent_path();
 
     for (const auto& item : mod.items) {

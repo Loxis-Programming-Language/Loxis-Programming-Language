@@ -7,18 +7,18 @@ fun inc(x: int) -> int {
 
 fun keepEven(x: int) -> Optional<int> {
     if x == 4 {
-        return optionalValue<int>(40)
+        return Option.some<int>(40)
     }
-    return optionalEmpty<int>()
+    return Option.none<int>()
 }
 
 fun resultInc(x: int) -> Result<int, str> {
-    return resultSuccess<int, str>(x + 1)
+    return Results.success<int, str>(x + 1)
 }
 
 fun main() -> int {
-    val optValue = optionalValue<int>(3)
-    val optEmpty = optionalEmpty<int>()
+    val optValue = Option.some<int>(3)
+    val optEmpty = Option.none<int>()
     val mapped = optValue.map<int>(inc)
     val flatMapped = mapped.flatMap<int>(keepEven)
 
@@ -28,8 +28,8 @@ fun main() -> int {
     print(optValue.hasValue())
     print(optEmpty.isEmpty())
 
-    val successValue = resultSuccess<int, str>(10)
-    val failureValue = resultFailure<int, str>("bad")
+    val successValue = Results.success<int, str>(10)
+    val failureValue = Results.failure<int, str>("bad")
     val resultMapped = successValue.map<int>(inc)
     val resultFlatMapped = resultMapped.flatMap<int>(resultInc)
 

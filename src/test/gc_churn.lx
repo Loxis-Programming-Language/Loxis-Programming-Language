@@ -1,12 +1,13 @@
+import loxis.unsafe
 // GC churn probe: one array per iteration, dropped at the end of the body.
 // NoGC must grow the heap without bound; ARC must reclaim and reuse the bytes.
 fun churn(n: int) -> int {
     var i = 0
     var sum = 0
     while i < n {
-        val arr = arrayNew(4)
-        arraySet(arr, 0, i)
-        sum = sum + arrayGet(arr, 0)
+        val arr = Unsafe.arrayNew(4)
+        Unsafe.arraySet(arr, 0, i)
+        sum = sum + Unsafe.arrayGet(arr, 0)
         i += 1
     }
     return sum

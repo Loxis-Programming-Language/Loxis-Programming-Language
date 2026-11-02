@@ -1,65 +1,9 @@
 package loxis.math
 
-fun clamp(value: int, low: int, high: int) -> int {
-    require(low <= high, "invalid clamp bounds")
-    if value < low {
-        return low
-    }
-    if value > high {
-        return high
-    }
-    return value
-}
-
-fun gcd(a: int, b: int) -> int {
-    var x = abs(a)
-    var y = abs(b)
-    while y != 0 {
-        val r = x % y
-        x = y
-        y = r
-    }
-    return x
-}
-
-fun powInt(base: int, exp: int) -> int {
-    require(exp >= 0, "negative integer exponent")
-    var result = 1
-    var factor = base
-    var remaining = exp
-    while remaining > 0 {
-        if remaining % 2 == 1 {
-            if result > 0 {
-                if factor > 0 { require(result <= 9223372036854775807 / factor, "integer multiplication overflow") }
-                if factor < 0 { require(factor >= (-9223372036854775807 - 1) / result, "integer multiplication overflow") }
-            } else if result < 0 {
-                if factor > 0 { require(result >= (-9223372036854775807 - 1) / factor, "integer multiplication overflow") }
-                if factor < 0 { require(result >= 9223372036854775807 / factor, "integer multiplication overflow") }
-            }
-            result *= factor
-        }
-        remaining /= 2
-        if remaining > 0 {
-            if factor > 0 { require(factor <= 9223372036854775807 / factor, "integer multiplication overflow") }
-            if factor < 0 { require(factor >= 9223372036854775807 / factor, "integer multiplication overflow") }
-            factor *= factor
-        }
-    }
-    return result
-}
-
-fun sqrt(value: double) -> double { return nativeSqrt(value) }
-fun floor(value: double) -> double { return nativeFloor(value) }
-fun ceil(value: double) -> double { return nativeCeil(value) }
-fun round(value: double) -> double { return nativeRound(value) }
-fun sin(value: double) -> double { return nativeSin(value) }
-fun cos(value: double) -> double { return nativeCos(value) }
-fun log(value: double) -> double { return nativeLog(value) }
-fun exp(value: double) -> double { return nativeExp(value) }
-fun pow(base: double, exponent: double) -> double { return nativePow(base, exponent) }
-fun isFinite(value: double) -> bool { return nativeIsFinite(value) != 0 }
 
 object Math {
+    fun max(x: int, y: int) -> int { return __loxis_max(x, y) }
+    fun min(x: int, y: int) -> int { return __loxis_min(x, y) }
     fun abs(value: int) -> int {
         require(value != -9223372036854775807 - 1, "absolute value overflow")
         if value < 0 { return -value }

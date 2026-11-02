@@ -59,6 +59,10 @@ struct RvDiscriminant { LocalId local; };
 struct RvAlloc { uint32_t size; uint32_t typeId; };
 struct RvClosure { std::string functionName; uint32_t envTypeId; std::vector<Operand> captures; };
 struct RvClosureGet { LocalId env; uint32_t offset; };
+// Writes `value` to a captured slot. The environment object being written to is
+// the destination local of the enclosing StAssign, mirroring RvHStore. `offset`
+// is the capture's payload byte offset (cell 0 holds the function pointer).
+struct RvClosureSet { uint32_t offset; Operand value; };
 struct RvVTableSlot { LocalId obj; uint32_t slot; };
 struct RvTypeId { LocalId obj; };
 struct RvIsCheck { LocalId obj; uint32_t targetTypeId; };
@@ -68,7 +72,7 @@ struct RvGlobalStore { uint32_t slot; Operand value; };
 struct Rvalue : std::variant<
     RvUse, RvRef, RvPtr, RvBinary, RvUnary, RvCast,
     RvAggregate, RvField, RvHStore, RvIndex, RvIndexStore, RvLen, RvDiscriminant,
-    RvAlloc, RvClosure, RvClosureGet, RvVTableSlot, RvTypeId, RvIsCheck,
+    RvAlloc, RvClosure, RvClosureGet, RvClosureSet, RvVTableSlot, RvTypeId, RvIsCheck,
     RvGlobalLoad, RvGlobalStore
 > {
     using variant::variant;

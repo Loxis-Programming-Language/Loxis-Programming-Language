@@ -1,11 +1,12 @@
+import loxis.text
 import loxis.io
 fun main() -> int {
     val content = Console.readAll()
-    require(strlen(content) == 6, "stdin byte count")
-    require(strchar(content, 0) == 13 && strchar(content, 1) == 10, "stdin crlf")
-    require(strchar(content, 2) == 0 && strchar(content, 3) == 26, "stdin controls")
-    require(strchar(content, 5) == 255, "stdin high byte")
-    writeChar(65)
+    require((content).length() == 6, "stdin byte count")
+    require((content).byteAt(0) == 13 && (content).byteAt(1) == 10, "stdin crlf")
+    require((content).byteAt(2) == 0 && (content).byteAt(3) == 26, "stdin controls")
+    require((content).byteAt(5) == 255, "stdin high byte")
+    Console.writeChar(65)
     print(" readall ok")
     return 0
 }

@@ -1,3 +1,4 @@
+import loxis.unsafe
 // list<int> demo — real generics, no erasure
 
 fun main() {

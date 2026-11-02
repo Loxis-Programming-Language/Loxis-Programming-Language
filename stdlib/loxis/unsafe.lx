@@ -1,0 +1,13 @@
+package loxis.unsafe
+
+// Explicit opt-in to VM primitives for runtime experiments and compiler tests.
+// Importing this module enables low-level calls only in the importing file.
+// Normal programs should use collections, text, File, System and Math instead.
+
+object Unsafe {
+    fun arrayNew(count: int) -> int { return __loxis_arrayNew(count) }
+    fun arrayGet(handle: int, index: int) -> int { return __loxis_arrayGet(handle, index) }
+    fun arraySet(handle: int, index: int, value: int) -> unit { __loxis_arraySet(handle, index, value) }
+    fun arrayLen(handle: int) -> int { return __loxis_arrayLen(handle) }
+    fun arrayFree(handle: int) -> unit { __loxis_arrayFree(handle) }
+}

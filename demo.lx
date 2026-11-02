@@ -1,4 +1,5 @@
 package demo
+import loxis.text
 
 // ============================================================
 //  Loxis v2 — Interface & chr builtin demo
@@ -64,9 +65,9 @@ fun main() {
 
     // --- chr builtin ---
     print("--- chr builtin ---")
-    print(chr(76))     // L
-    print(chr(111))    // o
-    print(chr(120))    // x
+    print(Text.fromByte(76))     // L
+    print(Text.fromByte(111))    // o
+    print(Text.fromByte(120))    // x
 
     // --- Arithmetic ---
     print("--- Arithmetic ---")

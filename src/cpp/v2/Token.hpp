@@ -48,7 +48,7 @@ enum class Tk : uint16_t {
     Ident, IntLit, FloatLit, StringLit, CharLit,
     // keywords
     KwPackage, KwImport, KwFrom,
-    KwFun, KwLet, KwVar, KwVal, KwVararg,
+    KwFun, KwLet, KwVar, KwVal,
     KwClass, KwInterface, KwObject, KwEnum,
     KwOpen, KwAbstract, KwData, KwOverride,
     KwInit, KwCompanion,
@@ -97,7 +97,6 @@ inline const char* tkName(Tk k) {
     case Tk::KwLet: return "'let'";
     case Tk::KwVar: return "'var'";
     case Tk::KwVal: return "'val'";
-    case Tk::KwVararg: return "'vararg'";
     case Tk::KwClass: return "'class'";
     case Tk::KwInterface: return "'interface'";
     case Tk::KwObject: return "'object'";

@@ -121,6 +121,7 @@ struct HirClosureCapture {
     std::string name;
     CoreTyPtr ty;
     uint32_t offset = 0;
+    uint32_t sourceOffset = ~0u;
 };
 struct HirClosure {
     std::string functionName;

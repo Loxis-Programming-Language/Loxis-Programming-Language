@@ -1,6 +1,6 @@
 import loxis.collections.list
 fun main() -> int {
-    val xs = listWithCapacity<int>(8)
+    val xs = Lists.withCapacity<int>(8)
     print(xs.get(0))
     return 0
 }

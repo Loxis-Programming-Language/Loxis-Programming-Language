@@ -2,7 +2,7 @@ import loxis.collections.iterator
 
 fun main() -> int {
     print(1)
-    val iter = emptyIter<int>()
+    val iter = Iter.empty<int>()
     print(2)
     val item = iter.next()
     print(3)

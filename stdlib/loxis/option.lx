@@ -3,6 +3,7 @@ package loxis.option
 enum class Optional<T> {
     Empty,
     Value(T),
+    fun orNull() -> T? { return __loxis_optionalOrNull<T>(this) }
 
     fun hasValue() -> bool {
         return when (this) { Optional::Value(_) -> true, else -> false }
@@ -38,69 +39,45 @@ enum class Optional<T> {
 
 }
 
-fun optionalValue<T>(value: T) -> Optional<T> {
+fun __loxis_optionalValue<T>(value: T) -> Optional<T> {
     return Optional::<T>::Value(value)
 }
 
-fun optionalEmpty<T>() -> Optional<T> {
+fun __loxis_optionalEmpty<T>() -> Optional<T> {
     return Optional::<T>::Empty()
 }
 
-fun optionalHasValue<T>(value: Optional<T>) -> bool {
+fun __loxis_optionalHasValue<T>(value: Optional<T>) -> bool {
     return when (value) {
         Optional::Value(_) -> true,
         else -> false
     }
 }
 
-fun optionalIsEmpty<T>(value: Optional<T>) -> bool {
+fun __loxis_optionalIsEmpty<T>(value: Optional<T>) -> bool {
     return when (value) {
         Optional::Empty() -> true,
         else -> false
     }
 }
 
-fun optionalMap<T, U>(value: Optional<T>, f: fun(T) -> U) -> Optional<U> {
+fun __loxis_optionalMap<T, U>(value: Optional<T>, f: fun(T) -> U) -> Optional<U> {
     return when (value) {
         Optional::Value(inner) -> Optional::<U>::Value(f(inner)),
         else -> Optional::<U>::Empty()
     }
 }
 
-fun optionalFlatMap<T, U>(value: Optional<T>, f: fun(T) -> Optional<U>) -> Optional<U> {
-    return when (value) {
-        Optional::Value(inner) -> f(inner),
-        else -> Optional::<U>::Empty()
-    }
-}
 
-fun optionalGetOrElse<T>(value: Optional<T>, fallback: T) -> T {
-    return when (value) {
-        Optional::Value(inner) -> inner,
-        else -> fallback
-    }
-}
-
-fun optionalValueOrFail<T>(value: Optional<T>) -> T {
+fun __loxis_optionalValueOrFail<T>(value: Optional<T>) -> T {
     return when (value) {
         Optional::Value(inner) -> inner,
         else -> error("missing optional value")
     }
 }
 
-fun optionalGetOrElseGet<T>(value: Optional<T>, fallback: fun() -> T) -> T {
-    return when (value) {
-        Optional::Value(inner) -> inner,
-        else -> fallback()
-    }
-}
 
-fun optionalFromNullable<T>(value: T?) -> Optional<T> {
-    if value == null { return optionalEmpty<T>() }
-    return optionalValue<T>(value!!)
-}
-
-fun optionalOrNull<T>(value: Optional<T>) -> T? {
+fun __loxis_optionalOrNull<T>(value: Optional<T>) -> T? {
     return when (value) {
         Optional::Value(inner) -> inner,
         else -> null

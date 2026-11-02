@@ -1,3 +1,4 @@
+import loxis.text
 fun main(): void {
-    print(ftoi(itof(42)))
+    print(((42).toDouble()).toInt())
 }
