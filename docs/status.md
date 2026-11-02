@@ -19,6 +19,8 @@ silently change the result of valid programs.
 - Primitive values, local `val`/`var`, functions and structured control flow.
 - Classes, constructors, fields, ordinary methods and interfaces for the
   combinations exercised by the smoke suite.
+- Singleton objects with persistent fields and methods, and user-defined
+  extension functions.
 - Generic functions and classes with call-site inference and monomorphization.
 - Function values, non-capturing lambdas and capturing closures.
 - Nullable values, `?.`, `?:`, `!!`, `is` and `!is` smart casts.
@@ -49,10 +51,8 @@ semantics may change before 0.2.
 The parser may recognize some of these constructs so diagnostics and tooling can
 understand future syntax. Recognition is not an execution guarantee.
 
-- Singleton and companion-object execution outside existing standard-library
-  objects.
+- Companion-object execution.
 - Generated data-class members.
-- User-defined extension-function lowering.
 - Struct-style and nested enum patterns, and complete exhaustiveness analysis.
 - Default arguments, async/await, coroutines and macros.
 - Stable native/bytecode ABI, separate compilation and third-party packages.

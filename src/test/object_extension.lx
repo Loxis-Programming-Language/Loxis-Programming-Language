@@ -1,0 +1,16 @@
+object Sequence {
+    var value: int = 40
+
+    fun next() -> int {
+        this.value += 1
+        return this.value
+    }
+}
+
+fun int.doubled() -> int { return this * 2 }
+
+fun main() {
+    print(Sequence.next())
+    print(Sequence.next())
+    print((21).doubled())
+}

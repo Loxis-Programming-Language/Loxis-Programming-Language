@@ -144,6 +144,11 @@ $cases = @(
         Out = "10`n20`n15`n23`n"
     },
     @{
+        Name = "singleton object and extension function"
+        File = "src\test\object_extension.lx"
+        Out = "41`n42`n42`n"
+    },
+    @{
         Name = "stdlib generic list"
         File = "src\test\stdlib_list.lx"
         Out = "3`n4`n24`n"
