@@ -35,6 +35,11 @@ CASES = {
         ["parser_newline_forEach.lx:14:12", "'forEach'"],
         ["parser_newline_forEach.lx:13:"],
     ),
+    "data_class_unsupported": (
+        None, None,
+        ["data classes are not supported yet", "use a regular class"],
+        ["Fatal error", "unsupported MIR"],
+    ),
 }
 
 

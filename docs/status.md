@@ -60,6 +60,8 @@ understand future syntax. Recognition is not an execution guarantee.
 
 Unsupported constructs should fail during compilation with a diagnostic. A
 successful compile followed by a backend failure is a compiler bug.
+`data class` declarations are therefore rejected until their generated-member
+contract is implemented; they are not silently treated as ordinary classes.
 
 ## Alpha release gates
 

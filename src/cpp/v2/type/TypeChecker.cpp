@@ -2498,6 +2498,13 @@ void TypeChecker::checkItem(ItemPtr i, Scope* sc) {
             currentRetTy = saved;
 
         } else if constexpr (std::is_same_v<T, ItemClass>) {
+            if (n.modifier == ClassModifier::Data) {
+                error(
+                    "data classes are not supported yet",
+                    "the compiler does not generate data-class members",
+                    "use a regular class and define the required methods explicitly");
+                return;
+            }
             // Type-check in class child scope
             Scope* classScope = sc->childMod(n.name);
             if (!classScope) classScope = sc;
