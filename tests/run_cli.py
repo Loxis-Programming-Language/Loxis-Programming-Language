@@ -36,7 +36,7 @@ def main() -> int:
 
     version = invoke(exe, "version")
     require(version.returncode == 0, f"version failed: {version.stderr}")
-    require(version.stdout == "Loxis 0.1.0-alpha.2-dev\n", f"unexpected version: {version.stdout!r}")
+    require(version.stdout == "Loxis 0.1.0-alpha.2\n", f"unexpected version: {version.stdout!r}")
 
     checked = invoke(exe, "check", str(ROOT / "examples" / "hello_world.lx"))
     require(checked.returncode == 0, f"check failed: {checked.stderr}")
