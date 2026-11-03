@@ -54,8 +54,13 @@ def main():
     failed = 0
     for name, (expected_out, expected_exit, want, forbid) in CASES.items():
         with tempfile.TemporaryDirectory(prefix="loxis-parser-") as work:
+            # Exercise Windows checkouts explicitly: CRLF must count as one
+            # source line, regardless of the repository's local line endings.
+            source = (ROOT / "src/test" / (name + ".lx")).read_text(encoding="utf-8")
+            source_path = Path(work) / (name + ".lx")
+            source_path.write_bytes(source.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8"))
             result = subprocess.run(
-                [str(exe), str(ROOT / "src/test" / (name + ".lx")), "200000"],
+                [str(exe), str(source_path), "200000"],
                 capture_output=True, text=True, encoding="utf-8", cwd=work,
                 env=dict(os.environ, LOXIS_STDLIB=str(ROOT / "stdlib")), timeout=30)
 

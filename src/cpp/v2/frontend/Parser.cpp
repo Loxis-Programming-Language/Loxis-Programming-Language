@@ -43,11 +43,15 @@ std::string unescapeString(const std::string& s) {
 }
 
 // Walks `count` characters of `text` forward from `loc`, so a fragment lexed on
-// its own can start at a meaningful position. Treats both \n and \r as line
-// breaks, matching Lexer::advance.
+// its own can start at a meaningful position. Treats CRLF as one line break,
+// matching Lexer::advance.
 SourceLocation advanceLoc(SourceLocation loc, const std::string& text, size_t count) {
     for (size_t i = 0; i < count && i < text.size(); ++i) {
-        if (text[i] == '\n' || text[i] == '\r') { loc.line++; loc.col = 1; }
+        if (text[i] == '\n' ||
+            (text[i] == '\r' && (i + 1 >= text.size() || text[i + 1] != '\n'))) {
+            loc.line++;
+            loc.col = 1;
+        }
         else loc.col++;
     }
     return loc;

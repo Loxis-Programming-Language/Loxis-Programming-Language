@@ -15,7 +15,7 @@ bool Lexer::atEnd() const { return pos >= src.size(); }
 char Lexer::peek(size_t off) const { return pos + off < src.size() ? src[pos + off] : '\0'; }
 char Lexer::advance() {
     char c = src[pos++];
-    if (c == '\n' || c == '\r') { ++line; col = 1; }
+    if (c == '\n' || (c == '\r' && peek() != '\n')) { ++line; col = 1; }
     else { ++col; }
     return c;
 }
