@@ -1,7 +1,6 @@
 # Loxis 0.1 stability contract
 
-The latest tagged release is **0.1.0-alpha.2**; `main` is the
-**0.1.0-alpha.3-dev** development line. The alpha is suitable for language
+The latest tagged release is **0.1.0-alpha.3**. The alpha is suitable for language
 experiments and small command-line programs, but it does not promise source or
 binary compatibility between alpha releases.
 

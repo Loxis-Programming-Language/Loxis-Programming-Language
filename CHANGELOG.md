@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.3 — 2026-11-03
+
+### Changed
+
 - Rename the user-facing executable and command examples from `Loxis` to the
   conventional lowercase `loxis`; the language and project remain “Loxis”.
 
